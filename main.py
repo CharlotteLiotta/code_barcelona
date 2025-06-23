@@ -8,33 +8,21 @@ from copy import deepcopy
 import geopandas as gpd
 from shapely import wkt
 from scipy.sparse import csr_matrix
+import jpype
+os.environ["R5_JAR"] = "C:/Users/1738037/AppData/Local/miniforge3/envs/r5py/Lib/site-packages/r5py/data/r5-v6.8-all.jar"
+jpype.startJVM(classpath=[os.environ["R5_JAR"]])
+print("Java started successfully.")
+from r5py import TravelTimeMatrixComputer, TransportMode, TravelTimeMatrix, TransportNetwork
+import datetime
+from shapely.geometry import mapping
+
 from functions import *
 
 ### IMPORT PARAMETERS
 
-#Spatial structure of Barcelona
-
-district = gpd.read_file('C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/BarcelonaCiutat_Districtes.csv')
-district['geometry'] = district['geometria_etrs89'].apply(wkt.loads)
-district = gpd.GeoDataFrame(
-    geometry="geometry", data=district
-)
-
-district["area"] = district.area
-
-population = pd.read_csv("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/2021_densitat.csv")
-sum_pop = population.groupby("Nom_Districte").sum("Població")
-district = district.merge(sum_pop["Població"], left_on = "nom_districte", right_index = True)
-
-city_center = district.loc[district.nom_districte == "Eixample",:].centroid
-
-#ax = district.plot("Població", legend = True)
-#city_center.plot(ax = ax)
-
-district["distance_center"] = district.centroid.distance(city_center.iloc[0], align = False) / 1000
-
-#ax = district.plot("distance_center", legend = True)
-#city_center.plot(ax = ax)
+#Import time parameters
+year = 0
+MAX_YEAR = 20
 
 #Import parameters on urban form - TO UPDATE FOR BARCELONA
 B = 0.64
@@ -44,64 +32,107 @@ RHO = 0.05
 N = 10000
 Y = 56098
 
-#Import transport cost parameters  - TO UPDATE FOR BARCELONA
-T_COST = (1.8 / (100 /8)) + ((1/30)*10)
-district["COST_CAR"] = district["distance_center"] * 400 * T_COST
-district["COST_PT"] = district["distance_center"] * 400 * T_COST * (district["distance_center"] / 4)
-tax = 1.15
-
-#Import parameters on opinion dynamic
+#Import parameters on opinion dynamic - TO UPDATE FOR BARCELONA
 I = np.random.randint(1,10, N)
 DELTA = 0.5
 GAMMA = 0.25
 BETA_OPINION = [0.37, 0.50, 0.21, 0.01, -0.01, -0.01, 0] #[0.33, 0.33, 0.33, 0.01, -0.01, -0.01, 0] #BETA_OPINION = [0.048, 0.058, 0.033, 0.00, -0.00, -0.00, 0.129]
 
-#Import time parameters
-year = 0
-MAX_YEAR = 20
+#Tax
+tax = 1.15
 RATE_INCREASE_TAX = 0.05
 
-### INITIAL CALIBRATION
+### IMPORT DATA
 
-#Solve the model for year 0
+#Spatial structure of Barcelona
+gdf = import_data(option = "SECTION") #"DISTRICT"SECTION
+#pas assez de gens! normalement 3.4M, ici on a 1.4
 
-transport_cost, transport_mode = compute_transport_cost(district["COST_CAR"], district["COST_PT"], 1)
+#Import transport cost parameters  - TO UPDATE FOR BARCELONA
+#T_COST = (1.8 / (100 /8)) + ((1/30)*10)
+#gdf["COST_CAR"] = gdf["distance_center"] * 400 * T_COST
+#gdf["COST_PT"] = gdf["distance_center"] * 400 * T_COST * (gdf["distance_center"] / 4)
+
+# Load and reproject to WGS84
+#gdf = gdf.to_crs("EPSG:4326")  # Ensure lat/lon
+
+# Get outer polygon (first geometry if multipart)
+#geom = gdf.unary_union
+#if geom.geom_type == "MultiPolygon":
+#    geom = list(geom.geoms)[0]  # First polygon
+
+# Write .poly file
+#with open("amb.poly", "w") as f:
+##    f.write("amb\n")  # name
+#    f.write("1\n")    # part number
+#    for x, y in geom.exterior.coords:
+#        f.write(f" {x} {y}\n")
+#    f.write("END\nEND\n")
+
+import_transport_times(gdf, datetime.datetime(2025, 7, 7, 8, 0, 0), "0801910130", 1)
+
+travel_time_matrix_car, travel_time_matrix_transit = load_transport_times(gdf)
+
+gdf = gdf.merge(travel_time_matrix_transit.loc[travel_time_matrix_transit.to_id == "0801910130",:], left_on = "ID", right_on = "from_id", how = "left")
+gdf = gdf.drop(columns = ['from_id', 'to_id'])
+gdf = gdf.rename(columns={"travel_time": "travel_time_transit"
+                          })
+
+gdf = gdf.merge(travel_time_matrix_car.loc[travel_time_matrix_car.to_id == "0801910130",:], left_on = "ID", right_on = "from_id", how = "left")
+gdf = gdf.drop(columns = ['from_id', 'to_id'])
+gdf = gdf.rename(columns={"travel_time": "travel_time_car"
+                          })
+
+gdf["COST_CAR"] = (gdf["travel_time_car"] / 60) * 10 * 40
+gdf["COST_PT"] = (gdf["travel_time_transit"] / 60) * 10 * 40
+
+### INITIAL STATE: YEAR 0
+
+gdf["transport_cost"], gdf["transport_mode"] = compute_transport_cost(gdf["COST_CAR"], gdf["COST_PT"], 1)
+#gdf.plot("transport_cost", legend = True)
+gdf.plot("transport_mode", legend = True)
+print(round(100 * sum(gdf["transport_mode"] * gdf["pop"]) / sum(gdf["pop"])), " % commute by public transport")
 
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u, N, BETA, Y, transport_cost, B, KAPPA, RHO, district["area"])
+    return compute_error_in_population(u, N, BETA, Y, transport_cost, B, KAPPA, RHO, gdf["area"])
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 57330)
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 15850)
 
 if solving_model.fun < 1:
     utility = solving_model.x
-    R = compute_rents(BETA, Y, utility, transport_cost)
-    q = compute_dwelling_size(BETA, Y, transport_cost, R)
-    n = compute_population(B, KAPPA, R, RHO, district["area"], q)
+    R = compute_rents(BETA, Y, utility, gdf["transport_cost"])
+    q = compute_dwelling_size(BETA, Y, gdf["transport_cost"], R)
+    n = compute_population(B, KAPPA, R, RHO, gdf["area"], q)
 else:
     print("Minimization failed!")
 
+n[np.isnan(n)] = 0
+R[np.isnan(R)] = 0
+q[np.isnan(q)] = 0
+gdf["transport_cost"][np.isnan(gdf["transport_cost"])] = 0
 # ABM: translate outputs at the household level
 
-indiv_distance_matrix = compute_indiv_distance_matrix(N, district["distance_center"].to_numpy(), n.to_numpy())
-missing_ppl = N - sum(sum(indiv_distance_matrix))
+#indiv_distance_matrix = compute_indiv_distance_matrix(N, gdf["ID"].to_numpy(), n.to_numpy())
+indiv_loc_matrix = compute_indiv_loc_matrix(N, len(gdf), n.to_numpy())
+missing_ppl = N - sum(sum(indiv_loc_matrix))
 if missing_ppl > 0:
     print("missing ppl", missing_ppl)
-    indiv_distance_matrix[round(N-missing_ppl):(N),0] = np.ones(round(missing_ppl))
+    indiv_loc_matrix[round(N-missing_ppl):(N),0] = np.ones(round(missing_ppl))
 
-rent_indiv = indiv_distance_matrix @ R
-dwelling_size_indiv = indiv_distance_matrix @ q
-utility = compute_utility_manually(Y, indiv_distance_matrix @transport_cost, 
+rent_indiv = indiv_loc_matrix @ R.to_numpy()
+dwelling_size_indiv = indiv_loc_matrix @ q
+utility = compute_utility_manually(Y, indiv_loc_matrix @gdf["transport_cost"], 
                                                 dwelling_size_indiv, rent_indiv, BETA)
 
-indiv_distance_sparse = csr_matrix(indiv_distance_matrix)
+indiv_distance_sparse = csr_matrix(indiv_loc_matrix)
 dwelling_size_indiv = dwelling_size_indiv.astype(np.float64)
 housing_indiv = dwelling_size_indiv @ indiv_distance_sparse  # shape: (10,)
 
 # Save outputs
 
-save_housing = np.zeros((len(district["distance_center"]), MAX_YEAR))
+save_housing = np.zeros((len(gdf["area"]), MAX_YEAR))
 save_housing[:, 0] = deepcopy(housing_indiv)
 
 save_rent = np.zeros((N, MAX_YEAR))
@@ -110,11 +141,11 @@ save_rent[:, 0] = deepcopy(rent_indiv)
 save_dwelling_size = np.zeros((N, MAX_YEAR))
 save_dwelling_size[:, 0] = deepcopy(dwelling_size_indiv)
 
-save_population = np.zeros((len(district["distance_center"]), MAX_YEAR))
-save_population[:, 0] = np.nansum(indiv_distance_matrix, 0)
+save_population = np.zeros((len(gdf["area"]), MAX_YEAR))
+save_population[:, 0] = np.nansum(indiv_loc_matrix, 0)
 
 save_transport_mode = np.zeros((N, MAX_YEAR))
-save_transport_mode[:, 0] = deepcopy(indiv_distance_matrix @transport_mode)
+save_transport_mode[:, 0] = deepcopy(indiv_loc_matrix @gdf["transport_mode"])
 
 save_utility = np.zeros((N, MAX_YEAR))
 save_utility[:, 0] = deepcopy(utility)
@@ -122,7 +153,7 @@ save_utility[:, 0] = deepcopy(utility)
 save_tax = np.zeros(MAX_YEAR)
 save_tax[0] = 1
 
-emissions_init = sum((save_population[:, 0] * district["distance_center"])[transport_mode == 0])
+emissions_init = sum((save_population[:, 0] * gdf["distance_center"])[gdf["transport_mode"] == 0])
 
 save_median_support = np.zeros(MAX_YEAR)
 

@@ -2,9 +2,15 @@ import numpy as np # type: ignore
 import scipy # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 import random
-from numba import njit, jit
 from copy import deepcopy
 from numba import njit, prange
+import pandas as pd
+import geopandas as gpd
+from shapely import wkt
+from scipy.sparse import csr_matrix
+from r5py import TravelTimeMatrixComputer, TransportMode, TravelTimeMatrix, TransportNetwork
+import datetime
+import os
 
 ### URBAN ECONOMICS
 
@@ -315,3 +321,204 @@ def plot_tax_suppport(save_tax, save_median_support):
 
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
     plt.show()
+
+def import_data(option):
+    if option == "SECTION":
+        df = pd.read_csv('C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/70035.csv', sep = ";", encoding="latin1")
+        df = df.loc[:,["Sections", "Total"]]
+        df = df.dropna(subset=["Sections"])
+        df["CUSEC"] = df["Sections"].str[:10]
+
+        def fix_decimal(s):
+            if isinstance(s, str) and ',' in s:
+                integer, decimal = s.split(',', 1)
+                if len(decimal) == 2:
+                    return f"{integer},{decimal}0"
+            return s
+
+        gdf = gpd.read_file('C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/seccionado_2024/SECC_CE_20240101.shp')
+        gdf = gdf.merge(df, on = "CUSEC")
+
+        gdf["Total"] = gdf["Total"].apply(fix_decimal)
+        gdf["Total"] = pd.to_numeric(gdf["Total"].str.replace(',', ''), errors='coerce')
+
+        gdf["density"] = gdf["Total"] / (gdf["Shape_Area"]/1000000)
+
+        gdf = gdf.loc[gdf.NMUN.isin(['Badalona', 'Badia del Vallès', 'Barberà del Vallès', 'Barcelona','Begues','Castellbisbal', 'Castelldefels', 'Cerdanyola del Vallès', 'Cervelló','Corbera de Llobregat','Papiol, El', 'Prat de Llobregat, El', 'Esplugues de Llobregat','Gavà', "Hospitalet de Llobregat, L'",'Palma de Cervelló, La','Molins de Rei', 'Montcada i Reixac', 'Montgat', 'Pallejà', 'Ripollet','Sant Adrià de Besòs', 'Sant Andreu de la Barca','Sant Boi de Llobregat', 'Sant Climent de Llobregat', 'Sant Cugat del Vallès', 'Sant Feliu de Llobregat','Sant Joan Despí','Sant Just Desvern','Sant Vicenç dels Horts', 'Santa Coloma de Cervelló', 'Santa Coloma de Gramenet','Tiana', 'Torrelles de Llobregat', 'Viladecans']),["CUSEC", "CUMUN", "Shape_Area", "Total", "density", "geometry", "NMUN"]]
+        city_center = gdf.loc[gdf.NMUN == "Barcelona",:].centroid
+        gdf["distance_center"] = gdf.centroid.distance(city_center.iloc[0], align = False) / 1000
+        gdf = gdf.loc[:,["CUSEC", "geometry", "Shape_Area", "Total", "distance_center"]]
+        gdf.columns = ["ID", "geometry", "area", "pop", "distance_center"]
+
+    elif option == "DISTRICT":
+
+        gdf = gpd.read_file('C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/BarcelonaCiutat_Districtes.csv')
+        gdf['geometry'] = gdf['geometria_etrs89'].apply(wkt.loads)
+        gdf = gpd.GeoDataFrame(geometry="geometry", data=gdf, crs="EPSG:25831")
+
+        gdf["area"] = gdf.area
+
+        df = pd.read_csv("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/2021_densitat.csv")
+        df = df.groupby("Nom_Districte").sum("Població")
+        gdf = gdf.merge(df["Població"], left_on = "nom_districte", right_index = True)
+
+        city_center = gdf.loc[gdf.nom_districte == "Eixample",:].centroid
+
+        gdf["distance_center"] = gdf.centroid.distance(city_center.iloc[0], align = False) / 1000
+
+        gdf = gdf.loc[:,["Codi_Districte", "geometry", "area", "Població", "distance_center"]]
+        gdf.columns = ["ID", "geometry", "area", "pop", "distance_center"]
+
+    gdf["area"] = gdf["area"] / 1000000
+    gdf["density"] = gdf["pop"] / gdf["area"]
+    
+    return gdf
+
+
+def import_transport_times(gdf, date_here, center, OPTION_SAVE):
+    #le mieux a l'air d'être ici (existe en simplfifié ou normal): https://t-mobilitat.atm.cat/web/t-mobilitat/datos-abiertos/catalogo-de-datos/informacion-estatica
+    
+    #ADD https://fgc.opendatasoft.com/explore/dataset/gtfs_zip/table/
+    #ADD https://datos.gob.es/en/catalogo/a09002970-red-de-transporte-por-carretera-paradas-lineas-y-horarios-de-los-autobuses-interurbanos-de-catalunya
+    #ADD https://www.amb.cat/web/area-metropolitana/dades-obertes/cataleg/detall/-/dataset/serveis-gtfs-de-tmb/1107694/11692 PAS DISPO?
+    #ADD https://www.amb.cat/es/web/area-metropolitana/dades-obertes/cataleg/detall/-/dataset/informacion-de-companias--lineas-y-recorridos/1033377/11692?_DatasetSearchListPortlet_WAR_AMBSearchPortletportlet_pageNum=4&_DatasetSearchListPortlet_WAR_AMBSearchPortletportlet_categoria=mobilitat&_DatasetSearchListPortlet_WAR_AMBSearchPortletportlet_detailBackURL=https%3A%2F%2Fwww.amb.cat%2Fes%2Fweb%2Farea-metropolitana%2Fdades-obertes%2Fcataleg%2Fllistat (seulement des bus?)
+    os.environ["R5_VERBOSE"] = "true"
+
+    points = gdf.copy()
+    points["geometry"] = points.centroid
+    points = points.loc[:,["ID", "geometry"]]
+    points.columns = ["id", "geometry"]
+
+    path_osm = "C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/barcelona.osm.pbf"
+    #path_osm = "C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/cataluna-latest.osm.pbf"
+
+    list_path_gtfs = os.listdir("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + 'gtfs/')
+    list_path_gtfs = [i for i in list_path_gtfs if i.endswith('zip')]
+    list_path_gtfs = ["C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + 'gtfs/' + sub for sub in list_path_gtfs] 
+    #list_path_gtfs = []
+    
+    print("Start Computing Network")
+    transport_network = TransportNetwork(
+        # OSM data
+        path_osm,
+    
+        # A list of GTFS file(s)
+        list_path_gtfs
+        )
+    
+    print("Transport Network Computed")
+
+    i = 800
+    while i < (len(points) - 100):
+
+        i = i + 100
+    
+        travel_time_matrix_computer_car = TravelTimeMatrixComputer(
+            transport_network,
+            origins=points.iloc[i - 100:i, :],
+            destinations=points.loc[points.id == center,:],
+            departure=date_here,
+            transport_modes=[TransportMode.CAR]
+            )
+        
+
+        travel_time_matrix_car = travel_time_matrix_computer_car.compute_travel_times()
+    
+        np.save("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_car" + "_" + str(i) + ".npy", travel_time_matrix_car)
+
+        print("Travel time Car: ", round(100 * i/len(points)), "%")
+    
+    travel_time_matrix_computer_car = TravelTimeMatrixComputer(
+        transport_network,
+        origins=points.iloc[i:len(points), :],
+        destinations=points.loc[points.id == center,:],
+        departure=date_here,
+        transport_modes=[TransportMode.CAR]
+        )
+        
+
+    travel_time_matrix_car = travel_time_matrix_computer_car.compute_travel_times()
+    
+    np.save("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_car" + "_" + str(len(points)) + ".npy", travel_time_matrix_car)
+
+    print("Travel Times Car Computed")
+
+    #if OPTION_SAVE == 1:
+        #np.save("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_transit.npy", travel_time_matrix_transit)
+        #np.save("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_car.npy", travel_time_matrix_car)
+
+    print("Travel Times Car Saved")
+
+    i = 0
+    
+    while i < (len(points) - 100):
+
+        i = i + 100
+
+        travel_time_matrix_computer_transit = TravelTimeMatrixComputer(
+            transport_network,
+            origins=points.iloc[i - 100:i, :],
+            destinations=points.loc[points.id == center,:],
+            departure=date_here, #2023, 6, 22, 8, 0, 0),
+            transport_modes=[TransportMode.TRANSIT, TransportMode.WALK]
+            )
+
+        print("Travel Time Matrix Transit Computed")
+
+        travel_time_matrix_transit = travel_time_matrix_computer_transit.compute_travel_times()
+    
+        np.save("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_transit" + "_" + str(i) + ".npy", travel_time_matrix_transit)
+    
+        print("Travel time Transit: ", round(100 * i/len(points)), "%")
+
+    travel_time_matrix_computer_transit = TravelTimeMatrixComputer(
+    transport_network,
+    origins=points.iloc[i:len(points), :],
+    destinations=points.loc[points.id == center,:],
+    departure=date_here, #2023, 6, 22, 8, 0, 0),
+    transport_modes=[TransportMode.TRANSIT, TransportMode.WALK]
+    )
+
+    print("Travel Time Matrix Transit Computed")
+
+    travel_time_matrix_transit = travel_time_matrix_computer_transit.compute_travel_times()
+    
+    np.save("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_transit" + "_" + str(len(points)) + ".npy", travel_time_matrix_transit)
+        
+    print("Travel Times Transit Computed")
+
+    #if OPTION_SAVE == 1:
+    #    np.save("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_transit.npy", travel_time_matrix_transit)
+        #np.save("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_car.npy", travel_time_matrix_car)
+
+    print("Travel Times Transit Saved")
+
+    #return travel_time_matrix_car, travel_time_matrix_transit
+
+def load_transport_times(gdf):
+
+    i = 100
+    travel_time_matrix_transit = np.load("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_transit" + "_" + str(i) + ".npy", allow_pickle= True)
+    travel_time_matrix_car = np.load("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_car" + "_" + str(i) + ".npy", allow_pickle= True)
+
+    while i < len(gdf) - 100:
+        i = i + 100
+        temp_transit = np.load("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_transit" + "_" + str(i) + ".npy", allow_pickle= True)
+        temp_car = np.load("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_car" + "_" + str(i) + ".npy", allow_pickle= True)
+
+        travel_time_matrix_transit = np.concatenate((travel_time_matrix_transit, temp_transit), axis=0)
+        travel_time_matrix_car = np.concatenate((travel_time_matrix_car, temp_car), axis=0)
+
+    temp_transit = np.load("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_transit" + "_" + str(len(gdf)) + ".npy", allow_pickle= True)
+    temp_car = np.load("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/" + "travel_time_matrix_car" + "_" + str(len(gdf)) + ".npy", allow_pickle= True)
+
+    travel_time_matrix_transit = np.concatenate((travel_time_matrix_transit, temp_transit), axis=0)
+    travel_time_matrix_car = np.concatenate((travel_time_matrix_car, temp_car), axis=0)
+    
+    travel_time_matrix_car = pd.DataFrame(travel_time_matrix_car, columns = ['from_id', 'to_id', 'travel_time'])
+    travel_time_matrix_transit = pd.DataFrame(travel_time_matrix_transit, columns = ['from_id', 'to_id', 'travel_time'])
+
+    travel_time_matrix_car['travel_time'] = pd.to_numeric(travel_time_matrix_car['travel_time'], errors='coerce')
+    travel_time_matrix_transit['travel_time'] = pd.to_numeric(travel_time_matrix_transit['travel_time'], errors='coerce')
+
+    return travel_time_matrix_car, travel_time_matrix_transit
