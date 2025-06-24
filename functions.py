@@ -104,8 +104,23 @@ def compute_population(b, kappa, R, rho, L, q):
     n = kappa ** (1/a) * (b * R / rho) ** (b/a) * L / q
     return n
 
-def compute_transport_cost(COST_CAR, COST_PT, tax):
-    return np.fmin(COST_CAR * tax, COST_PT), np.argmin([COST_CAR * tax, COST_PT], 0)
+    
+def compute_transport_cost(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, tax):
+
+    gdf["COST_CAR"] = ((gdf["travel_time_car"] / 60) * PRICE_TIME * WORKING_DAYS) + (gdf.distance_center * PRICE_FUEL * WORKING_DAYS) + FIXED_COST_CAR + (tax * WORKING_DAYS)
+    gdf["COST_PT"] = ((gdf["travel_time_transit"] / 60) * PRICE_TIME * WORKING_DAYS) + gdf["monthly_cost_transit"]
+
+    stacked = np.vstack([gdf["COST_CAR"], gdf["COST_PT"]])  # Shape (2, N)
+    masked = np.where(np.isnan(stacked), np.inf, stacked)
+    choice = np.argmin(masked, axis=0)
+
+    gdf["transport_cost"] = np.fmin(gdf["COST_CAR"], gdf["COST_PT"])
+    gdf["transport_mode"] = choice
+    
+    print("Transport cost: ", sum(np.isnan(gdf["transport_cost"])), "missing values")
+    gdf.loc[np.isnan(gdf["transport_cost"]), "transport_cost"] = 120
+    gdf.loc[np.isnan(gdf["transport_mode"]), "transport_mode"] = 0
+    return gdf
 
 ### OUTPUT FROM THE URBAN ECON MODEL
 
@@ -190,6 +205,21 @@ def compute_indiv_distance_matrix(N, distance, n_with_tax):
     return opinion_distance_matrix
 
 @njit
+def compute_indiv_loc_matrix(N, len_gdf, n):
+    opinion_distance_matrix = np.zeros((N, len_gdf))
+
+    step = 0
+    for k in range(len_gdf):
+        nb_pers = round(n[k])
+        if step+nb_pers < N:
+            opinion_distance_matrix[step:step+nb_pers, k] = np.ones(nb_pers)
+            step += nb_pers
+        else:
+            opinion_distance_matrix[step:N, k] = np.ones(N-step)
+            break
+    return opinion_distance_matrix
+
+@njit
 def update_indiv_distance_matrix(indiv_distance_matrix, n):
     #print(np.nansum(indiv_distance_matrix,0) - n)
     indiv_distance_matrix_new = (indiv_distance_matrix)
@@ -241,26 +271,26 @@ def compute_proba_of_moving(housing_lag, housing_without_inertia):
 
 
 @njit
-def make_people_move(indiv_distance_matrix_new, N, distance, indiv_distance_matrix, proba_of_moving_from, proba_of_moving_to):
+def make_people_move(indiv_loc_matrix_new, N, len_gdf, indiv_loc_matrix, proba_of_moving_from, proba_of_moving_to, PROBA_MOVE):
     
     has_moved = np.zeros(N)
-    indiv_moving = np.random.binomial(1, 0.3, N) #Each individual has a 30% chance to be willing to move.
+    indiv_moving = np.random.binomial(1, PROBA_MOVE, N) #Each individual has a 30% chance to be willing to move.
 
     for i in np.arange(N):
         if indiv_moving[i] == 1:
-            if sum(indiv_distance_matrix[i,:]) > 0:
-                proba_of_moving_here = sum((indiv_distance_matrix[i,:] * proba_of_moving_from)[indiv_distance_matrix[i,:] > 0])
+            if sum(indiv_loc_matrix[i,:]) > 0:
+                proba_of_moving_here = sum((indiv_loc_matrix[i,:] * proba_of_moving_from)[indiv_loc_matrix[i,:] > 0])
                 if proba_of_moving_here < 0:
                     proba_of_moving_here = 0
                 moving = np.random.binomial(1, proba_of_moving_here)
                 if moving == 1:
                     has_moved[i] = 1
-                    indiv_distance_matrix_new[i,:] = np.zeros(len(distance))
+                    indiv_loc_matrix_new[i,:] = np.zeros(len_gdf)
                     #destination = np.random.choice(np.arange(len(distance)), p=proba_of_moving_to)
-                    destination = np.arange(len(distance))[np.searchsorted(np.cumsum(proba_of_moving_to), np.random.random(), side="right")]
-                    indiv_distance_matrix_new[i,destination] = 1
+                    destination = np.arange(len_gdf)[np.searchsorted(np.cumsum(proba_of_moving_to), np.random.random(), side="right")]
+                    indiv_loc_matrix_new[i,destination] = 1
 
-    return indiv_distance_matrix_new, has_moved
+    return indiv_loc_matrix_new, has_moved
 
 ### PLOT AND VISUALIZE VARIABLES
 
@@ -322,8 +352,10 @@ def plot_tax_suppport(save_tax, save_median_support):
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
     plt.show()
 
+
 def import_data(option):
     if option == "SECTION":
+        #https://www.ine.es/dynt3/inebase/en/index.htm?padre=11676&capsel=11681
         df = pd.read_csv('C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/70035.csv', sep = ";", encoding="latin1")
         df = df.loc[:,["Sections", "Total"]]
         df = df.dropna(subset=["Sections"])
@@ -522,3 +554,213 @@ def load_transport_times(gdf):
     travel_time_matrix_transit['travel_time'] = pd.to_numeric(travel_time_matrix_transit['travel_time'], errors='coerce')
 
     return travel_time_matrix_car, travel_time_matrix_transit
+
+def merge_transport(gdf, travel_time_matrix, center, name):
+    gdf = gdf.merge(travel_time_matrix.loc[travel_time_matrix.to_id == center,:], left_on = "ID", right_on = "from_id", how = "left")
+    gdf = gdf.drop(columns = ['from_id', 'to_id'])
+    gdf = gdf.rename(columns={"travel_time": name
+                          })
+    return gdf
+
+def add_transport(gdf, travel_time_matrix_car, travel_time_matrix_transit, center):
+
+    gdf = merge_transport(gdf, travel_time_matrix_transit, center, "travel_time_transit")
+    gdf = merge_transport(gdf, travel_time_matrix_car, center, "travel_time_car")
+    return gdf
+
+def import_jobs(gdf):
+    jobs = pd.read_csv('C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/employment_distrib.csv')
+    jobs = jobs.loc[:,["SPERSONAS", "ID_LUGAR_TRAB_N3"]]
+    jobs["code_city"] = jobs["ID_LUGAR_TRAB_N3"].str[:5]
+    gdf["code_city"] = gdf["ID"].str[:5]
+    jobs = jobs.loc[:,["SPERSONAS", "code_city"]]
+    gdf = gdf.merge(jobs, on = "code_city", how = "left")
+    size_city = gdf.loc[:,["code_city", "area"]].groupby("code_city").sum("area")
+    size_city.columns = ["area_city"]
+    gdf = gdf.merge(size_city, on = "code_city", how = "left")
+    gdf["density_employment"] = gdf["SPERSONAS"] / gdf["area_city"]
+    gdf["employment"] = gdf["SPERSONAS"] * (gdf["area"] / gdf["area_city"])
+    gdf = gdf.drop(columns = ["SPERSONAS", "area_city"])
+    return gdf
+
+def import_trans_mode():
+    #https://www.ine.es/dynt3/inebase/en/index.htm?padre=8981&capsel=8982
+    trans_mode = pd.read_csv('C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/55377.csv', sep = ";")
+    trans_mode = trans_mode.loc[trans_mode.Municipalities.isin(['Badalona', 'Barcelona', 'Castelldefels', 'Cerdanyola del Vallès', 'Cornellà de Llobregat', 'Granollers', "Hospitalet de Llobregat, L'", 'Manresa', 'Mollet del Vallès', 'Prat de Llobregat, El', 'Sabadell', 'Sant Boi de Llobregat', 'Sant Cugat del Vallès', 'Santa Coloma de Gramenet', 'Terrassa', 'Viladecans', 'Vilanova i la Geltrú']),:] #check manual jusqu'a fuengirola
+    trans_mode = trans_mode.loc[trans_mode.Age == "Total",:]
+    trans_mode = trans_mode.loc[trans_mode.Sex == "Both sexes",:]
+    trans_mode = trans_mode.loc[:,["Municipalities", "Means of transport", "Total"]]
+    trans_mode = trans_mode.pivot(index='Municipalities', columns='Means of transport', values='Total')
+    trans_mode['Total'] = pd.to_numeric(trans_mode['Total'].str.replace(",", ""), errors="coerce")
+    for col in ['Public', 'Particular', 'Walking', 'Company or other media']:
+        trans_mode[col] = pd.to_numeric(trans_mode[col].str.replace(",", ""), errors="coerce")
+        trans_mode[col] = trans_mode[col] / trans_mode['Total']
+
+    mapping = {
+        'Badalona': '08015',
+        'Barcelona': '08019',
+        'Castelldefels': '08056',
+        'Cerdanyola del Vallès': '08266',
+        'Cornellà de Llobregat': '08073',
+        'Granollers': '08096',
+        "Hospitalet de Llobregat, L'": '08101',
+        'Manresa': '08113',
+        'Mollet del Vallès': '08124',
+        'Prat de Llobregat, El': '08169',
+        'Sabadell': '08187',
+        'Sant Boi de Llobregat': '08200',
+        'Sant Cugat del Vallès': '08205',
+        'Santa Coloma de Gramenet': '08245',
+        'Terrassa': '08279',
+        'Viladecans': '08301',
+        'Vilanova i la Geltrú': '08307'
+        # ... add all 17 mappings here
+        }
+
+    trans_mode['code_city'] = trans_mode.index.map(mapping)
+    trans_mode["share_car"] = trans_mode["Particular"] + trans_mode["Company or other media"]
+    return trans_mode
+
+def import_cost_transit(gdf):
+    gdf["monthly_cost_transit"] = np.nan
+    gdf.loc[gdf.code_city.isin(['08015', '08019', '08056', '08077','08101', '08089', '08125', '08126','08169', '08194', '08200', '08211', '08217', '08221', '08245', '08282', '08301', ]), "monthly_cost_transit"] = 22
+    gdf.loc[gdf.code_city.isin(['08020', '08054', '08068', '08072', '08123','08157', '08158', '08180', '08196', '08204','08205', '08244', '08252','08263', '08289', '08904', '08905', '08266']), "monthly_cost_transit"] = 29.65
+    return gdf
+
+def compute_cost_car(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL):
+
+    trans_mode = import_trans_mode()
+
+    gdf = gdf.merge(trans_mode.loc[:,["code_city", "share_car"]], on = "code_city", how = "left")
+    
+    def compute_error_transport(x):
+        FIXED_COST_CAR = x[0]
+        gdf_here = compute_transport_cost(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, tax = 0)
+        error1 = np.nansum(np.abs(((1 - gdf_here["transport_mode"]) * gdf_here["pop"]) - (gdf_here["share_car"] * gdf_here["pop"])))
+        print(f"x = {x[0]}, error1 = {error1}")
+
+        gdf_here = gdf_here.loc[~np.isnan(gdf_here.share_car),:]
+        error2 = np.nansum(gdf_here["pop"]) * np.abs((np.nansum(gdf_here.share_car * gdf_here["pop"]) / np.nansum(gdf_here["pop"])) - (np.nansum((1 - gdf_here["transport_mode"]) * gdf_here["pop"]) / np.nansum(gdf_here["pop"])))
+        print(f"x = {x[0]}, error2 = {error2}")
+        return error1 + error2
+
+    solving_transport = scipy.optimize.minimize(compute_error_transport, x0=[300], method='Nelder-Mead')
+    FIXED_COST_CAR = solving_transport.x
+    return gdf, FIXED_COST_CAR
+
+def import_income(gdf):
+    #https://www.ine.es/dynt3/inebase/en/index.htm?padre=12385&capsel=12384
+    income = pd.read_csv('C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/30896.csv', sep = ";", encoding="latin1")
+    income =income.loc[(income.Periodo == 2022) & (income['Mean and median income indicators'] == 'Average net income per person'),["Sections", "Total"]]
+    income = income.dropna(subset=["Sections"])
+    income["ID"] = income["Sections"].str[:10]
+    income.columns = ['Sections', 'net_income', 'ID']
+    income.net_income = pd.to_numeric(income.net_income, errors= "coerce")
+    income.net_income = income.net_income * 1000
+    gdf = gdf.merge(income.loc[:,['net_income', 'ID']], on = "ID", how = "left")
+    Y = (np.nansum(gdf.net_income * gdf["pop"]) / np.nansum(gdf["pop"]))
+    return Y / 12, gdf
+
+def plot_with_missing(gdf, var):
+    gdf.plot(
+    column=var,
+    legend=True,
+    missing_kwds={
+        "color": "lightgrey",
+        "label": "Missing data"
+    })
+
+def import_rent_and_size(gdf):
+    #https://habitatge.gencat.cat/ca/dades/indicadors_estadistiques/estadistiques_de_construccio_i_mercat_immobiliari/mercat_de_lloguer/lloguers-municipis-amb/
+
+    #section level - AMB
+    rent = pd.read_excel("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/AMB_lloguer_m2.xlsx", header = 5)
+    rent = rent.loc[:,["Codi_àmbit", "IV"]]
+    gdf["Codi_àmbit"] = pd.to_numeric(gdf["ID"].str[:7])
+    rent["IV"] = pd.to_numeric(rent["IV"], errors = "coerce")
+    rent.columns = ['Codi_àmbit', 'rent_AMB_section']
+
+    gdf = gdf.merge(rent, on = "Codi_àmbit", how = "left")
+
+    #city level - AMB
+    rent = pd.read_excel("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/AMB_lloguer_m2.xlsx", header = 5)
+    rent = rent.loc[np.isnan(rent.Codi_àmbit),["Codi_INE", "IV"]]
+    gdf["Codi_INE"] = pd.to_numeric(gdf["code_city"])
+    rent["IV"] = pd.to_numeric(rent["IV"], errors = "coerce")
+    rent = rent.iloc[0:29]
+    rent.columns = ['Codi_INE', 'rent_AMB_city']
+    rent.Codi_INE = rent.Codi_INE.astype(int)
+    gdf = gdf.merge(rent, on = "Codi_INE", how = "left")
+
+    #Barri lebel - Barcelona
+    rent = pd.read_excel("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/trimestral_bcn_lloguer_m2.xlsx", header = 20, sheet_name = "2023")
+    rent = rent.iloc[:,[0,5]]
+    rent.columns = ["code_barri", "rent_barcelona_barri"]
+    admin = pd.read_excel("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/BarcelonaCiutat_SeccionsCensals.xlsx")
+    admin = admin.loc[:,["codi_districte", "codi_barri", "codi_seccio_censal"]]
+    admin["ID"] = "08019" + admin["codi_districte"].astype(str).str.zfill(2) + admin["codi_seccio_censal"].astype(str).str.zfill(3)
+    rent = rent.merge(admin, left_on = "code_barri", right_on = "codi_barri", how = "left")
+
+    gdf = gdf.merge(rent.loc[:,["rent_barcelona_barri", "ID"]], on = "ID", how = "left")
+
+    #District level - Barcelona
+    rent = pd.read_excel("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/trimestral_bcn_lloguer_m2.xlsx", header = 8, sheet_name = "2023")
+    rent = rent.iloc[:,[0,5]]
+    rent.columns = ["codi_districte", "rent_barcelona_district"]
+    rent = rent.merge(admin, on = "codi_districte", how = "left")
+
+    gdf = gdf.merge(rent.loc[:,["rent_barcelona_district", "ID"]], on = "ID", how = "left")
+
+    gdf["rent_m2"] = gdf['rent_AMB_section']
+    gdf.loc[np.isnan(gdf.rent_m2), "rent_m2"] = gdf.loc[np.isnan(gdf.rent_m2), "rent_barcelona_barri"]
+    gdf.loc[gdf.rent_m2 < 0.5, "rent_m2"] = np.nan
+    gdf.loc[np.isnan(gdf.rent_m2), "rent_m2"] = gdf.loc[np.isnan(gdf.rent_m2), "rent_AMB_city"]
+    gdf.loc[np.isnan(gdf.rent_m2), "rent_m2"] = gdf.loc[np.isnan(gdf.rent_m2), "rent_barcelona_district"]
+
+    ## DWELLING SIZE
+
+    #section level - AMB
+    size = pd.read_excel("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/AMB_Superficie.xlsx", header = 5)
+    size = size.loc[:,["Codi_àmbit", "IV"]]
+    size["IV"] = pd.to_numeric(size["IV"], errors = "coerce")
+    size.columns = ['Codi_àmbit', 'size_AMB_section']
+
+    gdf = gdf.merge(size, on = "Codi_àmbit", how = "left")
+
+    #city level - AMB
+    size = pd.read_excel("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/AMB_Superficie.xlsx", header = 5)
+    size = size.loc[np.isnan(size.Codi_àmbit),["Codi_INE", "IV"]]
+    size["IV"] = pd.to_numeric(size["IV"], errors = "coerce")
+    size = size.iloc[0:29]
+    size.columns = ['Codi_INE', 'size_AMB_city']
+    size.Codi_INE = size.Codi_INE.astype(int)
+    gdf = gdf.merge(size, on = "Codi_INE", how = "left")
+
+    #Barri lebel - Barcelona
+    size = pd.read_excel("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/trimestral_bcn_sup.xlsx", header = 20, sheet_name = "2023")
+    size = size.iloc[:,[0,5]]
+    size.columns = ["code_barri", "size_barcelona_barri"]
+    size = size.merge(admin, left_on = "code_barri", right_on = "codi_barri", how = "left")
+
+    gdf = gdf.merge(size.loc[:,["size_barcelona_barri", "ID"]], on = "ID", how = "left")
+
+    #District level - Barcelona
+    size = pd.read_excel("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/trimestral_bcn_sup.xlsx", header = 8, sheet_name = "2023")
+    size = size.iloc[:,[0,5]]
+    size.columns = ["codi_districte", "size_barcelona_district"]
+    size = size.merge(admin, on = "codi_districte", how = "left")
+
+    gdf = gdf.merge(size.loc[:,["size_barcelona_district", "ID"]], on = "ID", how = "left")
+
+    gdf["size"] = gdf['size_AMB_section']
+    gdf.loc[np.isnan(gdf["size"]), "size"] = gdf.loc[np.isnan(gdf["size"]), "size_barcelona_barri"]
+    gdf.loc[gdf["size"] < 0.5, "size"] = np.nan
+    gdf.loc[np.isnan(gdf["size"]), "size"] = gdf.loc[np.isnan(gdf["size"]), "size_AMB_city"]
+    gdf.loc[np.isnan(gdf["size"]), "size"] = gdf.loc[np.isnan(gdf["size"]), "size_barcelona_district"]
+
+    gdf = gdf.drop(columns = ['Codi_àmbit', 'rent_AMB_section',
+       'Codi_INE', 'rent_AMB_city', 'rent_barcelona_barri',
+       'rent_barcelona_district', 'size_AMB_section',
+       'size_AMB_city', 'size_barcelona_barri', 'size_barcelona_district'])
+    
+    return gdf
