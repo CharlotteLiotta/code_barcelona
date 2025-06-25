@@ -705,7 +705,7 @@ def import_rent_and_size(gdf):
 
     #District level - Barcelona
     rent = pd.read_excel("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/trimestral_bcn_lloguer_m2.xlsx", header = 8, sheet_name = "2023")
-    rent = rent.iloc[:,[0,5]]
+    rent = rent.iloc[0:10,[0,5]]
     rent.columns = ["codi_districte", "rent_barcelona_district"]
     rent = rent.merge(admin, on = "codi_districte", how = "left")
 
@@ -746,7 +746,7 @@ def import_rent_and_size(gdf):
 
     #District level - Barcelona
     size = pd.read_excel("C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/trimestral_bcn_sup.xlsx", header = 8, sheet_name = "2023")
-    size = size.iloc[:,[0,5]]
+    size = size.iloc[0:10,[0,5]]
     size.columns = ["codi_districte", "size_barcelona_district"]
     size = size.merge(admin, on = "codi_districte", how = "left")
 

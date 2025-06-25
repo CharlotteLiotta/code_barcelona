@@ -24,6 +24,7 @@ from functions import *
 #EXTRACT DISTANCE AS WELL AS TRAVEL TIME FOR CARS
 #GO POLYCENTRIC
 #ADD DIFFERENT INCOME GROUPS?
+#DO MAX LIKELIHOOD INSTEAD OF MEAN
 
 ### IMPORT PARAMETERS
 
@@ -75,6 +76,25 @@ gdf, FIXED_COST_CAR = compute_cost_car(gdf, import_trans_mode, PRICE_TIME, WORKI
 # Compute transport cost
 gdf = compute_transport_cost(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, tax = 0)
 #print(round(100 * sum(gdf["transport_mode"] * gdf["pop"]) / sum(gdf["pop"])), " % commute by public transport")
+
+#Calibration
+gdf["income_net_of_transport_cost"] = Y - gdf["transport_cost"]
+gdf = import_rent_and_size(gdf)
+
+ppl_per_hh = pd.read_csv('C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/ppl_per_hh.csv')
+ppl_per_hh["ID_7D"] = ppl_per_hh["ID_RESIDENCIA_N4"].str[9:]
+ppl_per_hh.loc[ppl_per_hh["ID_ACTI_HOG_1"] == '3 or more', "ID_ACTI_HOG_1"] = 3
+ppl_per_hh.loc[ppl_per_hh["ID_ACTI_HOG_2"] == '3 or more', "ID_ACTI_HOG_2"] = 3
+ppl_per_hh["ID_ACTI_HOG_1"] = pd.to_numeric(ppl_per_hh["ID_ACTI_HOG_1"])
+ppl_per_hh["ID_ACTI_HOG_2"] = pd.to_numeric(ppl_per_hh["ID_ACTI_HOG_2"])
+ppl_per_hh["active_per_hh"] = ppl_per_hh["ID_ACTI_HOG_1"] + ppl_per_hh["ID_ACTI_HOG_2"]
+ppl_per_hh = ppl_per_hh.loc[:,["active_per_hh", "ID_7D"]].groupby("ID_7D").mean()
+gdf["ID_7D"] = gdf["ID"].str[:7]
+gdf = gdf.merge(ppl_per_hh, on = "ID_7D", how = "left")
+gdf["rent_share"] = gdf["rent_m2"] * gdf["size"] / (gdf["income_net_of_transport_cost"] * gdf["active_per_hh"])
+plt.hist(gdf["rent_share"])
+
+BETA = np.nansum(gdf["pop"][~np.isnan(gdf["rent_share"])] * gdf["rent_share"][~np.isnan(gdf["rent_share"])]) / np.nansum(gdf["pop"][~np.isnan(gdf["rent_share"])])
 
 # Solve the model
 def compute_error_in_population_from_utility(u):
