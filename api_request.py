@@ -3,17 +3,20 @@ import json
 import pandas as pd
 
 url = "https://www.ine.es/Censo2021/api"
+path_data = "C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/"
 
+### QUERY TO RETRIEVE EMPLOYMENT AT WORKPLACE
 #query = {
 #    "idioma": "EN",  # Use supported language
 #    "metrica": ["SPERSONAS"],
-#    "tabla": "viv.ppal",  # Personal data table
+#    "tabla": "viv.ppal",  
 #    "variables": [
-#        "ID_LUGAR_TRAB_N3"   # Province of workplace
+#        "ID_LUGAR_TRAB_N3"   
 #        
 #    ]
 #}
 
+### QUERY TO RETRIEVE ACTIVE PERSONS PER HOUSEHOLD
 query = {
     "idioma": "EN",  # Use supported language
     "metrica": ["SHOGARES"],
@@ -43,4 +46,4 @@ else:
 
 # Extract the data
 datos = pd.DataFrame(content["data"])
-datos.to_csv('C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/ppl_per_hh.csv')
+datos.to_csv(path_data + 'ppl_per_hh.csv')

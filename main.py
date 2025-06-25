@@ -1,22 +1,16 @@
 import numpy as np 
-import pandas as pd
-import scipy as sc
-import matplotlib.pyplot as plt
-import random
-from numba import njit, jit
 from copy import deepcopy
-import geopandas as gpd
-from shapely import wkt
-from scipy.sparse import csr_matrix
-import jpype
+from scipy.sparse import csr_matrix # type: ignore
+import jpype # type: ignore
+import os
 os.environ["R5_JAR"] = "C:/Users/1738037/AppData/Local/miniforge3/envs/r5py/Lib/site-packages/r5py/data/r5-v6.8-all.jar"
 jpype.startJVM(classpath=[os.environ["R5_JAR"]])
-print("Java started successfully.")
-from r5py import TravelTimeMatrixComputer, TransportMode, TravelTimeMatrix, TransportNetwork
-import datetime
-from shapely.geometry import mapping
 
 from functions import *
+from import_data import * # type: ignore
+from calibration import * # type: ignore
+from model import * # type: ignore
+from plotting_tools import * # type: ignore
 
 ###TO DO:
 #LOGIT TRANSPORT COST
@@ -25,43 +19,46 @@ from functions import *
 #GO POLYCENTRIC
 #ADD DIFFERENT INCOME GROUPS?
 #DO MAX LIKELIHOOD INSTEAD OF MEAN
+#HANDLE MISSING / WEIRD VALUES FOR CALIBRATION (RENT, SMALL OR LARGE CENSUS TRACTS)
+#ADD AMENITIES
 
 ### IMPORT PARAMETERS
 
-#Import time parameters
+path_data = "C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/"
+
+#Time
 year = 0
 MAX_YEAR = 20
 
-#Import parameters on urban form - TO UPDATE FOR BARCELONA
-B = 0.64
-BETA = 0.3
-KAPPA = 2.0140
-RHO = 0.05 + 0.93
-N = 10000
+#Policy impact model
+RHO = 0.05 + 0.93 #Interest rate + depreciation rate of built capital
+PRICE_TIME = 10 #euros/h
+WORKING_DAYS = 40 #20 days per month, with 2 trips per day
+PRICE_FUEL = 0.11 #euros/km
+
+#ABM
+N = 10000 #Nb of agents in the ABM
 PROBA_MOVE = 0.3
 
-#Import transport parameters
-PRICE_TIME = 10
-WORKING_DAYS = 40
-PRICE_FUEL = 0.11
-FIXED_COST_TRANSPORT = 22 #a modifier pour prendre ne compte les zones
-
-#Import parameters on opinion dynamic - TO UPDATE FOR BARCELONA
-I = np.random.randint(1,10, N)
-DELTA = 0.5
-GAMMA = 0.25
-BETA_OPINION = [0.37, 0.50, 0.21, 0.01, -0.01, -0.01, 0] #[0.33, 0.33, 0.33, 0.01, -0.01, -0.01, 0] #BETA_OPINION = [0.048, 0.058, 0.033, 0.00, -0.00, -0.00, 0.129]
+#Policy support model
+#I = np.random.randint(1,10, N)
+#DELTA = 0.5
+#GAMMA = 0.25
+#BETA_OPINION = [0.37, 0.50, 0.21, 0.01, -0.01, -0.01, 0] #[0.33, 0.33, 0.33, 0.01, -0.01, -0.01, 0] #BETA_OPINION = [0.048, 0.058, 0.033, 0.00, -0.00, -0.00, 0.129]
 
 #Tax
-tax = 1
-RATE_INCREASE_TAX = 0.05
+tax = 1 #Initial tax level
+RATE_INCREASE_TAX = 0.05 #Rate of increase per year
 
 ### IMPORT DATA
 
-#Spatial structure of Barcelona
-gdf = import_data(option = "SECTION") #"DISTRICT"SECTION #1.4M total des actifs
+#Import data
+gdf = import_data(option = "SECTION") #"DISTRICT" or "SECTION" - Active population: 1.4M
 gdf = import_jobs(gdf)
 Y, gdf = import_income(gdf)
+gdf = import_land_use(gdf)
+gdf = import_rent_and_size(gdf)
+gdf = import_ppl_per_hh(gdf)
 
 #Transport times
 #import_transport_times(gdf, datetime.datetime(2025, 7, 7, 8, 0, 0), "0801910130", 1)
@@ -69,38 +66,29 @@ travel_time_matrix_car, travel_time_matrix_transit = load_transport_times(gdf)
 gdf = add_transport(gdf, travel_time_matrix_car, travel_time_matrix_transit, "0801910130")
 gdf = import_cost_transit(gdf)
 
-gdf, FIXED_COST_CAR = compute_cost_car(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL)
-
 ### INITIAL STATE: YEAR 0
 
-# Compute transport cost
+#Transport cost calibration
+gdf, FIXED_COST_CAR = compute_cost_car(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL)
+print("FIXED_COST_CAR: ", FIXED_COST_CAR)
+
+#Compute transport cost
 gdf = compute_transport_cost(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, tax = 0)
-#print(round(100 * sum(gdf["transport_mode"] * gdf["pop"]) / sum(gdf["pop"])), " % commute by public transport")
+print(round(100 * sum(gdf["transport_mode"] * gdf["pop"]) / sum(gdf["pop"])), " % commute by public transport")
 
-#Calibration
-gdf["income_net_of_transport_cost"] = Y - gdf["transport_cost"]
-gdf = import_rent_and_size(gdf)
+#Calibration BETA
+BETA = calibrate_beta(gdf, Y)
+print("BETA: ", BETA)
 
-ppl_per_hh = pd.read_csv('C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/ppl_per_hh.csv')
-ppl_per_hh["ID_7D"] = ppl_per_hh["ID_RESIDENCIA_N4"].str[9:]
-ppl_per_hh.loc[ppl_per_hh["ID_ACTI_HOG_1"] == '3 or more', "ID_ACTI_HOG_1"] = 3
-ppl_per_hh.loc[ppl_per_hh["ID_ACTI_HOG_2"] == '3 or more', "ID_ACTI_HOG_2"] = 3
-ppl_per_hh["ID_ACTI_HOG_1"] = pd.to_numeric(ppl_per_hh["ID_ACTI_HOG_1"])
-ppl_per_hh["ID_ACTI_HOG_2"] = pd.to_numeric(ppl_per_hh["ID_ACTI_HOG_2"])
-ppl_per_hh["active_per_hh"] = ppl_per_hh["ID_ACTI_HOG_1"] + ppl_per_hh["ID_ACTI_HOG_2"]
-ppl_per_hh = ppl_per_hh.loc[:,["active_per_hh", "ID_7D"]].groupby("ID_7D").mean()
-gdf["ID_7D"] = gdf["ID"].str[:7]
-gdf = gdf.merge(ppl_per_hh, on = "ID_7D", how = "left")
-gdf["rent_share"] = gdf["rent_m2"] * gdf["size"] / (gdf["income_net_of_transport_cost"] * gdf["active_per_hh"])
-plt.hist(gdf["rent_share"])
-
-BETA = np.nansum(gdf["pop"][~np.isnan(gdf["rent_share"])] * gdf["rent_share"][~np.isnan(gdf["rent_share"])]) / np.nansum(gdf["pop"][~np.isnan(gdf["rent_share"])])
+#Calibration B and KAPPA
+mask = ((gdf["log_R"] < 3.2) &(gdf["log_R"] > 2) &(~np.isnan(gdf["log_n"])) & (~np.isnan(gdf["log_R"]))&(~np.isnan(gdf["log_L"]))&(~np.isnan(gdf["log_q"])))
+B, KAPPA = calibrate_b_kappa(gdf, mask, option_calib = "housing")
 
 # Solve the model
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u, N, BETA, Y, gdf["transport_cost"], B, KAPPA, RHO, gdf["area"])
+    return compute_error_in_population(u, np.nansum(gdf["pop"]), BETA, Y, gdf["transport_cost"], B, KAPPA, RHO, gdf["urb_area"])
 
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 100)
 
@@ -108,12 +96,23 @@ if solving_model.fun < 1:
     utility = solving_model.x
     R = compute_rents(BETA, Y, utility, gdf["transport_cost"])
     q = compute_dwelling_size(BETA, Y, gdf["transport_cost"], R)
-    n = compute_population(B, KAPPA, R, RHO, gdf["area"], q)
+    n = compute_population(B, KAPPA, R, RHO, gdf["urb_area"], q)
 else:
     print("Minimization failed!")
 
-# ABM: translate outputs at the household level
+# Plot the result of the calibration
+map_calibration(gdf, n, gdf["pop"] , "Population")
+map_calibration(gdf, q, gdf["size"] / gdf["active_per_hh"], "Dwelling size per capita")
+map_calibration(gdf, R, gdf["rent_m2"], "Rent per m2")
+map_calibration(gdf, 1000000 * n / gdf["urb_area"], 1000000 * gdf["pop"] / gdf["urb_area"], "Population density")
 
+scatter_calibration(gdf, n, gdf["pop"] , "Population")
+scatter_calibration(gdf, q, gdf["size"] / gdf["active_per_hh"], "Dwelling size per capita")
+scatter_calibration(gdf, R, gdf["rent_m2"], "Rent per m2")
+scatter_calibration(gdf, 1000000 * n / gdf["urb_area"], 1000000 * gdf["pop"] / gdf["urb_area"], "Population density")
+
+# ABM: translate outputs at the household level
+#### n = n / 140
 indiv_loc_matrix = compute_indiv_loc_matrix(N, len(gdf), n.to_numpy())
 missing_ppl = N - sum(sum(indiv_loc_matrix))
 if missing_ppl > 0:
