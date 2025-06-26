@@ -2,6 +2,8 @@ import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 
 def plot_with_missing(gdf, var):
+    """ Map a variable with missing values in grey """
+
     gdf.plot(
     column=var,
     legend=True,
@@ -11,6 +13,7 @@ def plot_with_missing(gdf, var):
     })
 
 def map_calibration(gdf, var1, var2, title):
+    """ Compare data and calibration - Map """
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
     cmap = "viridis"
@@ -29,6 +32,8 @@ def map_calibration(gdf, var1, var2, title):
     plt.show()
 
 def scatter_calibration(gdf, var1, var2, title):
+    """ Compare data and calibration - Scatter plot """
+
     plt.scatter(gdf["distance_center"], var1, label = "Calibration", s = 0.5)
     plt.scatter(gdf["distance_center"], var2, label = "Data", s = 0.5)
     plt.ylim(0,np.nanmax(var2))

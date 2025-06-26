@@ -3,7 +3,8 @@ import json
 import pandas as pd
 
 url = "https://www.ine.es/Censo2021/api"
-path_data = "C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/"
+path_data = '../data_barcelona/'
+#Doc here: https://www.ine.es/dyngs/DataLab/en/manual.html?cid=1259945952385
 
 ### QUERY TO RETRIEVE EMPLOYMENT AT WORKPLACE
 #query = {

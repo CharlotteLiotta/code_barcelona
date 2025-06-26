@@ -1,7 +1,8 @@
 import numpy as np # type: ignore
 
 def compute_transport_cost(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, tax):
-
+    """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
+    
     gdf["COST_CAR"] = ((gdf["travel_time_car"] / 60) * PRICE_TIME * WORKING_DAYS) + (gdf.distance_center * PRICE_FUEL * WORKING_DAYS) + FIXED_COST_CAR + (tax * WORKING_DAYS)
     gdf["COST_PT"] = ((gdf["travel_time_transit"] / 60) * PRICE_TIME * WORKING_DAYS) + gdf["monthly_cost_transit"]
 
@@ -15,6 +16,7 @@ def compute_transport_cost(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_
     #print("Transport cost: ", sum(np.isnan(gdf["transport_cost"])), "missing values")
     gdf.loc[np.isnan(gdf["transport_cost"]), "transport_cost"] = 120
     gdf.loc[np.isnan(gdf["transport_mode"]), "transport_mode"] = 0
+
     return gdf
 
 def compute_error_in_population(u, N, BETA, Y, transport_cost, B, KAPPA, RHO, L, housing_lag = None):

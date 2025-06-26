@@ -21,10 +21,11 @@ from plotting_tools import * # type: ignore
 #DO MAX LIKELIHOOD INSTEAD OF MEAN
 #HANDLE MISSING / WEIRD VALUES FOR CALIBRATION (RENT, SMALL OR LARGE CENSUS TRACTS)
 #ADD AMENITIES
+#HARMONIZE DISTANCE CENTER AND CENTER TRANSPORT
 
 ### IMPORT PARAMETERS
 
-path_data = "C:/Users/1738037/OneDrive - UAB/1- CLIMGROW Charlotte/1- PSC cities/data_barcelona/"
+path_data = "../data_barcelona/"
 
 #Time
 year = 0
@@ -35,6 +36,7 @@ RHO = 0.05 + 0.93 #Interest rate + depreciation rate of built capital
 PRICE_TIME = 10 #euros/h
 WORKING_DAYS = 40 #20 days per month, with 2 trips per day
 PRICE_FUEL = 0.11 #euros/km
+center = "0801910130"
 
 #ABM
 N = 10000 #Nb of agents in the ABM
@@ -53,23 +55,23 @@ RATE_INCREASE_TAX = 0.05 #Rate of increase per year
 ### IMPORT DATA
 
 #Import data
-gdf = import_data(option = "SECTION") #"DISTRICT" or "SECTION" - Active population: 1.4M
-gdf = import_jobs(gdf)
-Y, gdf = import_income(gdf)
-gdf = import_land_use(gdf)
-gdf = import_rent_and_size(gdf)
-gdf = import_ppl_per_hh(gdf)
+gdf = import_data(path_data, option = "SECTION") #"DISTRICT" or "SECTION" - Active population: 1.4M
+gdf = import_jobs(gdf, path_data)
+Y, gdf = import_income(gdf, path_data)
+gdf = import_land_use(gdf, path_data)
+gdf = import_rent_and_size(gdf, path_data)
+gdf = import_ppl_per_hh(gdf, path_data)
 
 #Transport times
-#import_transport_times(gdf, datetime.datetime(2025, 7, 7, 8, 0, 0), "0801910130", 1)
-travel_time_matrix_car, travel_time_matrix_transit = load_transport_times(gdf)
-gdf = add_transport(gdf, travel_time_matrix_car, travel_time_matrix_transit, "0801910130")
+#import_transport_times(gdf, datetime.datetime(2025, 7, 7, 8, 0, 0), center, path_data, 1)
+travel_time_matrix_car, travel_time_matrix_transit = load_transport_times(gdf, path_data)
+gdf = add_transport(gdf, travel_time_matrix_car, travel_time_matrix_transit, center)
 gdf = import_cost_transit(gdf)
 
 ### INITIAL STATE: YEAR 0
 
 #Transport cost calibration
-gdf, FIXED_COST_CAR = compute_cost_car(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL)
+gdf, FIXED_COST_CAR = compute_cost_car(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, path_data)
 print("FIXED_COST_CAR: ", FIXED_COST_CAR)
 
 #Compute transport cost
@@ -82,7 +84,7 @@ print("BETA: ", BETA)
 
 #Calibration B and KAPPA
 mask = ((gdf["log_R"] < 3.2) &(gdf["log_R"] > 2) &(~np.isnan(gdf["log_n"])) & (~np.isnan(gdf["log_R"]))&(~np.isnan(gdf["log_L"]))&(~np.isnan(gdf["log_q"])))
-B, KAPPA = calibrate_b_kappa(gdf, mask, option_calib = "housing")
+B, KAPPA = calibrate_b_kappa(gdf, mask, RHO, option_calib = "housing")
 
 # Solve the model
 def compute_error_in_population_from_utility(u):
