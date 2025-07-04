@@ -5,7 +5,7 @@ from shapely import wkt # type: ignore
 
 from import_data import * # type: ignore
 
-def import_data(path_data, option):
+def import_data(path_data, center, option):
     """ Import shapefile + population """
 
     if option == "SECTION":
@@ -32,7 +32,8 @@ def import_data(path_data, option):
         gdf["Total"] = gdf["Total"].apply(fix_decimal)
         gdf["Total"] = pd.to_numeric(gdf["Total"].str.replace(',', ''), errors='coerce')
         gdf = gdf.loc[gdf.NMUN.isin(['Badalona', 'Badia del Vallès', 'Barberà del Vallès', 'Barcelona','Begues','Castellbisbal', 'Castelldefels', 'Cerdanyola del Vallès', 'Cervelló','Corbera de Llobregat','Papiol, El', 'Prat de Llobregat, El', 'Esplugues de Llobregat','Gavà', "Hospitalet de Llobregat, L'",'Palma de Cervelló, La','Molins de Rei', 'Montcada i Reixac', 'Montgat', 'Pallejà', 'Ripollet','Sant Adrià de Besòs', 'Sant Andreu de la Barca','Sant Boi de Llobregat', 'Sant Climent de Llobregat', 'Sant Cugat del Vallès', 'Sant Feliu de Llobregat','Sant Joan Despí','Sant Just Desvern','Sant Vicenç dels Horts', 'Santa Coloma de Cervelló', 'Santa Coloma de Gramenet','Tiana', 'Torrelles de Llobregat', 'Viladecans']),["CUSEC", "CUMUN", "Shape_Area", "Total", "geometry", "NMUN"]]
-        city_center = gdf.loc[gdf.NMUN == "Barcelona",:].centroid
+        gdf.CUSEC = gdf.CUSEC.astype(str)
+        city_center = gdf.loc[gdf.CUSEC == center,:].centroid
         gdf["distance_center"] = gdf.centroid.distance(city_center.iloc[0], align = False) / 1000
         gdf = gdf.loc[:,["CUSEC", "geometry", "Shape_Area", "Total", "distance_center"]]
         
@@ -89,7 +90,7 @@ def import_income(gdf, path_data):
     
     #Import income data
     income = pd.read_csv(path_data + '30896.csv', sep = ";", encoding="latin1")
-    income = income.loc[(income.Periodo == 2022) & (income['Mean and median income indicators'] == 'Average net income per person'),["Sections", "Total"]]
+    income = income.loc[(income.Periodo == 2022) & (income['Mean and median income indicators'] == 'Average household net income'),["Sections", "Total"]]
     income = income.dropna(subset=["Sections"])
     income["ID"] = income["Sections"].str[:10]
     income.columns = ['Sections', 'net_income', 'ID']
@@ -99,6 +100,7 @@ def import_income(gdf, path_data):
     #Merge with gdf
     gdf = gdf.merge(income.loc[:,['net_income', 'ID']], on = "ID", how = "left")
     
+    gdf["net_income"] = gdf["net_income"] / gdf["active_per_hh"]
     #Compute average income
     Y = (np.nansum(gdf.net_income * gdf["pop"]) / np.nansum(gdf["pop"]))
     
@@ -157,7 +159,7 @@ def import_rent_and_size(gdf, path_data):
     #Consolidate
     gdf["rent_m2"] = gdf['rent_AMB_section']
     gdf.loc[np.isnan(gdf.rent_m2), "rent_m2"] = gdf.loc[np.isnan(gdf.rent_m2), "rent_barcelona_barri"]
-    gdf.loc[gdf.rent_m2 < 0.5, "rent_m2"] = np.nan
+    #gdf.loc[gdf.rent_m2 < 0.5, "rent_m2"] = np.nan
     gdf.loc[np.isnan(gdf.rent_m2), "rent_m2"] = gdf.loc[np.isnan(gdf.rent_m2), "rent_AMB_city"]
     gdf.loc[np.isnan(gdf.rent_m2), "rent_m2"] = gdf.loc[np.isnan(gdf.rent_m2), "rent_barcelona_district"]
 
@@ -217,24 +219,56 @@ def import_ppl_per_hh(gdf, path_data):
     ppl_per_hh["ID_ACTI_HOG_1"] = pd.to_numeric(ppl_per_hh["ID_ACTI_HOG_1"])
     ppl_per_hh["ID_ACTI_HOG_2"] = pd.to_numeric(ppl_per_hh["ID_ACTI_HOG_2"])
     ppl_per_hh["active_per_hh"] = ppl_per_hh["ID_ACTI_HOG_1"] + ppl_per_hh["ID_ACTI_HOG_2"]
-    ppl_per_hh = ppl_per_hh.loc[:,["active_per_hh", "ID_7D"]].groupby("ID_7D").mean()
+    
+    ppl_per_hh["active_per_hh"] = ppl_per_hh["active_per_hh"] * ppl_per_hh["SHOGARES"]
+    
+    ppl_per_hh = ppl_per_hh.loc[:,["active_per_hh", "ID_7D", "SHOGARES"]].groupby("ID_7D").sum()
+    ppl_per_hh["active_per_hh"] = ppl_per_hh["active_per_hh"] / ppl_per_hh["SHOGARES"]
+    ppl_per_hh = ppl_per_hh.loc[:,["active_per_hh"]]
+    
     gdf["ID_7D"] = gdf["ID"].str[:7]
     gdf = gdf.merge(ppl_per_hh, on = "ID_7D", how = "left")
+
+    area_housing = pd.read_csv(path_data + 'area_housing.csv')
+    area_housing["ID_7D"] = area_housing["ID_RESIDENCIA_N4"].str[9:]
+    area_housing.loc[area_housing["ID_SUP_VIV"] == '106-120 m2', "ID_SUP_VIV"] = 113
+    area_housing.loc[area_housing["ID_SUP_VIV"] == '121-150 m2', "ID_SUP_VIV"] = 135.5
+    area_housing.loc[area_housing["ID_SUP_VIV"] == '151-180 m2', "ID_SUP_VIV"] = 165.5
+    area_housing.loc[area_housing["ID_SUP_VIV"] == '30-45 m2', "ID_SUP_VIV"] = 37.5
+    area_housing.loc[area_housing["ID_SUP_VIV"] == '46-60 m2', "ID_SUP_VIV"] = 53
+    area_housing.loc[area_housing["ID_SUP_VIV"] == '61-75 m2', "ID_SUP_VIV"] = 68
+    area_housing.loc[area_housing["ID_SUP_VIV"] == '76-90 m2', "ID_SUP_VIV"] = 83
+    area_housing.loc[area_housing["ID_SUP_VIV"] == '91-105 m2', "ID_SUP_VIV"] = 98
+    area_housing.loc[area_housing["ID_SUP_VIV"] == 'Less than 30 m2', "ID_SUP_VIV"] = 15
+    area_housing.loc[area_housing["ID_SUP_VIV"] == 'More than 180 m2', "ID_SUP_VIV"] = 200
+
+    area_housing["ID_SUP_VIV"] = pd.to_numeric(area_housing["ID_SUP_VIV"], errors = "coerce")
+    area_housing["ID_SUP_VIV"] = area_housing["ID_SUP_VIV"] * area_housing["SHOGARES"]
+    
+    area_housing = area_housing.loc[:,["SHOGARES", "ID_SUP_VIV", "ID_7D"]].groupby("ID_7D").sum()
+    area_housing["ID_SUP_VIV"] = area_housing["ID_SUP_VIV"] / area_housing["SHOGARES"]
+    
+    area_housing = area_housing.merge(ppl_per_hh, on = "ID_7D", how = "left")
+    area_housing["size"] = area_housing["ID_SUP_VIV"] / area_housing["active_per_hh"]
+    gdf["ID_7D"] = gdf["ID"].str[:7]
+    gdf = gdf.drop(columns = ["size"])
+    gdf = gdf.merge(area_housing.loc[:,["size"]], left_on = "ID_7D", right_index = True, how = "left")
+
     return gdf
 
-def load_transport_times(gdf, path_data):
+def load_transport_times(gdf, path_data, center):
     """ Load transport times previously retrieved with import_transport_time """
 
     def load_transport_data(mode):
         i = 100
-        travel_time_matrix = np.load(path_data + "travel_time_matrix_" + mode + "_" + str(i) + ".npy", allow_pickle= True)
+        travel_time_matrix = np.load(path_data + "/travel_time_matrix_" + mode + "_" + str(i) + ".npy", allow_pickle= True) #"tt_" + center + 
     
         while i < len(gdf) - 100:
             i = i + 100
-            temp = np.load(path_data + "travel_time_matrix_" + mode + "_" + str(i) + ".npy", allow_pickle= True)
+            temp = np.load(path_data + "/travel_time_matrix_" + mode + "_" + str(i) + ".npy", allow_pickle= True) #"tt_" + center + 
             travel_time_matrix = np.concatenate((travel_time_matrix, temp), axis=0)
         
-        temp = np.load(path_data + "travel_time_matrix_" + mode +  "_" + str(len(gdf)) + ".npy", allow_pickle= True)
+        temp = np.load(path_data + "/travel_time_matrix_" + mode +  "_" + str(len(gdf)) + ".npy", allow_pickle= True) #"tt_" + center + 
         travel_time_matrix = np.concatenate((travel_time_matrix, temp), axis=0)
     
         travel_time_matrix = pd.DataFrame(travel_time_matrix, columns = ['from_id', 'to_id', 'travel_time'])
@@ -242,6 +276,27 @@ def load_transport_times(gdf, path_data):
         return travel_time_matrix
 
     return load_transport_data("car"), load_transport_data("transit")
+
+def load_transport_distance(gdf, path_data, center):
+    """ Load transport times previously retrieved with import_transport_time """
+
+    i = 100
+    travel_distance_matrix = np.load(path_data + "detailed_itin_car_" + str(i) + ".npy", allow_pickle= True)
+    
+    while i < len(gdf) - 100:
+        i = i + 100
+        temp = np.load(path_data + "detailed_itin_car_" + str(i) + ".npy", allow_pickle= True)
+        travel_distance_matrix = np.concatenate((travel_distance_matrix, temp), axis=0)
+        
+    temp = np.load(path_data + "detailed_itin_car_" + str(len(gdf)) + ".npy", allow_pickle= True)
+    travel_distance_matrix = np.concatenate((travel_distance_matrix, temp), axis=0)
+    
+    travel_distance_matrix = pd.DataFrame(travel_distance_matrix)
+    travel_distance_matrix = travel_distance_matrix.iloc[:,[0,1,6]]
+    travel_distance_matrix.columns = ["from_id", "to_id", "distance_car"]
+    travel_distance_matrix['distance_car'] = pd.to_numeric(travel_distance_matrix['distance_car'], errors='coerce')
+    return travel_distance_matrix
+
 
 def merge_transport(gdf, travel_time_matrix, center, name):
     """ Merge transport times to a point with gdf """

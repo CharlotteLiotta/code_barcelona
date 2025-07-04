@@ -18,13 +18,25 @@ path_data = '../data_barcelona/'
 #}
 
 ### QUERY TO RETRIEVE ACTIVE PERSONS PER HOUSEHOLD
+#query = {
+#    "idioma": "EN",  # Use supported language
+#    "metrica": ["SHOGARES"],
+#    "tabla": "hog",  # Personal data table
+#    "variables": [
+#        "ID_RESIDENCIA_N4",  # Municipality level
+#        "ID_ACTI_HOG_2", "ID_ACTI_HOG_1"   # Province of workplace
+#        
+#    ]
+#}
+
+### QUERY TO RETRIEVE ACTIVE PERSONS PER HOUSEHOLD
 query = {
     "idioma": "EN",  # Use supported language
     "metrica": ["SHOGARES"],
     "tabla": "hog",  # Personal data table
     "variables": [
         "ID_RESIDENCIA_N4",  # Municipality level
-        "ID_ACTI_HOG_2", "ID_ACTI_HOG_1"   # Province of workplace
+        "ID_SUP_VIV",   # Province of workplace
         
     ]
 }
@@ -47,4 +59,4 @@ else:
 
 # Extract the data
 datos = pd.DataFrame(content["data"])
-datos.to_csv(path_data + 'ppl_per_hh.csv')
+datos.to_csv(path_data + 'area_housing.csv')

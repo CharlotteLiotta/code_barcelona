@@ -3,7 +3,7 @@ import numpy as np # type: ignore
 def compute_transport_cost(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, tax):
     """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
     
-    gdf["COST_CAR"] = ((gdf["travel_time_car"] / 60) * PRICE_TIME * WORKING_DAYS) + (gdf.distance_center * PRICE_FUEL * WORKING_DAYS) + FIXED_COST_CAR + (tax * WORKING_DAYS)
+    gdf["COST_CAR"] = ((gdf["travel_time_car"] / 60) * PRICE_TIME * WORKING_DAYS) + ((gdf.distance_car / 1000) * PRICE_FUEL * WORKING_DAYS) + FIXED_COST_CAR + (tax * WORKING_DAYS)
     gdf["COST_PT"] = ((gdf["travel_time_transit"] / 60) * PRICE_TIME * WORKING_DAYS) + gdf["monthly_cost_transit"]
 
     stacked = np.vstack([gdf["COST_CAR"], gdf["COST_PT"]])  # Shape (2, N)
@@ -15,6 +15,29 @@ def compute_transport_cost(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_
     
     #print("Transport cost: ", sum(np.isnan(gdf["transport_cost"])), "missing values")
     gdf.loc[np.isnan(gdf["transport_cost"]), "transport_cost"] = 120
+    gdf.loc[np.isnan(gdf["transport_mode"]), "transport_mode"] = 0
+
+    return gdf
+
+def compute_transport_cost_logit(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax):
+    """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
+    
+    gdf["COST_CAR"] = ((gdf["travel_time_car"] / 60) * PRICE_TIME * WORKING_DAYS) + ((gdf.distance_car / 1000) * PRICE_FUEL * WORKING_DAYS) + FIXED_COST_CAR + (tax * WORKING_DAYS)
+    gdf["COST_PT"] = ((gdf["travel_time_transit"] / 60) * PRICE_TIME * WORKING_DAYS) + gdf["monthly_cost_transit"]
+
+    gdf.loc[np.isnan(gdf["COST_CAR"]), "COST_CAR"] = 600
+    gdf.loc[np.isnan(gdf["COST_PT"]), "COST_PT"] = 3500
+    #stacked = np.vstack([gdf["COST_CAR"], gdf["COST_PT"]])  # Shape (2, N)
+    #masked = np.where(np.isnan(stacked), np.inf, stacked)
+    #choice = np.argmin(masked, axis=0)
+
+    #gdf["transport_cost"] = np.fmin(gdf["COST_CAR"], gdf["COST_PT"])
+    
+    
+    gdf["transport_mode"] = 1 / (1 + np.exp((gdf["COST_PT"] - gdf["COST_CAR"])/LAMBDA))
+    gdf["transport_cost"] = (gdf["transport_mode"] * gdf["COST_PT"]) + ((1 - gdf["transport_mode"]) * gdf["COST_CAR"])
+    #print("Transport cost: ", sum(np.isnan(gdf["transport_cost"])), "missing values")
+    gdf.loc[np.isnan(gdf["transport_cost"]), "transport_cost"] = gdf["COST_CAR"]
     gdf.loc[np.isnan(gdf["transport_mode"]), "transport_mode"] = 0
 
     return gdf
