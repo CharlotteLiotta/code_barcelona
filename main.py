@@ -16,13 +16,10 @@ from import_transport import *
 
 ###TO DO:
 
-#BETTER TRANSPORT DATA WITH FGC,...
+#BETTER TRANSPORT DATA WITH FGC,... // CHECK TRANSPORT AND ADD EMEF
 
 #GO POLYCENTRIC
 #ADD DIFFERENT INCOME GROUPS?
-#DO MAX LIKELIHOOD INSTEAD OF MEAN ###1.
-
-#ADD AMENITIES ###1.
 
 #clean the size / active data import
 #clean the distance to city center data
@@ -69,10 +66,17 @@ Y, gdf = import_income(gdf, path_data)
 
 #### IMPORT AMENITIES
 
+gdf["barcelona"] = gdf.code_city == "08019"
+
 #Distance to the beach
 land_cover = gpd.read_file(path_data + "cobertes-sol-v1r0-2023.gpkg", layer="cobertes_sol", engine="fiona")
 land_cover = land_cover.to_crs(gdf.crs)
-gdf['min_distance_beach'] = gdf.geometry.apply(lambda geom: land_cover.loc[land_cover.nivell_2 == 233,:].distance(geom).min())
+gdf['min_distance_beach'] = gdf.centroid.apply(
+    lambda center: land_cover.loc[land_cover.nivell_2 == 233, :].distance(center).min()
+)
+gdf["beach_500m"] = (gdf['min_distance_beach'] < 500) * 1
+gdf["beach_500m_1km"] = ((gdf['min_distance_beach'] < 1000) & (gdf['min_distance_beach'] > 500)) * 1
+gdf["beach_1km_2km"] = ((gdf['min_distance_beach'] < 2000) & (gdf['min_distance_beach'] > 1000)) * 1
 
 #Distance to park
 
@@ -82,9 +86,25 @@ parcs = parcs.to_crs(gdf.crs)
 parcs2 = gpd.read_file(path_data + "equipaments_pro.kml")
 parcs2 = parcs2.to_crs(gdf.crs)
 
-gdf['min_distance_parc'] = gdf.geometry.apply(lambda geom: parcs.distance(geom).min())
-gdf['min_distance_parc2'] = gdf.geometry.apply(lambda geom: parcs2.distance(geom).min())
-#CENTROID??
+parcs_combined = pd.concat([parcs["geometry"], parcs2["geometry"]])
+parcs_combined = gpd.GeoDataFrame(parcs_combined, geometry="geometry", crs=parcs.crs)
+
+parcs_combined = gpd.GeoDataFrame(
+    geometry=pd.concat([parcs.loc[parcs.area_ha > 2, "geometry"], parcs2["geometry"]]),
+    crs=parcs.crs
+)
+
+gdf['min_distance_parc'] = gdf.centroid.apply(lambda geom: parcs.distance(geom).min())
+gdf['min_distance_parc2'] = gdf.centroid.apply(lambda geom: parcs2.distance(geom).min())
+gdf['min_distance_parc_combined'] = gdf.centroid.apply(lambda geom: parcs_combined.distance(geom).min())
+
+gdf["parc_500m"] = (gdf['min_distance_parc_combined'] < 500) * 1
+gdf["parc_500m_1km"] = ((gdf['min_distance_parc_combined'] < 1000) & (gdf['min_distance_parc_combined'] > 500)) * 1
+gdf["parc_1km_2km"] = ((gdf['min_distance_parc_combined'] < 2000) & (gdf['min_distance_parc_combined'] > 1000)) * 1
+
+gdf["parc_500m_b"] = gdf["parc_500m"] * gdf["barcelona"]
+gdf["parc_500m_1km_b"] = gdf["parc_500m_1km"] * gdf["barcelona"]
+gdf["parc_1km_2km_b"] = gdf["parc_1km_2km"] * gdf["barcelona"]
 
 #Distance to train stations
 stations = [
@@ -105,16 +125,12 @@ stations = gpd.GeoDataFrame(
 )
 
 stations = stations.to_crs(gdf.crs)
-gdf['min_distance_stations'] = gdf.geometry.apply(lambda geom: stations.iloc[0,:].distance(geom).min())
+station_geom = stations.geometry.iloc[0]
+gdf['min_distance_stations'] = gdf.centroid.distance(station_geom)
 
-# Reproject to EPSG:25830
-gdf = gdf.to_crs(epsg=25830)
-
-#Distance to FGC stations / Renfe stations
-
-#Distance to markets
-
-#Slope
+gdf["station_500m"] = (gdf['min_distance_stations'] < 500) * 1
+gdf["station_500m_1km"] = ((gdf['min_distance_stations'] < 1000) & (gdf['min_distance_stations'] > 500)) * 1
+gdf["station_1km_2km"] = ((gdf['min_distance_stations'] < 2000) & (gdf['min_distance_stations'] > 1000)) * 1
 
 #Airport
 lon, lat = 2.0783, 41.2969
@@ -124,7 +140,9 @@ airport_wgs84 = gpd.GeoDataFrame(
     crs='EPSG:4326'  # WGS84
 )
 airport_25830 = airport_wgs84.to_crs(epsg=25830)
-gdf['min_distance_airport'] = gdf.geometry.apply(lambda geom: airport_25830.distance(geom).min())
+gdf['min_distance_airport'] = gdf.centroid.apply(lambda geom: airport_25830.distance(geom).min())
+
+gdf["airport_500m"] = (gdf['min_distance_airport'] < 500) * 1
 
 #Touristic areas
 #https://opendata-ajuntament.barcelona.cat/data/en/dataset/habitatges-us-turistic
@@ -136,6 +154,10 @@ mean_dn = joined.groupby('index_right')['DN'].mean()
 gdf['index_tourism'] = gdf.index.map(mean_dn)
 gdf.loc[np.isnan(gdf.index_tourism), "index_tourism"] = 0
 
+gdf["high_tourism"] = (gdf['index_tourism'] > 50) * 1
+gdf["medium_tourism"] = ((gdf['index_tourism'] < 50) & (gdf['index_tourism'] > 30)) * 1
+#distance à ça?
+
 #Activity
 activity = gpd.read_file(path_data + "2018_cohesio_sobreocupacio.gpkg")
 activity = activity.to_crs(gdf.crs)
@@ -145,10 +167,98 @@ gdf['mean_activity'] = gdf.index.map(mean_dn)
 gdf.loc[np.isnan(gdf.mean_activity), "mean_activity"] = 0
 
 #Pedestrian streets
+import requests
+import geopandas as gpd
+from shapely.geometry import shape, LineString, MultiLineString
+import json
+
+# Convert your polygon to Overpass-compatible bbox string: "south,west,north,east"
+amb_polygon = amb_polygon = gdf.to_crs(epsg=4326).unary_union
+minx, miny, maxx, maxy = amb_polygon.bounds
+bbox = f"{miny},{minx},{maxy},{maxx}"
+
+# Overpass QL query to get ways tagged as pedestrian or footway within bbox
+overpass_url = "http://overpass-api.de/api/interpreter"
+query = f"""
+[out:json][timeout:25];
+(
+  way["highway"="pedestrian"]({bbox});
+);
+out geom;
+"""
+
+response = requests.post(overpass_url, data={'data': query})
+data = response.json()
+
+# Extract ways and convert to shapely LineStrings
+lines = []
+for element in data['elements']:
+    if element['type'] == 'way' and 'geometry' in element:
+        coords = [(pt['lon'], pt['lat']) for pt in element['geometry']]
+        if len(coords) > 1:
+            lines.append(LineString(coords))
+
+# Create GeoDataFrame
+gdf_pedestrian = gpd.GeoDataFrame(geometry=lines, crs="EPSG:4326")
+gdf_pedestrian = gdf_pedestrian.to_crs(gdf.crs)
+gdf_pedestrian["length_m"] = gdf_pedestrian.geometry.length
+joined = gpd.sjoin(gdf_pedestrian, gdf, predicate="intersects")
+agg_length = joined.groupby("index_right")["length_m"].sum()
+gdf["pedestrian_length_m"] = gdf.index.map(agg_length).fillna(0)
+gdf["pedestrian_density"] = gdf["pedestrian_length_m"]  / gdf["area"] 
+
+pedestrian_data = gpd.read_file(path_data + "Carrers_Amb_Prioritat_Vianants/Carrers_Prioritat_Vianants.shp")
+pedestrian_data = pedestrian_data.to_crs(gdf.crs)
+pedestrian_data["length_m"] = pedestrian_data.geometry.length
+joined = gpd.sjoin(pedestrian_data, gdf, predicate="intersects")
+agg_length = joined.groupby("index_right")["length_m"].sum()
+gdf["pedestrian_data_length_m"] = gdf.index.map(agg_length).fillna(0)
+gdf["pedestrian_data_density"] = gdf["pedestrian_data_length_m"]  / gdf["area"] 
 
 #Heat
 
+#Distance to FGC stations / Renfe stations
 
+#Distance to markets
+
+#Slope
+root_dir = path_data + "mp20p5m_ETRS89zt1751632652072"
+slope_data = []
+
+for dirpath, _, filenames in os.walk(root_dir):
+    for filename in filenames:
+        if filename.endswith(".zip"):
+            zip_path = os.path.join(dirpath, filename)
+            try:
+                slope_here = gpd.read_file(f"zip://{zip_path}")
+                slope_data.append(slope_here)
+            except Exception as e:
+                print(f"Failed to read {zip_path}: {e}")
+
+# Concatenate all GeoDataFrames into one (optional)
+if slope_data:
+    full_gdf = gpd.GeoDataFrame(pd.concat(slope_data, ignore_index=True), crs=slope_data[0].crs)
+
+# Ensure both GeoDataFrames use the same projected CRS (for accurate area computation)
+full_gdf = full_gdf.to_crs(gdf.crs)
+
+# Spatial join: restrict full_gdf polygons to only those that intersect each gdf polygon
+results = []
+
+for idx, row in gdf.iterrows():
+    target_geom = row.geometry
+    intersections = full_gdf[full_gdf.intersects(target_geom)].copy()
+    if intersections.empty:
+        results.append(0.0)
+        continue
+
+    intersections['intersection'] = intersections.geometry.intersection(target_geom)
+    covered_area = intersections['intersection'].area.sum()
+    total_area = target_geom.area
+    share = covered_area / total_area
+    results.append(share)
+
+gdf['slope_20'] = results
 
 #Transport times
 #import_transport_times(gdf, datetime.datetime(2025, 7, 7, 8, 0, 0), center, path_data, 1)
@@ -199,11 +309,8 @@ def compute_log_likelihood(x):
     gdf["log_A"] = np.log(estimated_A)
     gdf_here = gdf.loc[~np.isnan(gdf.log_A) & ~np.isinf(gdf.log_A),:]
     y = gdf_here["log_A"]
-    gdf_here["park_500m"] = (gdf_here.min_distance_parc2 < 500) * 1
-    gdf_here["high_tourism"] = (gdf_here.index_tourism > 40) * 1
-    gdf_here["airport_500m"] = (gdf_here.min_distance_airport < 1000) * 1
-    gdf_here["station_500m"] = (gdf_here.min_distance_stations < 1000) * 1
-    X = gdf_here.loc[:,["high_tourism", 'mean_activity', "airport_500m", "station_500m"]]
+    #X = gdf_here.loc[:,["high_tourism", 'mean_activity', "airport_500m", "station_500m"]]
+    X = gdf_here.loc[:,["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km", "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b", "station_500m", "station_500m_1km", "station_1km_2km", "airport_500m", "high_tourism", 'mean_activity', 'pedestrian_density', 'slope_20']]
     X = sm.add_constant(X)  # Adds intercept
     model_statsmodel = sm.OLS(y, X).fit()
     print(model_statsmodel.summary())
@@ -240,11 +347,7 @@ def compute_log_likelihood_amenities(x):
     gdf["log_A"] = np.log(estimated_A)
     gdf_here = gdf.loc[~np.isnan(gdf.log_A) & ~np.isinf(gdf.log_A),:]
     y = gdf_here["log_A"]
-    gdf_here["park_500m"] = (gdf_here.min_distance_parc2 < 500) * 1
-    gdf_here["high_tourism"] = (gdf_here.index_tourism > 50) * 1
-    gdf_here["airport_500m"] = (gdf_here.min_distance_airport < 1000) * 1
-    gdf_here["station_500m"] = (gdf_here.min_distance_stations < 1000) * 1
-    X = gdf_here.loc[:,["high_tourism", 'mean_activity', "airport_500m", "station_500m"]]
+    X = gdf_here.loc[:,["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km", "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b", "station_500m", "station_500m_1km", "station_1km_2km", "airport_500m", "high_tourism", 'mean_activity', 'pedestrian_density', 'slope_20']]
     X = sm.add_constant(X)  # Adds intercept
     model_statsmodel = sm.OLS(y, X).fit()
     print(model_statsmodel.summary())
@@ -317,6 +420,53 @@ scatter_calibration(gdf, R, gdf["rent_m2"], "Rent per m2")
 scatter_calibration(gdf, 1000000 * n / gdf["urb_area"], 1000000 * gdf["pop"] / gdf["urb_area"], "Population density")
 
 agg = compare_var(gdf, n)
+
+def compare_rent_or_size(gdf, var_data, var_simul, weighting):
+    gdf["simul"] = var_simul
+
+    # Bin by distance
+    gdf["distance_bin"] = gdf["distance_center"].round().astype(int)
+
+    if weighting == 0:
+        # Aggregate by bin for both population sources
+        agg = gdf.groupby("distance_bin").agg(
+            data=(var_data, "mean"),
+            simul=("simul", "mean"),
+            ).reset_index()
+        
+    elif weighting == 1:
+        gdf["weighted_data"] = gdf[var_data] * gdf["pop"]
+        gdf["weighted_simul"] = gdf["simul"] * gdf["pop"]
+
+        agg = gdf.groupby("distance_bin").agg(
+            data=("weighted_data", "sum"),
+            simul=("weighted_simul", "sum"),
+            pop=("pop", "sum")
+            ).reset_index()
+
+        # Compute mean densities
+        agg["data"] = agg["data"] / agg["pop"]
+        agg["simul"] = agg["simul"] / agg["pop"]
+
+    # Plot
+    plt.figure(figsize=(8, 5))
+
+    # Individual points (optional, can be noisy)
+    plt.scatter(gdf["distance_center"], gdf[var_data], s=1, alpha=0.3, label="Data", color='red')
+    plt.scatter(gdf["distance_center"], gdf["simul"], s=1, alpha=0.3, label="Calib", color='blue')
+
+    # Aggregated lines
+    plt.plot(agg["distance_bin"], agg["data"], color='red', linewidth=2, label="Data")
+    plt.plot(agg["distance_bin"], agg["simul"], color='blue', linewidth=2, label="Calib")
+
+    plt.xlabel("Distance au centre-ville (km)")
+    #plt.ylabel("Rents per sqm")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    return agg
+
 
 plt.plot(agg["distance_bin"], agg["mean_density_pop"], color='red', linewidth=2, label="Densité moyenne (pop)")
 plt.plot(agg["distance_bin"], agg["mean_density_n"], color='blue', linewidth=2, label="Densité moyenne (n)")
