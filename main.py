@@ -17,12 +17,11 @@ from import_transport import *
 ###TO DO:
 
 #BETTER TRANSPORT DATA WITH FGC,... // CHECK TRANSPORT AND ADD EMEF
+#clean the size / active data import + maybe check rent again
+#clean the distance to city center data
 
 #GO POLYCENTRIC
 #ADD DIFFERENT INCOME GROUPS?
-
-#clean the size / active data import
-#clean the distance to city center data
 
 ### IMPORT PARAMETERS
 
@@ -215,11 +214,30 @@ agg_length = joined.groupby("index_right")["length_m"].sum()
 gdf["pedestrian_data_length_m"] = gdf.index.map(agg_length).fillna(0)
 gdf["pedestrian_data_density"] = gdf["pedestrian_data_length_m"]  / gdf["area"] 
 
-#Heat
-
 #Distance to FGC stations / Renfe stations
+rodalies = pd.read_excel(path_data + "listado-estaciones-rodalies-barcelona.xlsx")
+rodalies = gpd.GeoDataFrame(
+    rodalies, 
+    geometry=gpd.points_from_xy(rodalies.LONGITUD, rodalies.LATITUD),
+    crs="EPSG:4326"  # WGS 84
+)
 
-#Distance to markets
+rodalies = rodalies.to_crs(gdf.crs)
+gdf['min_distance_rodalies'] = gdf.centroid.apply(lambda geom: rodalies.distance(geom).min())
+gdf["rodalies_500m"] = (gdf['min_distance_rodalies'] < 500) * 1
+
+fgc = pd.read_excel(path_data + "gtfs_stops.xlsx")
+fgc[['lat', 'lon']] = fgc['stop_coordinates'].str.split(',', expand=True).astype(float)
+fgc = gpd.GeoDataFrame(
+    fgc, 
+    geometry=gpd.points_from_xy(fgc.lon, fgc.lat),
+    crs="EPSG:4326"  # WGS 84
+)
+
+fgc = fgc.to_crs(gdf.crs)
+gdf['min_distance_fgc'] = gdf.centroid.apply(lambda geom: fgc.distance(geom).min())
+gdf["fgc_500m"] = (gdf['min_distance_fgc'] < 500) * 1
+
 
 #Slope
 root_dir = path_data + "mp20p5m_ETRS89zt1751632652072"
@@ -310,7 +328,7 @@ def compute_log_likelihood(x):
     gdf_here = gdf.loc[~np.isnan(gdf.log_A) & ~np.isinf(gdf.log_A),:]
     y = gdf_here["log_A"]
     #X = gdf_here.loc[:,["high_tourism", 'mean_activity', "airport_500m", "station_500m"]]
-    X = gdf_here.loc[:,["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km", "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b", "station_500m", "station_500m_1km", "station_1km_2km", "airport_500m", "high_tourism", 'mean_activity', 'pedestrian_density', 'slope_20']]
+    X = gdf_here.loc[:,["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km", "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b", "station_500m", "station_500m_1km", "station_1km_2km", "airport_500m", "high_tourism", 'mean_activity', 'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
     X = sm.add_constant(X)  # Adds intercept
     model_statsmodel = sm.OLS(y, X).fit()
     print(model_statsmodel.summary())
@@ -347,7 +365,7 @@ def compute_log_likelihood_amenities(x):
     gdf["log_A"] = np.log(estimated_A)
     gdf_here = gdf.loc[~np.isnan(gdf.log_A) & ~np.isinf(gdf.log_A),:]
     y = gdf_here["log_A"]
-    X = gdf_here.loc[:,["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km", "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b", "station_500m", "station_500m_1km", "station_1km_2km", "airport_500m", "high_tourism", 'mean_activity', 'pedestrian_density', 'slope_20']]
+    X = gdf_here.loc[:,["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km", "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b", "station_500m", "station_500m_1km", "station_1km_2km", "airport_500m", "high_tourism", 'mean_activity', 'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
     X = sm.add_constant(X)  # Adds intercept
     model_statsmodel = sm.OLS(y, X).fit()
     print(model_statsmodel.summary())
@@ -420,57 +438,11 @@ scatter_calibration(gdf, R, gdf["rent_m2"], "Rent per m2")
 scatter_calibration(gdf, 1000000 * n / gdf["urb_area"], 1000000 * gdf["pop"] / gdf["urb_area"], "Population density")
 
 agg = compare_var(gdf, n)
-
-def compare_rent_or_size(gdf, var_data, var_simul, weighting):
-    gdf["simul"] = var_simul
-
-    # Bin by distance
-    gdf["distance_bin"] = gdf["distance_center"].round().astype(int)
-
-    if weighting == 0:
-        # Aggregate by bin for both population sources
-        agg = gdf.groupby("distance_bin").agg(
-            data=(var_data, "mean"),
-            simul=("simul", "mean"),
-            ).reset_index()
-        
-    elif weighting == 1:
-        gdf["weighted_data"] = gdf[var_data] * gdf["pop"]
-        gdf["weighted_simul"] = gdf["simul"] * gdf["pop"]
-
-        agg = gdf.groupby("distance_bin").agg(
-            data=("weighted_data", "sum"),
-            simul=("weighted_simul", "sum"),
-            pop=("pop", "sum")
-            ).reset_index()
-
-        # Compute mean densities
-        agg["data"] = agg["data"] / agg["pop"]
-        agg["simul"] = agg["simul"] / agg["pop"]
-
-    # Plot
-    plt.figure(figsize=(8, 5))
-
-    # Individual points (optional, can be noisy)
-    plt.scatter(gdf["distance_center"], gdf[var_data], s=1, alpha=0.3, label="Data", color='red')
-    plt.scatter(gdf["distance_center"], gdf["simul"], s=1, alpha=0.3, label="Calib", color='blue')
-
-    # Aggregated lines
-    plt.plot(agg["distance_bin"], agg["data"], color='red', linewidth=2, label="Data")
-    plt.plot(agg["distance_bin"], agg["simul"], color='blue', linewidth=2, label="Calib")
-
-    plt.xlabel("Distance au centre-ville (km)")
-    #plt.ylabel("Rents per sqm")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-    return agg
-
+agg = compare_rent_or_size(gdf, "size", q, 1)
+agg = compare_rent_or_size(gdf, "rent_m2", R, 1)
 
 plt.plot(agg["distance_bin"], agg["mean_density_pop"], color='red', linewidth=2, label="Densité moyenne (pop)")
 plt.plot(agg["distance_bin"], agg["mean_density_n"], color='blue', linewidth=2, label="Densité moyenne (n)")
-
 plt.xlabel("Distance au centre-ville (km)")
 plt.ylabel("Densité de population (hab/km²)")
 plt.legend()

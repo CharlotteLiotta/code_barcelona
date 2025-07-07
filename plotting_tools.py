@@ -75,8 +75,8 @@ def compare_var(gdf, n):
     plt.figure(figsize=(8, 5))
 
     # Individual points (optional, can be noisy)
-    plt.scatter(gdf["distance_center"], gdf["density_pop"], s=1, alpha=0.3, label="Densité individuelle (pop)")
-    plt.scatter(gdf["distance_center"], gdf["density_n"], s=1, alpha=0.3, label="Densité individuelle (n)", color='gray')
+    plt.scatter(gdf["distance_center"], gdf["density_pop"], color='red', s=1, alpha=0.3, label="Densité individuelle (pop)")
+    plt.scatter(gdf["distance_center"], gdf["density_n"], s=1, alpha=0.3, label="Densité individuelle (n)", color='blue')
 
     # Aggregated lines
     plt.plot(agg["distance_bin"], agg["mean_density_pop"], color='red', linewidth=2, label="Densité moyenne (pop)")
@@ -84,6 +84,52 @@ def compare_var(gdf, n):
 
     plt.xlabel("Distance au centre-ville (km)")
     plt.ylabel("Densité de population (hab/km²)")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    return agg
+
+def compare_rent_or_size(gdf, var_data, var_simul, weighting):
+    gdf["simul"] = var_simul
+
+    # Bin by distance
+    gdf["distance_bin"] = gdf["distance_center"].round().astype(int)
+
+    if weighting == 0:
+        # Aggregate by bin for both population sources
+        agg = gdf.groupby("distance_bin").agg(
+            data=(var_data, "mean"),
+            simul=("simul", "mean"),
+            ).reset_index()
+        
+    elif weighting == 1:
+        gdf["weighted_data"] = gdf[var_data] * gdf["pop"]
+        gdf["weighted_simul"] = gdf["simul"] * gdf["pop"]
+
+        agg = gdf.groupby("distance_bin").agg(
+            data=("weighted_data", "sum"),
+            simul=("weighted_simul", "sum"),
+            pop=("pop", "sum")
+            ).reset_index()
+
+        # Compute mean densities
+        agg["data"] = agg["data"] / agg["pop"]
+        agg["simul"] = agg["simul"] / agg["pop"]
+
+    # Plot
+    plt.figure(figsize=(8, 5))
+
+    # Individual points (optional, can be noisy)
+    plt.scatter(gdf["distance_center"], gdf[var_data], s=1, alpha=0.3, label="Data", color='red')
+    plt.scatter(gdf["distance_center"], gdf["simul"], s=1, alpha=0.3, label="Calib", color='blue')
+
+    # Aggregated lines
+    plt.plot(agg["distance_bin"], agg["data"], color='red', linewidth=2, label="Data")
+    plt.plot(agg["distance_bin"], agg["simul"], color='blue', linewidth=2, label="Calib")
+
+    plt.xlabel("Distance au centre-ville (km)")
+    #plt.ylabel("Rents per sqm")
     plt.legend()
     plt.tight_layout()
     plt.show()
