@@ -1,7 +1,11 @@
 import numpy as np # type: ignore
 import pandas as pd
 import geopandas as gpd # type: ignore
-from shapely import wkt # type: ignore
+from shapely import wkt, Point # type: ignore
+import requests
+from shapely.geometry import shape, LineString, MultiLineString # type: ignore
+import json
+import os 
 
 from import_data import * # type: ignore
 
@@ -196,12 +200,14 @@ def import_rent_and_size(gdf, path_data):
     gdf = gdf.merge(size.loc[:,["size_barcelona_district", "ID"]], on = "ID", how = "left")
 
     #Consolidate
-    gdf["size"] = gdf['size_AMB_section']
-    gdf.loc[np.isnan(gdf["size"]), "size"] = gdf.loc[np.isnan(gdf["size"]), "size_barcelona_barri"]
-    gdf.loc[gdf["size"] < 0.5, "size"] = np.nan
-    gdf.loc[np.isnan(gdf["size"]), "size"] = gdf.loc[np.isnan(gdf["size"]), "size_AMB_city"]
-    gdf.loc[np.isnan(gdf["size"]), "size"] = gdf.loc[np.isnan(gdf["size"]), "size_barcelona_district"]
+    gdf["size_AMB"] = gdf['size_AMB_section']
+    gdf.loc[np.isnan(gdf["size_AMB"]), "size_AMB"] = gdf.loc[np.isnan(gdf["size_AMB"]), "size_barcelona_barri"]
+    gdf.loc[gdf["size_AMB"] < 0.5, "size_AMB"] = np.nan
+    gdf.loc[np.isnan(gdf["size_AMB"]), "size_AMB"] = gdf.loc[np.isnan(gdf["size_AMB"]), "size_AMB_city"]
+    gdf.loc[np.isnan(gdf["size_AMB"]), "size_AMB"] = gdf.loc[np.isnan(gdf["size_AMB"]), "size_barcelona_district"]
 
+    gdf["size_AMB"] = gdf["size_AMB"]/gdf["active_per_hh"]
+    
     gdf = gdf.drop(columns = ['Codi_àmbit', 'rent_AMB_section',
        'Codi_INE', 'rent_AMB_city', 'rent_barcelona_barri',
        'rent_barcelona_district', 'size_AMB_section',
@@ -249,10 +255,9 @@ def import_ppl_per_hh(gdf, path_data):
     area_housing["ID_SUP_VIV"] = area_housing["ID_SUP_VIV"] / area_housing["SHOGARES"]
     
     area_housing = area_housing.merge(ppl_per_hh, on = "ID_7D", how = "left")
-    area_housing["size"] = area_housing["ID_SUP_VIV"] / area_housing["active_per_hh"]
+    area_housing["size_census"] = area_housing["ID_SUP_VIV"] / area_housing["active_per_hh"]
     gdf["ID_7D"] = gdf["ID"].str[:7]
-    gdf = gdf.drop(columns = ["size"])
-    gdf = gdf.merge(area_housing.loc[:,["size"]], left_on = "ID_7D", right_index = True, how = "left")
+    gdf = gdf.merge(area_housing.loc[:,["size_census"]], left_on = "ID_7D", right_index = True, how = "left")
 
     return gdf
 
@@ -361,3 +366,275 @@ def import_trans_mode(path_data):
     trans_mode['code_city'] = trans_mode.index.map(mapping)
     trans_mode["share_car"] = trans_mode["Particular"] + trans_mode["Company or other media"]
     return trans_mode
+
+def import_beach(gdf, path_data):
+    """ Import distance to the beach from land cover data """
+
+    land_cover = gpd.read_file(path_data + "cobertes-sol-v1r0-2023.gpkg", layer="cobertes_sol", engine="fiona")
+    land_cover = land_cover.to_crs(gdf.crs)
+    gdf['min_distance_beach'] = gdf.centroid.apply(
+        lambda center: land_cover.loc[land_cover.nivell_2 == 233, :].distance(center).min()
+        )
+    gdf["beach_500m"] = (gdf['min_distance_beach'] < 500) * 1
+    gdf["beach_500m_1km"] = ((gdf['min_distance_beach'] < 1000) & (gdf['min_distance_beach'] > 500)) * 1
+    gdf["beach_1km_2km"] = ((gdf['min_distance_beach'] < 2000) & (gdf['min_distance_beach'] > 1000)) * 1
+    return gdf.loc[:,['ID', 'min_distance_beach', "beach_500m", "beach_500m_1km", "beach_1km_2km"]]
+
+def import_parcs(gdf, path_data):
+    """ Import distance to parcs from both Barcelona and AMB data """
+
+    gdf["barcelona"] = (gdf.code_city == "08019")
+    parcs = gpd.read_file(path_data + "pev_parcs_od.gpkg")
+    parcs = parcs.to_crs(gdf.crs)
+
+    parcs2 = gpd.read_file(path_data + "equipaments_pro.kml")
+    parcs2 = parcs2.to_crs(gdf.crs)
+
+    parcs_combined = pd.concat([parcs["geometry"], parcs2["geometry"]])
+    parcs_combined = gpd.GeoDataFrame(parcs_combined, geometry="geometry", crs=parcs.crs)
+
+    parcs_combined = gpd.GeoDataFrame(
+        geometry=pd.concat([parcs.loc[parcs.area_ha > 2, "geometry"], parcs2["geometry"]]),
+        crs=parcs.crs
+    )
+
+    gdf['min_distance_parc_combined'] = gdf.centroid.apply(lambda geom: parcs_combined.distance(geom).min())
+
+    gdf["parc_500m"] = (gdf['min_distance_parc_combined'] < 500) * 1
+    gdf["parc_500m_1km"] = ((gdf['min_distance_parc_combined'] < 1000) & (gdf['min_distance_parc_combined'] > 500)) * 1
+    gdf["parc_1km_2km"] = ((gdf['min_distance_parc_combined'] < 2000) & (gdf['min_distance_parc_combined'] > 1000)) * 1
+
+    gdf["parc_500m_b"] = gdf["parc_500m"] * gdf["barcelona"]
+    gdf["parc_500m_1km_b"] = gdf["parc_500m_1km"] * gdf["barcelona"]
+    gdf["parc_1km_2km_b"] = gdf["parc_1km_2km"] * gdf["barcelona"]
+
+    return gdf.loc[:,["ID", 'min_distance_parc_combined', "parc_500m", "parc_500m_1km", "parc_1km_2km", "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b"]]
+
+def import_stations(gdf, option = "sants_only"):
+    """ Import the locations of the main train stations of Barcelona """
+    
+    stations = [
+    {"name": "Barcelona Sants", "lon": 2.1399, "lat": 41.3809},
+    {"name": "Estació de França", "lon": 2.1875, "lat": 41.3836},
+    {"name": "Passeig de Gràcia", "lon": 2.1665, "lat": 41.3916},
+    {"name": "Plaça de Catalunya", "lon": 2.1701, "lat": 41.3870},
+    {"name": "El Clot-Aragó", "lon": 2.1924, "lat": 41.4112},
+    {"name": "Arc de Triomf", "lon": 2.1802, "lat": 41.3912},
+    {"name": "Sant Andreu", "lon": 2.1897, "lat": 41.4351}
+    ]
+
+    # Create GeoDataFrame in EPSG:4326
+    stations = gpd.GeoDataFrame(
+        stations,
+        geometry=[Point(s["lon"], s["lat"]) for s in stations],
+        crs="EPSG:4326"
+    )
+
+    stations = stations.to_crs(gdf.crs)
+
+    if option == "sants_only":
+        station_geom = stations.geometry.iloc[0]
+    else:
+        station_geom = stations.geometry
+
+    gdf['min_distance_stations'] = gdf.centroid.distance(station_geom)
+
+    gdf["station_500m"] = (gdf['min_distance_stations'] < 500) * 1
+    gdf["station_500m_1km"] = ((gdf['min_distance_stations'] < 1000) & (gdf['min_distance_stations'] > 500)) * 1
+    gdf["station_1km_2km"] = ((gdf['min_distance_stations'] < 2000) & (gdf['min_distance_stations'] > 1000)) * 1
+
+    return gdf.loc[:,["ID", 'min_distance_stations', "station_500m", "station_500m_1km", "station_1km_2km"]]
+
+def import_airport(gdf):
+    """ Import the location of the airport """
+
+    lon, lat = 2.0783, 41.2969
+    airport_wgs84 = gpd.GeoDataFrame(
+        {'name': ['Barcelona Airport']},
+        geometry=[Point(lon, lat)],
+        crs='EPSG:4326'  # WGS84
+    )
+    airport_25830 = airport_wgs84.to_crs(epsg=25830)
+    gdf['min_distance_airport'] = gdf.centroid.apply(lambda geom: airport_25830.distance(geom).min())
+    gdf["airport_500m"] = (gdf['min_distance_airport'] < 500) * 1
+    
+    return gdf.loc[:,["ID", "min_distance_airport", "airport_500m"]]
+
+def import_touristic_areas(gdf, path_data):
+    """ Import the locations of touristic areas
+    
+    https://opendata-ajuntament.barcelona.cat/data/en/dataset/habitatges-us-turistic
+    There are other data to check as well.
+    """
+
+    tourism = gpd.read_file(path_data + "2019_turisme_allotjament.gpkg")
+    tourism = tourism.to_crs(gdf.crs)
+    joined = gpd.sjoin(tourism[['DN', 'geometry']], gdf[['geometry']], how='inner', predicate='intersects')
+    mean_dn = joined.groupby('index_right')['DN'].mean()
+    gdf['index_tourism'] = gdf.index.map(mean_dn)
+    gdf.loc[np.isnan(gdf.index_tourism), "index_tourism"] = 0
+
+    gdf["high_tourism"] = (gdf['index_tourism'] > 50) * 1
+    gdf["medium_tourism"] = ((gdf['index_tourism'] < 50) & (gdf['index_tourism'] > 30)) * 1
+
+    return gdf.loc[:,["ID", "high_tourism", "medium_tourism"]]
+
+def import_activity(gdf, path_data):
+    """ Import data about activity from Barcelona """
+
+    activity = gpd.read_file(path_data + "2018_cohesio_sobreocupacio.gpkg")
+    activity = activity.to_crs(gdf.crs)
+    joined = gpd.sjoin(activity[['norm', 'geometry']], gdf[['geometry']], how='inner', predicate='intersects')
+    mean_dn = joined.groupby('index_right')['norm'].mean()
+    gdf['mean_activity'] = gdf.index.map(mean_dn)
+    gdf.loc[np.isnan(gdf.mean_activity), "mean_activity"] = 0
+
+    return gdf.loc[:,["ID", "mean_activity"]]
+
+def import_pedestrian_streets(gdf, path_data):
+    """ Import data on the density of pedestrian streets, both from OSM and Barcelona Open Data Platform"""
+    
+    amb_polygon = gdf.to_crs(epsg=4326).unary_union
+    minx, miny, maxx, maxy = amb_polygon.bounds
+    bbox = f"{miny},{minx},{maxy},{maxx}"
+
+    # Overpass QL query to get ways tagged as pedestrian or footway within bbox
+    overpass_url = "http://overpass-api.de/api/interpreter"
+    query = f"""
+    [out:json][timeout:25];
+    (
+    way["highway"="pedestrian"]({bbox});
+    );
+    out geom;
+    """
+
+    response = requests.post(overpass_url, data={'data': query})
+    data = response.json()
+
+    # Extract ways and convert to shapely LineStrings
+    lines = []
+    for element in data['elements']:
+        if element['type'] == 'way' and 'geometry' in element:
+            coords = [(pt['lon'], pt['lat']) for pt in element['geometry']]
+            if len(coords) > 1:
+                lines.append(LineString(coords))
+
+    # Create GeoDataFrame
+    gdf_pedestrian = gpd.GeoDataFrame(geometry=lines, crs="EPSG:4326")
+    pedestrian_data = gpd.read_file(path_data + "Carrers_Amb_Prioritat_Vianants/Carrers_Prioritat_Vianants.shp")
+    gdf = compute_pedestrian_density(gdf, gdf_pedestrian, "pedestrian_density")
+    gdf = compute_pedestrian_density(gdf, pedestrian_data, "pedestrian_data_density")
+    
+    return gdf.loc[:, ["ID", "pedestrian_density", "pedestrian_data_density"]]
+
+def compute_pedestrian_density(gdf, gdf_pedestrian, name):
+    gdf_pedestrian = gdf_pedestrian.to_crs(gdf.crs)
+    gdf_pedestrian["length_m"] = gdf_pedestrian.geometry.length
+    joined = gpd.sjoin(gdf_pedestrian, gdf, predicate="intersects")
+    agg_length = joined.groupby("index_right")["length_m"].sum()
+    gdf[name] = gdf.index.map(agg_length).fillna(0)
+    gdf[name] = gdf[name]  / gdf["area"] 
+    return gdf
+
+def import_rodalies(gdf, path_data):
+    """ Import location of rodalies stations """
+
+    rodalies = pd.read_excel(path_data + "listado-estaciones-rodalies-barcelona.xlsx")
+    rodalies = gpd.GeoDataFrame(
+        rodalies, 
+        geometry=gpd.points_from_xy(rodalies.LONGITUD, rodalies.LATITUD),
+        crs="EPSG:4326"  # WGS 84
+        )
+
+    rodalies = rodalies.to_crs(gdf.crs)
+    gdf['min_distance_rodalies'] = gdf.centroid.apply(lambda geom: rodalies.distance(geom).min())
+    gdf["rodalies_500m"] = (gdf['min_distance_rodalies'] < 500) * 1
+
+    return gdf.loc[:,["ID", "min_distance_rodalies", "rodalies_500m"]]
+
+def import_fgc(gdf, path_data):
+    """ Import locations of fgc stations """
+    
+    fgc = pd.read_excel(path_data + "gtfs_stops.xlsx")
+    fgc[['lat', 'lon']] = fgc['stop_coordinates'].str.split(',', expand=True).astype(float)
+    fgc = gpd.GeoDataFrame(
+        fgc, 
+        geometry=gpd.points_from_xy(fgc.lon, fgc.lat),
+        crs="EPSG:4326"  # WGS 84
+    )
+
+    fgc = fgc.to_crs(gdf.crs)
+    gdf['min_distance_fgc'] = gdf.centroid.apply(lambda geom: fgc.distance(geom).min())
+    gdf["fgc_500m"] = (gdf['min_distance_fgc'] < 500) * 1
+
+    return gdf.loc[:,["ID", "min_distance_fgc", "fgc_500m"]]
+
+def import_slope(gdf, path_data):
+    """ Import slope/elevation data from IGC """
+
+    root_dir = path_data + "mp20p5m_ETRS89zt1751632652072"
+    slope_data = []
+
+    for dirpath, _, filenames in os.walk(root_dir):
+        for filename in filenames:
+            if filename.endswith(".zip"):
+                zip_path = os.path.join(dirpath, filename)
+                try:
+                    slope_here = gpd.read_file(f"zip://{zip_path}")
+                    slope_data.append(slope_here)
+                except Exception as e:
+                    print(f"Failed to read {zip_path}: {e}")
+
+    # Concatenate all GeoDataFrames into one (optional)
+    if slope_data:
+        full_gdf = gpd.GeoDataFrame(pd.concat(slope_data, ignore_index=True), crs=slope_data[0].crs)
+
+    # Ensure both GeoDataFrames use the same projected CRS (for accurate area computation)
+    full_gdf = full_gdf.to_crs(gdf.crs)
+
+    # Spatial join: restrict full_gdf polygons to only those that intersect each gdf polygon
+    results = []
+
+    for idx, row in gdf.iterrows():
+        target_geom = row.geometry
+        intersections = full_gdf[full_gdf.intersects(target_geom)].copy()
+        if intersections.empty:
+            results.append(0.0)
+            continue
+
+        intersections['intersection'] = intersections.geometry.intersection(target_geom)
+        covered_area = intersections['intersection'].area.sum()
+        total_area = target_geom.area
+        share = covered_area / total_area
+        results.append(share)
+
+    gdf['slope_20'] = results
+
+    return gdf.loc[:,["ID", "slope_20"]]
+
+def import_amenities(gdf, path_data, option_load, option_save):
+
+    if option_load == 1:
+
+        data_amenity = import_beach(gdf, path_data)
+        data_amenity = data_amenity.merge(import_parcs(gdf, path_data), on = "ID", how = "left")
+        data_amenity = data_amenity.merge(import_stations(gdf, option = "sants_only"), on = "ID", how = "left")
+        data_amenity = data_amenity.merge(import_airport(gdf), on = "ID", how = "left")
+        data_amenity = data_amenity.merge(import_touristic_areas(gdf, path_data), on = "ID", how = "left")
+        data_amenity = data_amenity.merge(import_activity(gdf, path_data), on = "ID", how = "left")
+        data_amenity = data_amenity.merge(import_pedestrian_streets(gdf, path_data), on = "ID", how = "left")
+        data_amenity = data_amenity.merge(import_rodalies(gdf, path_data), on = "ID", how = "left")
+        data_amenity = data_amenity.merge(import_fgc(gdf, path_data), on = "ID", how = "left")
+        data_amenity = data_amenity.merge(import_slope(gdf, path_data), on = "ID", how = "left")
+
+        if option_save == 1:
+
+            data_amenity.to_excel(path_data + "data_amenity.xlsx")
+
+    elif option_load == 0:
+
+        data_amenity = pd.read_excel(path_data + "data_amenity.xlsx", index_col = 0)
+        data_amenity['ID'] = '0' + data_amenity['ID'].astype(str)
+
+    gdf["ID"] = gdf["ID"].astype(str)
+    return gdf.merge(data_amenity, on = "ID", how = "left")

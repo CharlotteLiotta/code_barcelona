@@ -19,7 +19,7 @@ def compute_transport_cost(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_
 
     return gdf
 
-def compute_transport_cost_logit(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax):
+def compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax):
     """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
     
     gdf["COST_CAR"] = ((gdf["travel_time_car"] / 60) * PRICE_TIME * WORKING_DAYS) + ((gdf.distance_car / 1000) * PRICE_FUEL * WORKING_DAYS) + FIXED_COST_CAR + (tax * WORKING_DAYS)
@@ -39,6 +39,7 @@ def compute_transport_cost_logit(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, 
     #print("Transport cost: ", sum(np.isnan(gdf["transport_cost"])), "missing values")
     gdf.loc[np.isnan(gdf["transport_cost"]), "transport_cost"] = gdf["COST_CAR"]
     gdf.loc[np.isnan(gdf["transport_mode"]), "transport_mode"] = 0
+    gdf["income_net_of_transport_cost"] = Y - gdf["transport_cost"]
 
     return gdf
 

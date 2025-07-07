@@ -2,8 +2,6 @@ import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 from numba import njit, prange # type: ignore
 
-### URBAN ECONOMICS
-
 def compute_utility_manually(Y, T, q, R, BETA, OPTION_HEALTH = 0, N = 0, vkm = 0, marginal_cost_pollution = 0):
     if OPTION_HEALTH == 0:
         u = (Y - T - q * R) ** (1 - BETA) * q ** BETA
@@ -11,13 +9,6 @@ def compute_utility_manually(Y, T, q, R, BETA, OPTION_HEALTH = 0, N = 0, vkm = 0
         health = vkm * marginal_cost_pollution / N
         u = (Y - T - q * R - health) ** (1 - BETA) * q ** BETA
     return u
-
-
-
-
-
-
-### OUTPUT FROM THE URBAN ECON MODEL
 
 def gini(array):
     """Calculate the Gini coefficient of a numpy array."""
