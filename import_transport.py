@@ -10,8 +10,7 @@ def import_transport_times(gdf, date_here, center, path_data, OPTION_SAVE):
     
     #ADD https://fgc.opendatasoft.com/explore/dataset/gtfs_zip/table/ --- POTENTIELLEMENT INCLUS DANS T MOB
     #ADD https://datos.gob.es/en/catalogo/a09002970-red-de-transporte-por-carretera-paradas-lineas-y-horarios-de-los-autobuses-interurbanos-de-catalunya
-    #ADD https://www.amb.cat/web/area-metropolitana/dades-obertes/cataleg/detall/-/dataset/serveis-gtfs-de-tmb/1107694/11692 PAS DISPO?
-    #ADD https://www.amb.cat/es/web/area-metropolitana/dades-obertes/cataleg/detall/-/dataset/informacion-de-companias--lineas-y-recorridos/1033377/11692?_DatasetSearchListPortlet_WAR_AMBSearchPortletportlet_pageNum=4&_DatasetSearchListPortlet_WAR_AMBSearchPortletportlet_categoria=mobilitat&_DatasetSearchListPortlet_WAR_AMBSearchPortletportlet_detailBackURL=https%3A%2F%2Fwww.amb.cat%2Fes%2Fweb%2Farea-metropolitana%2Fdades-obertes%2Fcataleg%2Fllistat (seulement des bus?)
+   #ADD https://www.amb.cat/es/web/area-metropolitana/dades-obertes/cataleg/detall/-/dataset/informacion-de-companias--lineas-y-recorridos/1033377/11692?_DatasetSearchListPortlet_WAR_AMBSearchPortletportlet_pageNum=4&_DatasetSearchListPortlet_WAR_AMBSearchPortletportlet_categoria=mobilitat&_DatasetSearchListPortlet_WAR_AMBSearchPortletportlet_detailBackURL=https%3A%2F%2Fwww.amb.cat%2Fes%2Fweb%2Farea-metropolitana%2Fdades-obertes%2Fcataleg%2Fllistat (seulement des bus?)
     
     ### centroid pop
     #gdf['centroid'] = gdf.geometry.centroid
@@ -48,7 +47,7 @@ def import_transport_times(gdf, date_here, center, path_data, OPTION_SAVE):
     def compute_travel_times(mode):
 
         if mode == "car":
-            i = 600
+            i = 0
             transport_mode = [TransportMode.CAR]
         elif mode == "transit":
             i = 0
@@ -85,7 +84,7 @@ def import_transport_times(gdf, date_here, center, path_data, OPTION_SAVE):
         np.save(path_data + "travel_time_matrix_" + mode + "_" + str(len(points)) + ".npy", travel_time_matrix)
         print("Travel time " + mode + " saved")
 
-    compute_travel_times("car")
+    #compute_travel_times("car")
     compute_travel_times("transit")
 
 def import_car_distance(gdf, date_here, center, path_data):
@@ -119,7 +118,7 @@ def import_car_distance(gdf, date_here, center, path_data):
         elif mode == "transit":
             transport_mode = [TransportMode.TRANSIT, TransportMode.WALK]
     
-        i = 0
+        i = 600
         while i < (len(points) - 100):
 
             i = i + 100

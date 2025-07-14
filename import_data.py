@@ -30,12 +30,14 @@ def import_data(path_data, center, option):
 
         #Merge with shapefile
         gdf = gpd.read_file(path_data + 'seccionado_2024/SECC_CE_20240101.shp')
-        gdf = gdf.merge(df, on = "CUSEC")
+        gdf = gdf.loc[gdf.NMUN.isin(["Cornellà de Llobregat", 'Badalona', 'Badia del Vallès', 'Barberà del Vallès', 'Barcelona','Begues','Castellbisbal', 'Castelldefels', 'Cerdanyola del Vallès', 'Cervelló','Corbera de Llobregat','Papiol, El', 'Prat de Llobregat, El', 'Esplugues de Llobregat','Gavà', "Hospitalet de Llobregat, L'",'Palma de Cervelló, La','Molins de Rei', 'Montcada i Reixac', 'Montgat', 'Pallejà', 'Ripollet','Sant Adrià de Besòs', 'Sant Andreu de la Barca','Sant Boi de Llobregat', 'Sant Climent de Llobregat', 'Sant Cugat del Vallès', 'Sant Feliu de Llobregat','Sant Joan Despí','Sant Just Desvern','Sant Vicenç dels Horts', 'Santa Coloma de Cervelló', 'Santa Coloma de Gramenet','Tiana', 'Torrelles de Llobregat', 'Viladecans']),:]
+        gdf = gdf.merge(df, on = "CUSEC", how = "left")
 
         #Compute area, density, distance to city center
         gdf["Total"] = gdf["Total"].apply(fix_decimal)
         gdf["Total"] = pd.to_numeric(gdf["Total"].str.replace(',', ''), errors='coerce')
-        gdf = gdf.loc[gdf.NMUN.isin(['Badalona', 'Badia del Vallès', 'Barberà del Vallès', 'Barcelona','Begues','Castellbisbal', 'Castelldefels', 'Cerdanyola del Vallès', 'Cervelló','Corbera de Llobregat','Papiol, El', 'Prat de Llobregat, El', 'Esplugues de Llobregat','Gavà', "Hospitalet de Llobregat, L'",'Palma de Cervelló, La','Molins de Rei', 'Montcada i Reixac', 'Montgat', 'Pallejà', 'Ripollet','Sant Adrià de Besòs', 'Sant Andreu de la Barca','Sant Boi de Llobregat', 'Sant Climent de Llobregat', 'Sant Cugat del Vallès', 'Sant Feliu de Llobregat','Sant Joan Despí','Sant Just Desvern','Sant Vicenç dels Horts', 'Santa Coloma de Cervelló', 'Santa Coloma de Gramenet','Tiana', 'Torrelles de Llobregat', 'Viladecans']),["CUSEC", "CUMUN", "Shape_Area", "Total", "geometry", "NMUN"]]
+        gdf.loc[np.isnan(gdf["Total"]), "Total"] = 0
+        gdf = gdf.loc[gdf.NMUN.isin(["Cornellà de Llobregat", 'Badalona', 'Badia del Vallès', 'Barberà del Vallès', 'Barcelona','Begues','Castellbisbal', 'Castelldefels', 'Cerdanyola del Vallès', 'Cervelló','Corbera de Llobregat','Papiol, El', 'Prat de Llobregat, El', 'Esplugues de Llobregat','Gavà', "Hospitalet de Llobregat, L'",'Palma de Cervelló, La','Molins de Rei', 'Montcada i Reixac', 'Montgat', 'Pallejà', 'Ripollet','Sant Adrià de Besòs', 'Sant Andreu de la Barca','Sant Boi de Llobregat', 'Sant Climent de Llobregat', 'Sant Cugat del Vallès', 'Sant Feliu de Llobregat','Sant Joan Despí','Sant Just Desvern','Sant Vicenç dels Horts', 'Santa Coloma de Cervelló', 'Santa Coloma de Gramenet','Tiana', 'Torrelles de Llobregat', 'Viladecans']),["CUSEC", "CUMUN", "Shape_Area", "Total", "geometry", "NMUN"]]
         gdf.CUSEC = gdf.CUSEC.astype(str)
         city_center = gdf.loc[gdf.CUSEC == center,:].centroid
         gdf["distance_center"] = gdf.centroid.distance(city_center.iloc[0], align = False) / 1000
@@ -49,6 +51,7 @@ def import_data(path_data, center, option):
         
         #Merge with shapefile
         gdf = gpd.read_file(path_data + 'BarcelonaCiutat_Districtes.csv')
+        gdf["nom_districte"] = ['Ciutat Vella', 'Eixample', 'Sants-Montjuïc', 'Les Corts', 'Sarrià-Sant Gervasi', 'Gràcia', 'Horta-Guinardó', 'Nou Barris', 'Sant Andreu', 'Sant Martí']
         gdf = gdf.merge(df["Població"], left_on = "nom_districte", right_index = True)
         
         #Compute area, density, distance to city center
@@ -57,7 +60,7 @@ def import_data(path_data, center, option):
         gdf["area"] = gdf.area
         city_center = gdf.loc[gdf.nom_districte == "Eixample",:].centroid
         gdf["distance_center"] = gdf.centroid.distance(city_center.iloc[0], align = False) / 1000
-        gdf = gdf.loc[:,["Codi_Districte", "geometry", "area", "Població", "distance_center"]]
+        gdf = gdf.loc[:,["nom_districte", "geometry", "area", "Població", "distance_center"]]
 
     gdf.columns = ["ID", "geometry", "area", "pop", "distance_center"]
     gdf["area"] = gdf["area"] / 1000000
@@ -322,7 +325,7 @@ def import_cost_transit(gdf):
     """ Cost of the monthly transport pass - per TMB zone """
 
     gdf["monthly_cost_transit"] = np.nan
-    gdf.loc[gdf.code_city.isin(['08015', '08019', '08056', '08077','08101', '08089', '08125', '08126','08169', '08194', '08200', '08211', '08217', '08221', '08245', '08282', '08301', ]), "monthly_cost_transit"] = 22
+    gdf.loc[gdf.code_city.isin(['08015', '08019', '08056', '08077','08101', '08089', '08125', '08126','08169', '08194', '08200', '08211', '08217', '08221', '08245', '08282', '08301', "08073"]), "monthly_cost_transit"] = 22
     gdf.loc[gdf.code_city.isin(['08020', '08054', '08068', '08072', '08123','08157', '08158', '08180', '08196', '08204','08205', '08244', '08252','08263', '08289', '08904', '08905', '08266']), "monthly_cost_transit"] = 29.65
     return gdf
 

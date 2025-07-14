@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt # type: ignore
 from numba import njit, prange # type: ignore
 
 def compute_utility_manually(Y, T, q, R, BETA, OPTION_HEALTH = 0, N = 0, vkm = 0, marginal_cost_pollution = 0):
+    """ Compute agents' utility """
+    
     if OPTION_HEALTH == 0:
         u = (Y - T - q * R) ** (1 - BETA) * q ** BETA
     elif OPTION_HEALTH == 1:
@@ -36,42 +38,30 @@ def gini(array):
 def compute_change_in_welfare(utility_without_tax, utility_with_tax):
     """ Compute the impact of the change in utility on welfare"""
 
-    relative_change_utility = (100 * (utility_with_tax - utility_without_tax)) / utility_without_tax
-    return (1 / (1 + np.exp(-0.15 * relative_change_utility)))
+    relative_change_utility = (utility_with_tax - utility_without_tax) / utility_without_tax
+    print("relative_change_utility", 100 * relative_change_utility, "%")
+    return (1 / (1 + np.exp(-15 * relative_change_utility)))
 
 def compute_change_in_inequalities(utility_without_tax, utility_with_tax):
+    print("change gini", (gini(np.array(utility_with_tax)) - gini(np.array(utility_without_tax))))
     if gini(np.array(utility_without_tax)) != gini(np.array(utility_with_tax)):
         Q = (1 / (1 + np.exp(10 * (gini(np.array(utility_with_tax)) - gini(np.array(utility_without_tax)))))) #/ ))) #gini(np.array(utility_without_tax)))))
     else:
         Q = 0.5
+
     return Q
 
 def compute_change_in_emissions(n_with_tax, distance, transport_mode, emissions_init):
-    relative_change_emission = 100 * (sum((n_with_tax * distance)[transport_mode == 0]) - emissions_init) / emissions_init
-
-    return (1 / (1 + np.exp(0.02 * relative_change_emission)))
+    relative_change_emission = (sum(n_with_tax * distance * (1 - transport_mode)) - emissions_init) / emissions_init
+    print("relative_change_emission", 100 * relative_change_emission, "%")
+    return (1 / (1 + np.exp(2 * relative_change_emission)))
 
 ### POLICY SUPPORT FUNCTIONS
 
-def compute_political_opinion(score_welfare, score_ineq, score_emissions, I, BETA_OPINION, opinion_distance_matrix):
-    return BETA_OPINION[6] + (BETA_OPINION[0] + BETA_OPINION[3] * I) * score_welfare + (BETA_OPINION[1] + BETA_OPINION[4] * I) * score_ineq + (BETA_OPINION[2] + BETA_OPINION[5] * I) * score_emissions
+def compute_political_opinion(score_welfare, score_ineq, score_emissions, BETA_OPINION):
+    return BETA_OPINION[0] + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_ineq + BETA_OPINION[1] * score_emissions
 
-@njit(parallel = True)
-def compute_social_interactions(political_opinion, I, GAMMA):
-    N = len(I)
-    result = np.zeros(N)
-    
-    for i in prange(N):
-        #print(100 * i/N, "%")
-        abs_diff = np.abs(I - I[i])
-        matrix_opinion_row = np.exp(-abs_diff)
-        
-        weighted_sum = np.sum(political_opinion * matrix_opinion_row)
-        sum_matrix_opinion = np.sum(matrix_opinion_row)
-        
-        result[i] = ((1 - GAMMA) * political_opinion[i]) + (GAMMA * (weighted_sum / sum_matrix_opinion))
-    
-    return result
+
 
 ### ABM
 
@@ -92,17 +82,43 @@ def compute_indiv_distance_matrix(N, distance, n_with_tax):
 
 @njit
 def compute_indiv_loc_matrix(N, len_gdf, n):
+    """ Build the agents location matrix.
+    
+    Allocate the N agents to
+    the len_gdf census tracts of analysis,
+    based on the simlulated population density n 
+    """
+    
     opinion_distance_matrix = np.zeros((N, len_gdf))
-
     step = 0
+
     for k in range(len_gdf):
-        nb_pers = round(n[k])
-        if step+nb_pers < N:
-            opinion_distance_matrix[step:step+nb_pers, k] = np.ones(nb_pers)
-            step += nb_pers
+        nb_pers = int(round(n[k]))  # rounding outside of array slices is OK in njit
+
+        end = step + nb_pers
+        if end < N:
+            for i in range(step, end):
+                opinion_distance_matrix[i, k] = 1.0
+            step = end
         else:
-            opinion_distance_matrix[step:N, k] = np.ones(N-step)
+            for i in range(step, N):
+                opinion_distance_matrix[i, k] = 1.0
             break
+
+    missing_ppl = int(N - opinion_distance_matrix.sum())
+
+    if missing_ppl > 0:
+        print("missing ppl", missing_ppl)
+    
+        # Get location indices sorted by population in descending order
+        pop_per_location = opinion_distance_matrix.sum(axis=0)
+        sorted_locs = np.argsort(-pop_per_location)  # descending order
+
+        # Start assigning one agent per location
+        step = int(N - missing_ppl)
+        for i in range(missing_ppl):
+            opinion_distance_matrix[step + i, sorted_locs[i % len(sorted_locs)]] = 1.0
+
     return opinion_distance_matrix
 
 @njit
@@ -155,6 +171,31 @@ def compute_proba_of_moving(housing_lag, housing_without_inertia):
     proba_of_moving_to /= np.nansum(proba_of_moving_to)
     return proba_of_moving_from, proba_of_moving_to
 
+@njit
+def compute_proba_of_moving(housing_lag, housing_without_inertia):
+    """ Compute the probability of moving from, and moving to, each spatial unit"""
+    
+    len_housing = len(housing_lag)
+    proba_of_moving_from = np.zeros(len_housing)
+    proba_of_moving_to = np.zeros(len_housing)
+
+    total_positive_change = 0.0
+
+    for i in range(len_housing):
+        if housing_lag[i] > 0:
+            diff = housing_lag[i] - housing_without_inertia[i]
+            proba_of_moving_from[i] = diff / housing_lag[i]
+
+        delta = housing_without_inertia[i] - housing_lag[i]
+        if delta > 0:
+            proba_of_moving_to[i] = delta
+            total_positive_change += delta
+
+    if total_positive_change > 0:
+        for i in range(len_housing):
+            proba_of_moving_to[i] /= total_positive_change
+
+    return proba_of_moving_from, proba_of_moving_to
 
 @njit
 def make_people_move(indiv_loc_matrix_new, N, len_gdf, indiv_loc_matrix, proba_of_moving_from, proba_of_moving_to, PROBA_MOVE):

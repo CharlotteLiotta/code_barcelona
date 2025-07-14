@@ -135,3 +135,29 @@ def compare_rent_or_size(gdf, var_data, var_simul, weighting):
     plt.show()
 
     return agg
+
+def compute_weighted_mean_opinions(var, opinion_distance_matrix, N):
+    weighted_mean_opinion = np.zeros(opinion_distance_matrix.shape[1])
+    weighted_mean_opinion[np.nansum(opinion_distance_matrix, 0) > 0] = np.nansum(opinion_distance_matrix * var.reshape(N, 1), 0)[np.nansum(opinion_distance_matrix, 0) > 0] / np.nansum(opinion_distance_matrix, 0)[np.nansum(opinion_distance_matrix, 0) > 0]
+    weighted_mean_opinion[np.nansum(opinion_distance_matrix, 0) == 0] = np.nan
+    return weighted_mean_opinion
+
+def plot_tax_suppport(save_tax, save_median_support):
+
+    fig, ax1 = plt.subplots()
+
+    color = 'tab:red'
+    ax1.set_xlabel('time (year)')
+    ax1.set_ylabel('tax', color=color)
+    ax1.plot(save_tax[1:], color=color)
+    ax1.tick_params(axis='y', labelcolor=color)
+
+    ax2 = ax1.twinx()  # instantiate a second Axes that shares the same x-axis
+
+    color = 'tab:blue'
+    ax2.set_ylabel('median support', color=color)  # we already handled the x-label with ax1
+    ax2.plot(save_median_support[1:], color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    fig.tight_layout()  # otherwise the right y-label is slightly clipped
+    plt.show()
