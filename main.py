@@ -16,17 +16,6 @@ from plotting_tools import * # type: ignore
 from import_transport import *
 from policy_support import *
 
-###TO DO:
-
-#add emf -> meilleures données transport (modes et durées, mais pas emploi)
-#refaire import clean (rest seulement la distance en voiture je crois)
-#go polycentric using cluster employment
-#add different income groups
-#calibration perceived impacts (parameters in outcome function)
-#sociodemographics
-#add residuals
-#find a way to model congestion???
-
 ### IMPORT PARAMETERS
 
 path_data = "../data_barcelona/"
@@ -63,27 +52,15 @@ gdf = import_rent_and_size(gdf, path_data)
 Y, gdf = import_income(gdf, path_data)
 gdf = import_amenities(gdf, path_data, 0, 0)
 
-#rent_idea = gpd.read_file(path_data + "barcelona_rent_idealista.gpkg", layer="points")
-#rent_idea.plot("UNITPRICE", s = 1, legend = True)
-#rent_idea = rent_idea.to_crs(gdf.crs)
-#joined = gpd.sjoin(rent_idea, gdf, how="inner", predicate="within")
-#agg = joined.groupby("ID").agg(
-#    count_dea_data=("UNITPRICE", "count"),
-#    mean_rent_per_sqm=("UNITPRICE", "mean"),
-#    median_rent_per_sqm=("UNITPRICE", "median")
-#).reset_index()
-#gdf = gdf.merge(agg, on="ID", how = "left")
-
 #Transport times
 #import_transport_times(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, 1)
 #import_car_distance(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data)
 travel_time_matrix_car, travel_time_matrix_transit = load_transport_times(gdf, path_data, center)
-#travel_distance_matrix_car = load_transport_distance(gdf, path_data, center)
+travel_distance_matrix_car = load_transport_distance(gdf, path_data, center)
 gdf = add_transport(gdf, travel_time_matrix_car, travel_time_matrix_transit, center)
-#gdf = gdf.merge(travel_distance_matrix_car.loc[travel_distance_matrix_car.to_id == center,:], left_on = "ID", right_on = "from_id", how = "left").drop(columns = ['from_id', 'to_id'])
-city_center = gdf.loc[gdf['ID'] == center]  # adapt to your case
-center_centroid = city_center.geometry.centroid.values[0]
-gdf['distance_car'] = gdf.geometry.centroid.distance(center_centroid)
+gdf = gdf.merge(travel_distance_matrix_car.loc[travel_distance_matrix_car.to_id == center,:], left_on = "ID", right_on = "from_id", how = "left").drop(columns = ['from_id', 'to_id'])
+center_centroid = gdf.loc[gdf['ID'] == center].geometry.centroid.values[0]
+gdf.loc[np.isnan(gdf.distance_car), 'distance_car'] = gdf.geometry.centroid.distance(center_centroid).loc[np.isnan(gdf.distance_car)]
 gdf = import_cost_transit(gdf)
 
 ### POLICY SUPPORT
@@ -187,6 +164,14 @@ if solving_model.fun < 1:
 else:
     print("Minimization failed!")
 
+density_residual = np.log(gdf["pop"] / n)
+density_residual[gdf["pop"] == 0] = 0
+rent_residual = np.log(gdf["rent_m2"] / R)
+rent_residual[gdf["rent_m2"] == 0] = 0
+rent_residual[np.isnan(gdf["rent_m2"])] = 0
+size_residual = np.log(gdf["size"] / q)
+size_residual[np.isnan(gdf["size"])] = np.nanmean(size_residual)
+
 # Plot the result of the calibration
 map_calibration(gdf, n, gdf["pop"] , "Population")
 map_calibration(gdf, q, gdf["size"], "Dwelling size per capita")
@@ -211,8 +196,33 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
+#initial state
+def compute_error_in_population_from_utility(u):
+    """ Compute error in population associated to utility u"""
+
+    return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, Y, gdf["transport_cost"], B, KAPPA, RHO, gdf["urb_area"], rent_residual, density_residual, size_residual)
+
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 700)
+
+if solving_model.fun < 1:
+    utility = solving_model.x
+    R = compute_rents(BETA, Y, utility / gdf["amenities"], gdf["transport_cost"])
+    q = compute_dwelling_size(BETA, Y, gdf["transport_cost"], R)
+    n = compute_population(B, KAPPA, R, RHO, gdf["urb_area"], q)
+    R = R * np.exp(rent_residual)
+    q = q * np.exp(size_residual)
+    n = n * np.exp(density_residual)
+    n[np.isnan(n)] = 0
+else:
+    print("Minimization failed!")
+
+agg = compare_rent_or_size(gdf, "size", q, 1)
+agg = compare_rent_or_size(gdf, "rent_m2", R, 1)
+agg = compare_var(gdf, n)
+
 # ABM: translate outputs at the household level
 N = round(np.nansum(gdf["pop"]) * SCALE)
+
 indiv_loc_matrix = compute_indiv_loc_matrix(N, len(gdf), n.to_numpy()* SCALE)
 rent_indiv = indiv_loc_matrix @ R.to_numpy()
 dwelling_size_indiv = indiv_loc_matrix @ q
@@ -256,7 +266,7 @@ while year < MAX_YEAR:
     def compute_error_in_population_from_utility(u):
         """ Compute error in population associated to utility u"""
 
-        return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, Y, gdf["transport_cost"], B, KAPPA, RHO, gdf["urb_area"])
+        return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, Y, gdf["transport_cost"], B, KAPPA, RHO, gdf["urb_area"], rent_residual, density_residual, size_residual)
 
     solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 700)
 
@@ -265,6 +275,10 @@ while year < MAX_YEAR:
         R = compute_rents(BETA, Y, utility / gdf["amenities"], gdf["transport_cost"])
         q = compute_dwelling_size(BETA, Y, gdf["transport_cost"], R)
         n = compute_population(B, KAPPA, R, RHO, gdf["urb_area"], q)
+        R = R * np.exp(rent_residual)
+        q = q * np.exp(size_residual)
+        n = n * np.exp(density_residual)
+        n[np.isnan(n)] = 0
     else:
         print("Minimization failed!")
 

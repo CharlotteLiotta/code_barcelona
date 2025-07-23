@@ -118,7 +118,7 @@ def import_car_distance(gdf, date_here, center, path_data):
         elif mode == "transit":
             transport_mode = [TransportMode.TRANSIT, TransportMode.WALK]
     
-        i = 600
+        i = 1800
         while i < (len(points) - 100):
 
             i = i + 100

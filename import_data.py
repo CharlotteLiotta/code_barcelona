@@ -370,6 +370,14 @@ def import_trans_mode(path_data):
     trans_mode["share_car"] = trans_mode["Particular"] + trans_mode["Company or other media"]
     return trans_mode
 
+#add emf -> meilleures données transport (modes et durées, mais pas emploi)
+#emf = pd.read_csv(path_data + "emef/Microdades Ús públic_EMEF2023_Desplaçaments (2).csv", sep = ";")
+#emf = emf.loc[(emf.TIPOL == 1) & (emf.V03A == 3),:]
+#emf = emf.loc[:,["ID", "DISTANCIA_ORTO_REC_R1", "COM_O2", "COM_D2", "V03G_R3"]]
+#emf = emf.groupby("ID").first()
+#emf["indic"] = 1
+#emf.loc[:,["indic", "COM_D2"]].groupby("COM_D2").sum()
+
 def import_beach(gdf, path_data):
     """ Import distance to the beach from land cover data """
 
@@ -641,3 +649,17 @@ def import_amenities(gdf, path_data, option_load, option_save):
 
     gdf["ID"] = gdf["ID"].astype(str)
     return gdf.merge(data_amenity, on = "ID", how = "left")
+
+def import_rent_idealista(gdf, path_data):
+    rent_idea = gpd.read_file(path_data + "barcelona_rent_idealista.gpkg", layer="points")
+    rent_idea.plot("UNITPRICE", s = 1, legend = True)
+    rent_idea = rent_idea.to_crs(gdf.crs)
+    joined = gpd.sjoin(rent_idea, gdf, how="inner", predicate="within")
+    agg = joined.groupby("ID").agg(
+        count_dea_data=("UNITPRICE", "count"),
+        mean_rent_per_sqm=("UNITPRICE", "mean"),
+        median_rent_per_sqm=("UNITPRICE", "median")
+        ).reset_index()
+    
+    gdf = gdf.merge(agg, on="ID", how = "left")
+    return gdf

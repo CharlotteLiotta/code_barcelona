@@ -43,7 +43,7 @@ def compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CA
 
     return gdf
 
-def compute_error_in_population(u, N, BETA, Y, transport_cost, B, KAPPA, RHO, L, housing_lag = None):
+def compute_error_in_population(u, N, BETA, Y, transport_cost, B, KAPPA, RHO, L, resid_rent = 0, resid_density = 0, resid_size = 0):
     '''
     Compute the difference between the population estimated by the model if 
     the utility is equal to u and the actual population.
@@ -58,10 +58,11 @@ def compute_error_in_population(u, N, BETA, Y, transport_cost, B, KAPPA, RHO, L,
 
     R = compute_rents(BETA, Y, u, transport_cost)
     q = compute_dwelling_size(BETA, Y, transport_cost, R)
-    if housing_lag is None:
-        n = compute_population(B, KAPPA, R, RHO, L, q)
-    else:
-        n = housing_lag / q
+    n = compute_population(B, KAPPA, R, RHO, L, q)
+
+    R = R * np.exp(resid_rent)
+    q = q * np.exp(resid_size)
+    n = n * np.exp(resid_density)
     #print("Estimated_population", np.nansum(n))
     #print("Error", N - np.nansum(n))
     error_population = np.abs(N - np.nansum(n))
