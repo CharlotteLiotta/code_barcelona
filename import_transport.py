@@ -3,6 +3,76 @@ from r5py import TravelTimeMatrixComputer, TransportMode, TransportNetwork, Deta
 import os
 from shapely.geometry import Point # type: ignore
 
+def import_transport_times_poly(gdf, date_here, center, path_data, employment_centers):
+    """ Import transport times using GTFS data for transit, OSM data for private cars, and the r5py package """
+
+    points = gdf.copy()
+    points["geometry"] = points.centroid
+    points = points.loc[:,["ID", "geometry"]]
+    points.columns = ["id", "geometry"]
+
+    points_dest = employment_centers.copy()
+    points_dest = points_dest.loc[:,["cluster", "geometry"]]
+    points_dest.columns = ["id", "geometry"]
+
+    path_osm = path_data + "barcelona.osm.pbf"
+    #path_osm = path_data + "cataluna-latest.osm.pbf"
+
+    list_path_gtfs = os.listdir(path_data + 'gtfs/')
+    list_path_gtfs = [i for i in list_path_gtfs if i.endswith('zip')]
+    list_path_gtfs = [path_data + 'gtfs/' + sub for sub in list_path_gtfs] 
+    
+    print("Start Computing Network")
+    transport_network = TransportNetwork(
+        path_osm,
+        list_path_gtfs
+        )
+    
+    print("Transport Network Computed")
+
+    def compute_travel_times(mode):
+
+        if mode == "car":
+            i = 0
+            transport_mode = [TransportMode.CAR]
+        elif mode == "transit":
+            i = 0
+            transport_mode = [TransportMode.TRANSIT, TransportMode.WALK]
+    
+        i = 1400
+        while i < (len(points) - 100):
+
+            i = i + 100
+    
+            travel_time_matrix_computer = TravelTimeMatrixComputer(
+                transport_network,
+                origins=points.iloc[i - 100:i, :],
+                destinations= points_dest,
+                departure=date_here,
+                transport_modes=transport_mode
+                )
+        
+            travel_time_matrix = travel_time_matrix_computer.compute_travel_times()
+
+            np.save(path_data + "travel_time_matrix_poly_" + mode + "_" + str(i) + ".npy", travel_time_matrix)
+            print("Travel time " + mode + ": ", round(100 * i/len(points)), "%")
+    
+        travel_time_matrix_computer = TravelTimeMatrixComputer(
+            transport_network,
+            origins=points.iloc[i:len(points), :],
+            destinations=points_dest,
+            departure=date_here,
+            transport_modes=transport_mode
+            )
+        
+        travel_time_matrix = travel_time_matrix_computer.compute_travel_times()
+
+        np.save(path_data + "travel_time_matrix_poly_" + mode + "_" + str(len(points)) + ".npy", travel_time_matrix)
+        print("Travel time " + mode + " saved")
+
+    #compute_travel_times("car")
+    compute_travel_times("transit")
+
 def import_transport_times(gdf, date_here, center, path_data, OPTION_SAVE):
     """ Import transport times using GTFS data for transit, OSM data for private cars, and the r5py package """
 
@@ -148,3 +218,13 @@ def import_car_distance(gdf, date_here, center, path_data):
         print("Travel distance " + mode + " saved")
 
     compute_travel_distance("car")
+
+
+def load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers):
+    travel_time_matrix_car = travel_time_matrix_car.merge(gdf[['ID', 'geometry']].rename(columns={'ID': 'from_id', 'geometry': 'from_geom'}), on='from_id', how='left')
+    travel_time_matrix_car = travel_time_matrix_car.merge(employment_centers[['cluster', 'geometry']].rename(columns={'cluster': 'to_id', 'geometry': 'to_geom'}), on='to_id', how='left')
+    travel_time_matrix_car['distance_car'] = travel_time_matrix_car.apply(
+        lambda row: row['from_geom'].distance(row['to_geom']) if row['from_geom'] and row['to_geom'] else None,
+        axis=1
+    )
+    return travel_time_matrix_car

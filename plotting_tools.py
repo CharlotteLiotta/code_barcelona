@@ -1,6 +1,21 @@
 import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 
+def plot_employment(gdf, employment_centers, var):
+    base = gdf.plot(color='lightgrey', edgecolor='white', figsize=(10, 10))
+
+    # Overlay: points with size proportional to a column (e.g., 'population')
+    employment_centers.plot(
+        ax=base,
+        markersize = var,
+        #markersize=employment_centers['employment'] * 0.001,  # adjust scale_factor
+        #markersize=employment_centers.merge(employed_results, left_on = "cluster", right_on = "to_id")["weighted_employed"] * 0.001,  # adjust scale_factor
+        #markersize= ARRAY_WAGE* 0.5,  # adjust scale_factor
+        color='red',
+        alpha=0.6)
+
+    plt.show()
+
 def plot_with_missing(gdf, var):
     """ Map a variable with missing values in grey """
 

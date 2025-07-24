@@ -50,6 +50,45 @@ def compute_cost_car_logit(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, 
     LAMBDA = solving_transport.x[1]
     return gdf, FIXED_COST_CAR, LAMBDA
 
+def compute_cost_car_poly(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data):
+    """ Calibrate the fixed cost of private car to match the transport modes data """
+
+    trans_mode = import_trans_mode(path_data)
+
+    gdf = gdf.merge(trans_mode.loc[:,["code_city", "share_car"]], on = "code_city", how = "left")
+    
+    def compute_error_transport_poly(x):
+        FIXED_COST_CAR = x[0]
+        LAMBDA = x[1]
+        ARRAY_WAGE = x[2:]
+
+        gdf_here, employed_results = compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, tax = 0)
+        
+        error1 = np.nansum(np.abs(((1 - gdf_here["transport_mode"]) * gdf_here["pop"]) - (gdf_here["share_car"] * gdf_here["pop"])))
+        print(f"x = {x}, error_mode_by_tract = {error1}") #Error on transport mode by census tract
+
+        gdf_here = gdf_here.loc[~np.isnan(gdf_here.share_car),:]
+        error2 = np.nansum(gdf_here["pop"]) * np.abs((np.nansum(gdf_here.share_car * gdf_here["pop"]) / np.nansum(gdf_here["pop"])) - (np.nansum((1 - gdf_here["transport_mode"]) * gdf_here["pop"]) / np.nansum(gdf_here["pop"])))
+        print(f"x = {x}, error_mode_AMB = {error2}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
+        
+        #error3:avg wage
+        estimated_wage = np.nansum(gdf_here["pop"] * gdf_here["wage"]) / np.nansum(gdf_here["pop"])
+        error3 = np.abs(Y-estimated_wage)
+        print(f"x = {x}, error_wage = {error3}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
+        
+        #error4:ppl per employment center
+        employed_results = employed_results.merge(employment_centers, left_index = True, right_on = "cluster")
+        error4= np.nansum(np.abs(employed_results.employed - employed_results.employment)) / 2
+        print(f"x = {x}, error_employment = {error4}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
+        
+        return error1 + error2 + error3 + error4
+
+    solving_transport = scipy.optimize.minimize(compute_error_transport_poly, x0=[163, 280] + (np.ones(len(np.unique(employment_centers.cluster))) * 0.75*Y).tolist(), method='L-BFGS-B', bounds=[(0, 300), (0, 400)]+ [(0, 10000)] * len(np.unique(employment_centers.cluster)))
+    FIXED_COST_CAR = solving_transport.x[0]
+    LAMBDA = solving_transport.x[1]
+    ARRAY_WAGE = solving_transport.x[2:]
+    return gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE
+
 def calibrate_beta(gdf, Y):
     """ Calibrate BETA as the average share of income net of transport cost used for housing """
 

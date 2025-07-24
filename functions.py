@@ -51,8 +51,13 @@ def compute_change_in_inequalities(utility_without_tax, utility_with_tax):
 
     return Q
 
-def compute_change_in_emissions(n_with_tax, distance, transport_mode, emissions_init):
-    relative_change_emission = (sum(n_with_tax * distance * (1 - transport_mode)) - emissions_init) / emissions_init
+def compute_change_in_emissions(gdf, travel_matrix, emissions_init, n_with_tax):
+    travel_matrix["distance_emi"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center"] * (1 - travel_matrix["transport_mode"])
+    distance_emi = travel_matrix.loc[:,["distance_emi", "from_id"]].groupby("from_id").sum()
+    gdf = gdf.drop(columns = "distance_emi")
+    gdf = gdf.merge(distance_emi, left_on = "ID", right_index = True)
+    emissions = sum(n_with_tax * (gdf["distance_emi"]))
+    relative_change_emission = (emissions - emissions_init) / emissions_init
     print("relative_change_emission", 100 * relative_change_emission, "%")
     return (1 / (1 + np.exp(2 * relative_change_emission)))
 

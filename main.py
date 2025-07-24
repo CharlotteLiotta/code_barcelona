@@ -7,6 +7,7 @@ os.environ["R5_JAR"] = "C:/Users/1738037/AppData/Local/miniforge3/envs/r5py/Lib/
 jpype.startJVM(classpath=[os.environ["R5_JAR"]])
 import datetime
 import warnings
+import pickle
 
 from functions import *
 from import_data import * # type: ignore
@@ -52,16 +53,24 @@ gdf = import_rent_and_size(gdf, path_data)
 Y, gdf = import_income(gdf, path_data)
 gdf = import_amenities(gdf, path_data, 0, 0)
 
+#Import transport data
+employment_centers = gpd.read_file(path_data + "cluster_employment.shp")
+#import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers)
+travel_time_matrix_car, travel_time_matrix_transit = load_transport_times_poly(gdf, path_data, center)
+travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers)
+gdf = import_cost_transit(gdf)
+travel_time_matrix_transit = travel_time_matrix_transit.merge(gdf[['ID', 'monthly_cost_transit']].rename(columns={'ID': 'from_id'}), on='from_id', how='left')
+
 #Transport times
 #import_transport_times(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, 1)
 #import_car_distance(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data)
-travel_time_matrix_car, travel_time_matrix_transit = load_transport_times(gdf, path_data, center)
-travel_distance_matrix_car = load_transport_distance(gdf, path_data, center)
-gdf = add_transport(gdf, travel_time_matrix_car, travel_time_matrix_transit, center)
-gdf = gdf.merge(travel_distance_matrix_car.loc[travel_distance_matrix_car.to_id == center,:], left_on = "ID", right_on = "from_id", how = "left").drop(columns = ['from_id', 'to_id'])
-center_centroid = gdf.loc[gdf['ID'] == center].geometry.centroid.values[0]
-gdf.loc[np.isnan(gdf.distance_car), 'distance_car'] = gdf.geometry.centroid.distance(center_centroid).loc[np.isnan(gdf.distance_car)]
-gdf = import_cost_transit(gdf)
+#travel_time_matrix_car, travel_time_matrix_transit = load_transport_times(gdf, path_data, center)
+#travel_distance_matrix_car = load_transport_distance(gdf, path_data, center)
+#gdf = add_transport(gdf, travel_time_matrix_car, travel_time_matrix_transit, center)
+#gdf = gdf.merge(travel_distance_matrix_car.loc[travel_distance_matrix_car.to_id == center,:], left_on = "ID", right_on = "from_id", how = "left").drop(columns = ['from_id', 'to_id'])
+#center_centroid = gdf.loc[gdf['ID'] == center].geometry.centroid.values[0]
+#gdf.loc[np.isnan(gdf.distance_car), 'distance_car'] = gdf.geometry.centroid.distance(center_centroid).loc[np.isnan(gdf.distance_car)]
+#gdf = import_cost_transit(gdf)
 
 ### POLICY SUPPORT
 
@@ -70,15 +79,26 @@ BETA_OPINION = import_opinion_parameters(path_data)
 ### INITIAL STATE: YEAR 0
 
 #Transport cost calibration
-gdf, FIXED_COST_CAR, LAMBDA = compute_cost_car_logit(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, path_data)
+#gdf, FIXED_COST_CAR, LAMBDA = compute_cost_car_logit(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, path_data)
+#gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE = compute_cost_car_poly(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data)
+#with open(path_data + "calib_trans_poly.pkl", "wb") as f:
+#    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE), f)
+with open(path_data + "calib_trans_poly.pkl", "rb") as f:
+    FIXED_COST_CAR, LAMBDA, ARRAY_WAGE = pickle.load(f)
 print("FIXED_COST_CAR: ", FIXED_COST_CAR)
 print("LAMBDA: ", LAMBDA)
+del Y
+del compute_transport_cost_logit, compute_cost_car_logit
 
 #Compute transport cost
-gdf = compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax = 0)
+#gdf = compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax = 0)
+gdf, employed_results, travel_matrix = compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, tax = 0)
+
 print(round(100 * sum(gdf["transport_mode"] * gdf["pop"]) / sum(gdf["pop"])), " % commute by public transport")
 plot_with_missing(gdf, gdf["transport_cost"])
 plot_with_missing(gdf, gdf["transport_mode"])
+#plot_employment(gdf, employment_centers, var) var = employment_centers['employment'] * 0.001, employment_centers.merge(employed_results, left_on = "cluster", right_on = "to_id")["weighted_employed"] * 0.001,  # adjust scale_factor, ARRAY_WAGE* 0.5
+
 
 #Calibration BETA with amenities
 gdf["size"] = gdf["size_census"] #gdf["size_census"] #gdf["size_AMB"]
@@ -90,7 +110,8 @@ def calibration_utility_amenity(x, print_summary, export_amenities):
     print(f"x = {x}")
 
     #Log-likelihood on dwelling size
-    estimated_size = BETA * gdf["income_net_of_transport_cost"]  / gdf["rent_m2"]
+    #estimated_size = BETA * gdf["income_net_of_transport_cost"]  / gdf["rent_m2"]
+    estimated_size = BETA * (gdf["wage"] - gdf["transport_cost"])  / gdf["rent_m2"]
     diff_size = gdf["size"] - estimated_size
     mask = ((~np.isnan(diff_size)) & (~np.isinf(diff_size)))
     epsilon_size = np.nansum(diff_size.loc[mask] ** 2) / sum(mask)
@@ -98,7 +119,8 @@ def calibration_utility_amenity(x, print_summary, export_amenities):
     print("log_L = ", log_L)
 
     #Log-likelihood on amenities
-    estimated_A = U / (((1-BETA) ** (1-BETA)) * (BETA ** BETA) * (gdf["income_net_of_transport_cost"]  / gdf["rent_m2"]))
+    #estimated_A = U / (((1-BETA) ** (1-BETA)) * (BETA ** BETA) * (gdf["income_net_of_transport_cost"]  / gdf["rent_m2"]))
+    estimated_A = U / (((1-BETA) ** (1-BETA)) * (BETA ** BETA) * ((gdf["wage"] - gdf["transport_cost"])  / gdf["rent_m2"]))
     with np.errstate(divide='ignore', invalid='ignore'):
         gdf["log_A"] = np.log(estimated_A.replace([np.inf, -np.inf], np.nan))
     gdf_here = gdf.loc[~np.isnan(gdf.log_A) & ~np.isinf(gdf.log_A),:]
@@ -152,14 +174,14 @@ B, KAPPA = calibrate_b_kappa(gdf, mask, RHO, option_calib = "housing")
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, Y, gdf["transport_cost"], B, KAPPA, RHO, gdf["urb_area"])
+    return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, RHO, gdf["urb_area"])
 
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 700)
 
 if solving_model.fun < 1:
     utility = solving_model.x
-    R = compute_rents(BETA, Y, utility / gdf["amenities"], gdf["transport_cost"])
-    q = compute_dwelling_size(BETA, Y, gdf["transport_cost"], R)
+    R = compute_rents(BETA, gdf["wage"], utility / gdf["amenities"], gdf["transport_cost"])
+    q = compute_dwelling_size(BETA, gdf["wage"], gdf["transport_cost"], R)
     n = compute_population(B, KAPPA, R, RHO, gdf["urb_area"], q)
 else:
     print("Minimization failed!")
@@ -200,14 +222,14 @@ plt.show()
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, Y, gdf["transport_cost"], B, KAPPA, RHO, gdf["urb_area"], rent_residual, density_residual, size_residual)
+    return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, RHO, gdf["urb_area"], rent_residual, density_residual, size_residual)
 
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 700)
 
 if solving_model.fun < 1:
     utility = solving_model.x
-    R = compute_rents(BETA, Y, utility / gdf["amenities"], gdf["transport_cost"])
-    q = compute_dwelling_size(BETA, Y, gdf["transport_cost"], R)
+    R = compute_rents(BETA, gdf["wage"], utility / gdf["amenities"], gdf["transport_cost"])
+    q = compute_dwelling_size(BETA, gdf["wage"], gdf["transport_cost"], R)
     n = compute_population(B, KAPPA, R, RHO, gdf["urb_area"], q)
     R = R * np.exp(rent_residual)
     q = q * np.exp(size_residual)
@@ -227,7 +249,7 @@ indiv_loc_matrix = compute_indiv_loc_matrix(N, len(gdf), n.to_numpy()* SCALE)
 rent_indiv = indiv_loc_matrix @ R.to_numpy()
 dwelling_size_indiv = indiv_loc_matrix @ q
 
-utility = compute_utility_manually(Y, indiv_loc_matrix @gdf["transport_cost"], 
+utility = compute_utility_manually(indiv_loc_matrix @gdf["wage"], indiv_loc_matrix @gdf["transport_cost"], 
                                                 dwelling_size_indiv, rent_indiv, BETA)
 
 housing_indiv = dwelling_size_indiv @ csr_matrix(indiv_loc_matrix)  # shape: (10,)
@@ -248,7 +270,11 @@ save_utility[:, 0] = deepcopy(utility)
 save_tax = np.zeros(MAX_YEAR)
 save_tax[0] = 1
 
-emissions_init = sum(save_population[:, 0] * (gdf["distance_car"] / 1000) * (1 - gdf["transport_mode"]))
+travel_matrix["distance_emi"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center"] * (1 - travel_matrix["transport_mode"])
+distance_emi = travel_matrix.loc[:,["distance_emi", "from_id"]].groupby("from_id").sum()
+gdf = gdf.merge(distance_emi, left_on = "ID", right_index = True)
+emissions_init = sum(save_population[:, 0] * (gdf["distance_emi"]))
+
 save_median_support = np.zeros(MAX_YEAR)
 
 year = year + 1
@@ -261,19 +287,20 @@ while year < MAX_YEAR:
 
     # Urban form with the tax, without inertia
 
-    gdf = compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax = tax)
+    #gdf = compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax = tax)
+    gdf, employed_results, travel_matrix = compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, tax = 0)
 
     def compute_error_in_population_from_utility(u):
         """ Compute error in population associated to utility u"""
 
-        return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, Y, gdf["transport_cost"], B, KAPPA, RHO, gdf["urb_area"], rent_residual, density_residual, size_residual)
+        return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, RHO, gdf["urb_area"], rent_residual, density_residual, size_residual)
 
     solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 700)
 
     if solving_model.fun < 1:
         utility = solving_model.x
-        R = compute_rents(BETA, Y, utility / gdf["amenities"], gdf["transport_cost"])
-        q = compute_dwelling_size(BETA, Y, gdf["transport_cost"], R)
+        R = compute_rents(BETA, gdf["wage"], utility / gdf["amenities"], gdf["transport_cost"])
+        q = compute_dwelling_size(BETA, gdf["wage"], gdf["transport_cost"], R)
         n = compute_population(B, KAPPA, R, RHO, gdf["urb_area"], q)
         R = R * np.exp(rent_residual)
         q = q * np.exp(size_residual)
@@ -293,7 +320,7 @@ while year < MAX_YEAR:
     rent_indiv[has_moved == 1] = rent_indiv_new[has_moved == 1]
     dwelling_size_indiv[has_moved == 1] = dwelling_size_indiv_new[has_moved == 1]
 
-    utility = compute_utility_manually(Y, indiv_loc_matrix @gdf["transport_cost"], 
+    utility = compute_utility_manually(indiv_loc_matrix @ gdf["wage"], indiv_loc_matrix @gdf["transport_cost"], 
                                                 dwelling_size_indiv, rent_indiv, BETA)
 
     housing_indiv = dwelling_size_indiv @ csr_matrix(indiv_loc_matrix)  # shape: (10,)
@@ -310,7 +337,7 @@ while year < MAX_YEAR:
     # Policy support
     score_welfare = compute_change_in_welfare(save_utility[:,0], save_utility[:,year])
     score_ineq = compute_change_in_inequalities(save_utility[:,0], save_utility[:,year])
-    score_emissions = compute_change_in_emissions(save_population[:, year], gdf["distance_car"] / 1000, gdf["transport_mode"], emissions_init)
+    score_emissions = compute_change_in_emissions(gdf, travel_matrix, emissions_init, save_population[:, year])
     political_opinion = compute_political_opinion(score_welfare, score_ineq, score_emissions, BETA_OPINION)
     
     if year > 1:
