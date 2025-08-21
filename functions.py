@@ -59,7 +59,7 @@ def compute_change_in_emissions(gdf, travel_matrix, emissions_init, n_with_tax):
     emissions = sum(n_with_tax * (gdf["distance_emi"]))
     relative_change_emission = (emissions - emissions_init) / emissions_init
     print("relative_change_emission", 100 * relative_change_emission, "%")
-    return (1 / (1 + np.exp(2 * relative_change_emission)))
+    return (1 / (1 + np.exp(2 * relative_change_emission))), emissions
 
 ### POLICY SUPPORT FUNCTIONS
 
@@ -207,7 +207,8 @@ def make_people_move(indiv_loc_matrix_new, N, len_gdf, indiv_loc_matrix, proba_o
     
     has_moved = np.zeros(N)
     indiv_moving = np.random.binomial(1, PROBA_MOVE, N) #Each individual has a 30% chance to be willing to move.
-
+    print(indiv_moving)
+    print(np.nansum(indiv_moving))
     for i in np.arange(N):
         if indiv_moving[i] == 1:
             if sum(indiv_loc_matrix[i,:]) > 0:

@@ -201,3 +201,16 @@ comparison["error"] = (comparison["employment_cluster"] - comparison["employment
 cluster_geom.loc[:,["geometry", "employment_cluster"]].to_file(path_data + "cluster_employment.shp")
 
 #gdf = gdf.drop(columns = ["cluster", "employment_cluster"])
+
+
+
+fig, ax = plt.subplots(figsize=(8, 8))
+
+# Plot polygons
+gdf.plot(ax=ax, color="white", edgecolor="grey")
+
+# Plot points on top
+employment_centers.plot(ax=ax, color="red", markersize=20)
+for x, y, label in zip(employment_centers.geometry.x, employment_centers.geometry.y, employment_centers["cluster"]):
+    ax.text(x, y, label, fontsize=12, ha="right", va="bottom", color="red")
+plt.show()

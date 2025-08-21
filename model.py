@@ -44,11 +44,13 @@ def compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CA
 
     return gdf
 
-def compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_INCOME, tax):
+def compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_INCOME, points_in_zone, house_in_zone, tax):
     """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
     
-    travel_time_matrix_car["COST_CAR"] = ((travel_time_matrix_car["travel_time"] / 60) * PRICE_TIME * WORKING_DAYS) + ((travel_time_matrix_car.distance_car / 1000) * PRICE_FUEL * WORKING_DAYS) + FIXED_COST_CAR + (tax * WORKING_DAYS)
+    travel_time_matrix_car["zone_tax"] = 1 * (travel_time_matrix_car.from_id.isin(house_in_zone) | travel_time_matrix_car.to_id.isin(points_in_zone))
+    travel_time_matrix_car["COST_CAR"] = ((travel_time_matrix_car["travel_time"] / 60) * PRICE_TIME * WORKING_DAYS) + ((travel_time_matrix_car.distance_car / 1000) * PRICE_FUEL * WORKING_DAYS) + FIXED_COST_CAR + (tax * WORKING_DAYS * travel_time_matrix_car["zone_tax"])
     travel_time_matrix_transit["COST_PT"] = ((travel_time_matrix_transit["travel_time"] / 60) * PRICE_TIME * WORKING_DAYS) + travel_time_matrix_transit["monthly_cost_transit"]
+
 
     travel_time_matrix_car.loc[np.isnan(travel_time_matrix_car["COST_CAR"]), "COST_CAR"] = 600
     travel_time_matrix_transit.loc[np.isnan(travel_time_matrix_transit["COST_PT"]), "COST_PT"] = 3500

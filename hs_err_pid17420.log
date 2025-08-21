@@ -1,0 +1,585 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0x00000290de68116e, pid=17420, tid=1532
+#
+# JRE version:  (23.0.2+7) (build )
+# Java VM: OpenJDK 64-Bit Server VM (23.0.2+7, mixed mode, sharing, tiered, compressed oops, compressed class ptrs, g1 gc, windows-amd64)
+# Problematic frame:
+# v  ~StubRoutines::verify_mxcsr 0x00000290de68116e
+#
+# No core dump will be written. Minidumps are not enabled by default on client versions of Windows
+#
+# The crash happened outside the Java Virtual Machine in native code.
+# See problematic frame for where to report the bug.
+#
+
+---------------  S U M M A R Y ------------
+
+Command Line: -Xmx13284448666 -Xcheck:jni -Xrs -Duser.language=en -Duser.country=US -Duser.variant= -Djava.io.tmpdir=C:\Users\1738037\AppData\Local\Temp\r5pyngh3u9ll 
+
+Host: Intel(R) Core(TM) Ultra 5 125U, 14 cores, 15G,  Windows 11 , 64 bit Build 22621 (10.0.22621.5415)
+Time: Tue Aug 19 14:31:19 2025 Paris, Madrid (heure d’été) elapsed time: 0.027284 seconds (0d 0h 0m 0s)
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x00000290cb72f210):  JavaThread "main"             [_thread_in_native, id=1532, stack(0x000000c216c00000,0x000000c216df0000) (1984K)]
+
+Stack: [0x000000c216c00000,0x000000c216df0000],  sp=0x000000c216de49e0,  free space=1938k
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+C  0x00000290de68116e  (no source info available)
+
+The last pc belongs to verify_mxcsr (printed below).
+Java frames: (J=compiled Java code, j=interpreted, Vv=VM code)
+j  java.lang.Object.hashCode()I+0 java.base
+j  java.util.ImmutableCollections$MapN.probe(Ljava/lang/Object;)I+1 java.base
+j  java.util.ImmutableCollections$MapN.<init>([Ljava/lang/Object;)V+78 java.base
+j  java.util.Map.of(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Map;+107 java.base
+j  jdk.internal.reflect.Reflection.<clinit>()V+66 java.base
+v  ~StubRoutines::call_stub 0x00000290de680fcd
+j  java.security.AccessController.doPrivileged(Ljava/security/PrivilegedAction;)Ljava/lang/Object;+2 java.base
+j  java.lang.reflect.AccessibleObject.<clinit>()V+17 java.base
+v  ~StubRoutines::call_stub 0x00000290de680fcd
+
+siginfo: EXCEPTION_ACCESS_VIOLATION (0xc0000005), reading address 0xffffffffffffffff
+
+
+Registers:
+RAX=0x000000000000000a, RBX=0x00000290f9164680, RCX=0x000000c216de4940, RDX=0x0000000000000000
+RSP=0x000000c216de49e0, RBP=0x000000c216de54f0, RSI=0x0000000000000000, RDI=0x0000000000000030
+R8 =0x00007fff22910990, R9 =0x0000000000000000, R10=0x0000000000000000, R11=0x000000c216de47d0
+R12=0x0000000000000000, R13=0x00000290f9cf8730, R14=0x000000c216de55a8, R15=0x00000290cb72f210
+RIP=0x00000290de68116e, EFLAGS=0x0000000000010206
+
+
+Register to memory mapping:
+
+RAX=0x000000000000000a is an unknown value
+RBX={method} {0x00000290f9164688} 'hashCode' '()I' in 'java/lang/Object'
+RCX=0x000000c216de4940 is pointing into the stack for thread: 0x00000290cb72f210
+RDX=0x0 is null
+RSP=0x000000c216de49e0 is pointing into the stack for thread: 0x00000290cb72f210
+RBP=0x000000c216de54f0 is pointing into the stack for thread: 0x00000290cb72f210
+RSI=0x0 is null
+RDI=0x0000000000000030 is an unknown value
+R8 =0x00007fff22910990 ucrtbase.dll
+R9 =0x0 is null
+R10=0x0 is null
+R11=0x000000c216de47d0 is pointing into the stack for thread: 0x00000290cb72f210
+R12=0x0 is null
+R13=0x00000290f9cf8730 is pointing into metadata
+R14=0x000000c216de55a8 is pointing into the stack for thread: 0x00000290cb72f210
+R15=0x00000290cb72f210 is a thread
+
+Top of Stack: (sp=0x000000c216de49e0)
+0x000000c216de49e0:   00007ffe406280f0 00000290cb72f5b0
+0x000000c216de49f0:   0000000055054057 00000290cb72f210
+0x000000c216de4a00:   0000000000000000 0000000000000000
+0x000000c216de4a10:   0000000000000000 0000000000000000
+0x000000c216de4a20:   0000000000000000 0000000000000000
+0x000000c216de4a30:   0000000000000000 0000000000000000
+0x000000c216de4a40:   0000000000000000 0000000000000000
+0x000000c216de4a50:   0000000000000000 0000000000000000
+0x000000c216de4a60:   0000000000000000 0000000000000000
+0x000000c216de4a70:   0000000000000000 0000000000000000
+0x000000c216de4a80:   0000000000000000 0000000000000000
+0x000000c216de4a90:   0000000000000000 0000000000000000
+0x000000c216de4aa0:   834824048b48ec8b 4808ec83489cf0e4
+0x000000c216de4ab0:   5c89486824548948 4850246c89486024
+0x000000c216de4ac0:   282454894c30244c 64894c20245c894c
+0x000000c216de4ad0:   245489485020ec83 894c102444894418
+0x000000c216de4ae0:   0000000000000000 0000000000000000
+0x000000c216de4af0:   0000000000000000 0000000000000000
+0x000000c216de4b00:   0000000000000000 0000000000000000
+0x000000c216de4b10:   0000000000000000 0000000000000000
+0x000000c216de4b20:   0000000000000000 0000000000000000
+0x000000c216de4b30:   0000000000000000 0000000000000000
+0x000000c216de4b40:   0000000000000000 0000000000000000
+0x000000c216de4b50:   0000000000000000 0000000000000000
+0x000000c216de4b60:   0000000000000000 0000000000000000
+0x000000c216de4b70:   0000000000000000 0000000000000000
+0x000000c216de4b80:   0000000000000000 0000000000000000
+0x000000c216de4b90:   0000000000000000 0000000000000000
+0x000000c216de4ba0:   0000000000000000 0000000000000000
+0x000000c216de4bb0:   0000000000000000 000000c216de4e20
+0x000000c216de4bc0:   0000000000000000 000000000000000a
+0x000000c216de4bd0:   000000c216de4e00 000000c216de4e38 
+
+Instructions: (pc=0x00000290de68116e)
+0x00000290de68106e:   8b 7d e8 48 8b 75 f0 48 81 c4 d8 00 00 00 c5 f8
+0x00000290de68107e:   77 5d c3 48 89 01 e9 71 ff ff ff c5 fa 11 01 e9
+0x00000290de68108e:   68 ff ff ff c5 fb 11 01 e9 5f ff ff ff 49 89 47
+0x00000290de68109e:   08 49 ba 70 80 62 40 fe 7f 00 00 4d 89 57 10 41
+0x00000290de6810ae:   c7 47 18 c3 01 00 00 e9 13 ff ff ff f0 83 44 24
+0x00000290de6810be:   c0 00 c3 48 8b c4 48 83 c0 08 c3 50 48 83 ec 08
+0x00000290de6810ce:   c5 f8 ae 1c 24 8b 04 24 25 c0 ff 00 00 49 ba 40
+0x00000290de6810de:   05 85 40 fe 7f 00 00 41 3b 02 0f 84 f5 00 00 00
+0x00000290de6810ee:   55 48 8b ec 48 83 e4 f0 9c 48 83 ec 08 48 81 ec
+0x00000290de6810fe:   80 00 00 00 48 89 44 24 78 48 89 4c 24 70 48 89
+0x00000290de68110e:   54 24 68 48 89 5c 24 60 48 89 6c 24 50 48 89 74
+0x00000290de68111e:   24 48 48 89 7c 24 40 4c 89 44 24 38 4c 89 4c 24
+0x00000290de68112e:   30 4c 89 54 24 28 4c 89 5c 24 20 4c 89 64 24 18
+0x00000290de68113e:   4c 89 6c 24 10 4c 89 74 24 08 4c 89 3c 24 48 81
+0x00000290de68114e:   ec 80 0a 00 00 48 0f ae 04 24 48 b9 f0 80 62 40
+0x00000290de68115e:   fe 7f 00 00 48 b8 b0 5b dd 3f fe 7f 00 00 ff d0
+0x00000290de68116e:   48 0f ae 0c 24 48 81 c4 80 0a 00 00 4c 8b 3c 24
+0x00000290de68117e:   4c 8b 74 24 08 4c 8b 6c 24 10 4c 8b 64 24 18 4c
+0x00000290de68118e:   8b 5c 24 20 4c 8b 54 24 28 4c 8b 4c 24 30 4c 8b
+0x00000290de68119e:   44 24 38 48 8b 7c 24 40 48 8b 74 24 48 48 8b 6c
+0x00000290de6811ae:   24 50 48 8b 5c 24 60 48 8b 54 24 68 48 8b 4c 24
+0x00000290de6811be:   70 48 8b 44 24 78 48 81 c4 80 00 00 00 48 83 c4
+0x00000290de6811ce:   08 9d 48 8b e5 5d 49 ba 40 05 85 40 fe 7f 00 00
+0x00000290de6811de:   c4 c1 78 ae 12 48 83 c4 08 58 c3 50 41 51 41 50
+0x00000290de6811ee:   52 b8 00 00 80 7f 45 33 c9 44 8b 44 24 28 41 8b
+0x00000290de6811fe:   d0 81 e2 ff ff ff 7f 3b c2 0f 88 12 00 00 00 45
+0x00000290de68120e:   85 c0 41 b9 00 00 00 80 b8 ff ff ff 7f 44 0f 49
+0x00000290de68121e:   c8 4c 89 4c 24 28 5a 41 58 41 59 58 c3 50 41 51
+0x00000290de68122e:   41 50 52 b8 00 00 80 7f 45 33 c9 44 8b 44 24 28
+0x00000290de68123e:   41 8b d0 81 e2 ff ff ff 7f 3b c2 0f 88 1b 00 00
+0x00000290de68124e:   00 45 85 c0 49 b9 00 00 00 00 00 00 00 80 48 b8
+0x00000290de68125e:   ff ff ff ff ff ff ff 7f 4c 0f 49 c8 4c 89 4c 24 
+
+
+Stack slot to memory mapping:
+
+stack at sp + 0 slots: 0x00007ffe406280f0 points into unknown readable memory: 0x686320525343584d | 4d 58 43 53 52 20 63 68
+stack at sp + 1 slots: 0x00000290cb72f5b0 points into unknown readable memory: 0x000000c216de5510 | 10 55 de 16 c2 00 00 00
+stack at sp + 2 slots: 0x0000000055054057 is an unknown value
+stack at sp + 3 slots: 0x00000290cb72f210 is a thread
+stack at sp + 4 slots: 0x0 is null
+stack at sp + 5 slots: 0x0 is null
+stack at sp + 6 slots: 0x0 is null
+stack at sp + 7 slots: 0x0 is null
+
+Lock stack of current Java thread (top to bottom):
+
+StubRoutines::verify_mxcsr [0x00000290de6810c9, 0x00000290de6811e9] (288 bytes)
+[MachCode]
+  0x00000290de6810c9: 5048 83ec | 08c5 f8ae | 1c24 8b04 | 2425 c0ff | 0000 49ba | 4005 8540 | fe7f 0000 | 413b 020f 
+  0x00000290de6810e9: 84f5 0000 | 0055 488b | ec48 83e4 | f09c 4883 | ec08 4881 | ec80 0000 | 0048 8944 | 2478 4889 
+  0x00000290de681109: 4c24 7048 | 8954 2468 | 4889 5c24 | 6048 896c | 2450 4889 | 7424 4848 | 897c 2440 | 4c89 4424 
+  0x00000290de681129: 384c 894c | 2430 4c89 | 5424 284c | 895c 2420 | 4c89 6424 | 184c 896c | 2410 4c89 | 7424 084c 
+  0x00000290de681149: 893c 2448 | 81ec 800a | 0000 480f | ae04 2448 | b9f0 8062 | 40fe 7f00 | 0048 b8b0 | 5bdd 3ffe 
+  0x00000290de681169: 7f00 00ff | d048 0fae | 0c24 4881 | c480 0a00 | 004c 8b3c | 244c 8b74 | 2408 4c8b | 6c24 104c 
+  0x00000290de681189: 8b64 2418 | 4c8b 5c24 | 204c 8b54 | 2428 4c8b | 4c24 304c | 8b44 2438 | 488b 7c24 | 4048 8b74 
+  0x00000290de6811a9: 2448 488b | 6c24 5048 | 8b5c 2460 | 488b 5424 | 6848 8b4c | 2470 488b | 4424 7848 | 81c4 8000 
+  0x00000290de6811c9: 0000 4883 | c408 9d48 | 8be5 5d49 | ba40 0585 | 40fe 7f00 | 00c4 c178 | ae12 4883 | c408 58c3 
+[/MachCode]
+
+---------------  P R O C E S S  ---------------
+
+Threads class SMR info:
+_java_thread_list=0x00000290cdd19560, length=1, elements={
+0x00000290cb72f210
+}
+
+Java Threads: ( => current thread )
+=>0x00000290cb72f210 JavaThread "main"                              [_thread_in_native, id=1532, stack(0x000000c216c00000,0x000000c216df0000) (1984K)]
+Total: 1
+
+Other Threads:
+  0x00000290cb8ee040 VMThread "VM Thread"                           [id=14012, stack(0x000000c219b00000,0x000000c219cf0000) (1984K)]
+  0x00000290cbbd10a0 WatcherThread "VM Periodic Task Thread"        [id=23000, stack(0x000000c219910000,0x000000c219b00000) (1984K)]
+  0x00000290cb8ed8e0 WorkerThread "GC Thread#0"                     [id=14968, stack(0x000000c218f60000,0x000000c219150000) (1984K)]
+  0x00000290cbc162c0 ConcurrentGCThread "G1 Main Marker"            [id=18644, stack(0x000000c219150000,0x000000c219340000) (1984K)]
+  0x00000290cb8ea540 WorkerThread "G1 Conc#0"                       [id=21352, stack(0x000000c219340000,0x000000c219530000) (1984K)]
+  0x00000290cb655d10 ConcurrentGCThread "G1 Refine#0"               [id=10520, stack(0x000000c219530000,0x000000c219720000) (1984K)]
+  0x00000290cbc93f10 ConcurrentGCThread "G1 Service"                [id=10024, stack(0x000000c219720000,0x000000c219910000) (1984K)]
+Total: 7
+
+Threads with active compile tasks:
+Total: 0
+
+VM state: not at safepoint (normal execution)
+
+VM Mutex/Monitor currently owned by a thread: None
+
+Heap address: 0x00000004e8000000, size: 12672 MB, Compressed Oops mode: Zero based, Oop shift amount: 3
+
+CDS archive(s) mapped at: [0x00000290f9000000-0x00000290f9d70000-0x00000290f9d70000), size 14090240, SharedBaseAddress: 0x00000290f9000000, ArchiveRelocationMode: 1.
+Compressed class space mapped at: 0x00000290fa000000-0x000002913a000000, reserved size: 1073741824
+Narrow klass base: 0x00000290f9000000, Narrow klass shift: 0, Narrow klass range: 0x41000000
+
+GC Precious Log:
+ CardTable entry size: 512
+ Card Set container configuration: InlinePtr #cards 4 size 8 Array Of Cards #cards 64 size 144 Howl #buckets 8 coarsen threshold 14745 Howl Bitmap #cards 2048 size 272 coarsen threshold 1843 Card regions per heap region 1 cards per card region 16384
+ CPUs: 14 total, 14 available
+ Memory: 15836M
+ Large Page Support: Disabled
+ NUMA Support: Disabled
+ Compressed Oops: Enabled (Zero based)
+ Heap Region Size: 8M
+ Heap Min Capacity: 8M
+ Heap Initial Capacity: 248M
+ Heap Max Capacity: 12672M
+ Pre-touch: Disabled
+ Parallel Workers: 11
+ Concurrent Workers: 3
+ Concurrent Refinement Workers: 11
+ Periodic GC: Disabled
+
+Heap:
+ garbage-first heap   total reserved 12976128K, committed 253952K, used 0K [0x00000004e8000000, 0x0000000800000000)
+  region size 8192K, 1 young (8192K), 0 survivors (0K)
+ Metaspace       used 4K, committed 128K, reserved 1114112K
+  class space    used 0K, committed 64K, reserved 1048576K
+
+Heap Regions: E=young(eden), S=young(survivor), O=old, HS=humongous(starts), HC=humongous(continues), CS=collection set, F=free, TAMS=top-at-mark-start, PB=parsable bottom
+|   0|0x00000004e8000000, 0x00000004e8000000, 0x00000004e8800000|  0%| F|  |TAMS 0x00000004e8000000| PB 0x00000004e8000000| Untracked |  0
+|   1|0x00000004e8800000, 0x00000004e8800000, 0x00000004e9000000|  0%| F|  |TAMS 0x00000004e8800000| PB 0x00000004e8800000| Untracked |  0
+|   2|0x00000004e9000000, 0x00000004e9000000, 0x00000004e9800000|  0%| F|  |TAMS 0x00000004e9000000| PB 0x00000004e9000000| Untracked |  0
+|   3|0x00000004e9800000, 0x00000004e9800000, 0x00000004ea000000|  0%| F|  |TAMS 0x00000004e9800000| PB 0x00000004e9800000| Untracked |  0
+|   4|0x00000004ea000000, 0x00000004ea000000, 0x00000004ea800000|  0%| F|  |TAMS 0x00000004ea000000| PB 0x00000004ea000000| Untracked |  0
+|   5|0x00000004ea800000, 0x00000004ea800000, 0x00000004eb000000|  0%| F|  |TAMS 0x00000004ea800000| PB 0x00000004ea800000| Untracked |  0
+|   6|0x00000004eb000000, 0x00000004eb000000, 0x00000004eb800000|  0%| F|  |TAMS 0x00000004eb000000| PB 0x00000004eb000000| Untracked |  0
+|   7|0x00000004eb800000, 0x00000004eb800000, 0x00000004ec000000|  0%| F|  |TAMS 0x00000004eb800000| PB 0x00000004eb800000| Untracked |  0
+|   8|0x00000004ec000000, 0x00000004ec000000, 0x00000004ec800000|  0%| F|  |TAMS 0x00000004ec000000| PB 0x00000004ec000000| Untracked |  0
+|   9|0x00000004ec800000, 0x00000004ec800000, 0x00000004ed000000|  0%| F|  |TAMS 0x00000004ec800000| PB 0x00000004ec800000| Untracked |  0
+|  10|0x00000004ed000000, 0x00000004ed000000, 0x00000004ed800000|  0%| F|  |TAMS 0x00000004ed000000| PB 0x00000004ed000000| Untracked |  0
+|  11|0x00000004ed800000, 0x00000004ed800000, 0x00000004ee000000|  0%| F|  |TAMS 0x00000004ed800000| PB 0x00000004ed800000| Untracked |  0
+|  12|0x00000004ee000000, 0x00000004ee000000, 0x00000004ee800000|  0%| F|  |TAMS 0x00000004ee000000| PB 0x00000004ee000000| Untracked |  0
+|  13|0x00000004ee800000, 0x00000004ee800000, 0x00000004ef000000|  0%| F|  |TAMS 0x00000004ee800000| PB 0x00000004ee800000| Untracked |  0
+|  14|0x00000004ef000000, 0x00000004ef000000, 0x00000004ef800000|  0%| F|  |TAMS 0x00000004ef000000| PB 0x00000004ef000000| Untracked |  0
+|  15|0x00000004ef800000, 0x00000004ef800000, 0x00000004f0000000|  0%| F|  |TAMS 0x00000004ef800000| PB 0x00000004ef800000| Untracked |  0
+|  16|0x00000004f0000000, 0x00000004f0000000, 0x00000004f0800000|  0%| F|  |TAMS 0x00000004f0000000| PB 0x00000004f0000000| Untracked |  0
+|  17|0x00000004f0800000, 0x00000004f0800000, 0x00000004f1000000|  0%| F|  |TAMS 0x00000004f0800000| PB 0x00000004f0800000| Untracked |  0
+|  18|0x00000004f1000000, 0x00000004f1000000, 0x00000004f1800000|  0%| F|  |TAMS 0x00000004f1000000| PB 0x00000004f1000000| Untracked |  0
+|  19|0x00000004f1800000, 0x00000004f1800000, 0x00000004f2000000|  0%| F|  |TAMS 0x00000004f1800000| PB 0x00000004f1800000| Untracked |  0
+|  20|0x00000004f2000000, 0x00000004f2000000, 0x00000004f2800000|  0%| F|  |TAMS 0x00000004f2000000| PB 0x00000004f2000000| Untracked |  0
+|  21|0x00000004f2800000, 0x00000004f2800000, 0x00000004f3000000|  0%| F|  |TAMS 0x00000004f2800000| PB 0x00000004f2800000| Untracked |  0
+|  22|0x00000004f3000000, 0x00000004f3000000, 0x00000004f3800000|  0%| F|  |TAMS 0x00000004f3000000| PB 0x00000004f3000000| Untracked |  0
+|  23|0x00000004f3800000, 0x00000004f3800000, 0x00000004f4000000|  0%| F|  |TAMS 0x00000004f3800000| PB 0x00000004f3800000| Untracked |  0
+|  24|0x00000004f4000000, 0x00000004f4000000, 0x00000004f4800000|  0%| F|  |TAMS 0x00000004f4000000| PB 0x00000004f4000000| Untracked |  0
+|  25|0x00000004f4800000, 0x00000004f4800000, 0x00000004f5000000|  0%| F|  |TAMS 0x00000004f4800000| PB 0x00000004f4800000| Untracked |  0
+|  26|0x00000004f5000000, 0x00000004f5000000, 0x00000004f5800000|  0%| F|  |TAMS 0x00000004f5000000| PB 0x00000004f5000000| Untracked |  0
+|  27|0x00000004f5800000, 0x00000004f5800000, 0x00000004f6000000|  0%| F|  |TAMS 0x00000004f5800000| PB 0x00000004f5800000| Untracked |  0
+|  28|0x00000004f6000000, 0x00000004f6000000, 0x00000004f6800000|  0%| F|  |TAMS 0x00000004f6000000| PB 0x00000004f6000000| Untracked |  0
+|  29|0x00000004f6800000, 0x00000004f6800000, 0x00000004f7000000|  0%| F|  |TAMS 0x00000004f6800000| PB 0x00000004f6800000| Untracked |  0
+|  30|0x00000004f7000000, 0x00000004f707ae30, 0x00000004f7800000|  6%| E|  |TAMS 0x00000004f7000000| PB 0x00000004f7000000| Complete |  0
+
+Card table byte_map: [0x00000290e8070000,0x00000290e9930000] _byte_map_base: 0x00000290e5930000
+
+Marking Bits: (CMBitMap*) 0x00000290cb7e9820
+ Bits: [0x00000290e9930000, 0x00000290f5f30000)
+
+Polling page: 0x00000290cd0b0000
+
+Metaspace:
+
+Usage:
+  Non-class:      3.62 KB used.
+      Class:   1008 bytes used.
+       Both:      4.61 KB used.
+
+Virtual space:
+  Non-class space:       64.00 MB reserved,      64.00 KB ( <1%) committed,  1 nodes.
+      Class space:        1.00 GB reserved,      64.00 KB ( <1%) committed,  1 nodes.
+             Both:        1.06 GB reserved,     128.00 KB ( <1%) committed. 
+
+Chunk freelists:
+   Non-Class:  12.00 MB
+       Class:  15.75 MB
+        Both:  27.75 MB
+
+MaxMetaspaceSize: unlimited
+CompressedClassSpaceSize: 1.00 GB
+Initial GC threshold: 21.00 MB
+Current GC threshold: 17179869184.00 GB
+CDS: on
+ - commit_granule_bytes: 65536.
+ - commit_granule_words: 8192.
+ - virtual_space_node_default_size: 8388608.
+ - enlarge_chunks_in_place: 1.
+ - use_allocation_guard: 0.
+
+
+Internal statistics:
+
+num_allocs_failed_limit: 0.
+num_arena_births: 2.
+num_arena_deaths: 0.
+num_vsnodes_births: 2.
+num_vsnodes_deaths: 0.
+num_space_committed: 2.
+num_space_uncommitted: 0.
+num_chunks_returned_to_freelist: 0.
+num_chunks_taken_from_freelist: 3.
+num_chunk_merges: 0.
+num_chunk_splits: 2.
+num_chunks_enlarged: 0.
+num_inconsistent_stats: 0.
+
+CodeHeap 'non-profiled nmethods': size=120064Kb used=0Kb max_used=0Kb free=120064Kb
+ bounds [0x00000290dec10000, 0x00000290dee80000, 0x00000290e6150000]
+CodeHeap 'profiled nmethods': size=120000Kb used=0Kb max_used=0Kb free=120000Kb
+ bounds [0x00000290d7150000, 0x00000290d73c0000, 0x00000290de680000]
+CodeHeap 'non-nmethods': size=5696Kb used=356Kb max_used=356Kb free=5339Kb
+ bounds [0x00000290de680000, 0x00000290de8f0000, 0x00000290dec10000]
+CodeCache: size=245760Kb, used=356Kb, max_used=356Kb, free=245403Kb
+ total_blobs=122, nmethods=0, adapters=93, full_count=0
+Compilation: enabled, stopped_count=0, restarted_count=0
+
+Compilation events (0 events):
+No events
+
+GC Heap History (0 events):
+No events
+
+Dll operation events (1 events):
+Event: 0.008 Loaded shared library C:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\lib\jvm\bin\java.dll
+
+Deoptimization events (0 events):
+No events
+
+Classes loaded (0 events):
+No events
+
+Classes unloaded (0 events):
+No events
+
+Classes redefined (0 events):
+No events
+
+Internal exceptions (0 events):
+No events
+
+VM Operations (0 events):
+No events
+
+Memory protections (0 events):
+No events
+
+Nmethod flushes (0 events):
+No events
+
+Events (1 events):
+Event: 0.020 Thread 0x00000290cb72f210 Thread added: 0x00000290cb72f210
+
+
+Dynamic libraries:
+0x00007ff7b25f0000 - 0x00007ff7b260c000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\python.exe
+0x00007fff24cd0000 - 0x00007fff24ee7000 	C:\Windows\SYSTEM32\ntdll.dll
+0x00007fff23cc0000 - 0x00007fff23d84000 	C:\Windows\System32\KERNEL32.DLL
+0x00007fff21f70000 - 0x00007fff22342000 	C:\Windows\System32\KERNELBASE.dll
+0x00007fff22810000 - 0x00007fff22921000 	C:\Windows\System32\ucrtbase.dll
+0x00007ffe68490000 - 0x00007ffe68ac1000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\python311.dll
+0x00007ffefe3c0000 - 0x00007ffefe3de000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\VCRUNTIME140.dll
+0x00007fff22fa0000 - 0x00007fff23011000 	C:\Windows\System32\WS2_32.dll
+0x00007fff23ba0000 - 0x00007fff23cb7000 	C:\Windows\System32\RPCRT4.dll
+0x00007fff22930000 - 0x00007fff22958000 	C:\Windows\System32\bcrypt.dll
+0x00007fff24a30000 - 0x00007fff24ae1000 	C:\Windows\System32\ADVAPI32.dll
+0x00007fff23540000 - 0x00007fff235e7000 	C:\Windows\System32\msvcrt.dll
+0x00007fff240d0000 - 0x00007fff24178000 	C:\Windows\System32\sechost.dll
+0x00007fff10630000 - 0x00007fff1063a000 	C:\Windows\SYSTEM32\VERSION.dll
+0x00007ffee29c0000 - 0x00007ffee29da000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\zlib.dll
+0x00007fff21dc0000 - 0x00007fff21e3b000 	C:\Windows\System32\bcryptprimitives.dll
+0x00000290bf070000 - 0x00000290bf07f000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\python3.DLL
+0x00007fff01b60000 - 0x00007fff01b9e000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\zmq\backend\cython\_zmq.cp311-win_amd64.pyd
+0x00007fff008d0000 - 0x00007fff00945000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\libzmq-mt-4_3_5.dll
+0x0000000052cb0000 - 0x0000000052d12000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\gssapi64.dll
+0x00007ffefb5e0000 - 0x00007ffefb638000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\libsodium.dll
+0x00007fff20510000 - 0x00007fff2053d000 	C:\Windows\SYSTEM32\IPHLPAPI.DLL
+0x00007ffef4290000 - 0x00007ffef431d000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\MSVCP140.dll
+0x0000000052b80000 - 0x0000000052cac000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\krb5_64.dll
+0x00007fff1d9f0000 - 0x00007fff1d9fc000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\VCRUNTIME140_1.dll
+0x00007fff22960000 - 0x00007fff22b11000 	C:\Windows\System32\USER32.dll
+0x0000000052b70000 - 0x0000000052b78000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\comerr64.dll
+0x00007fff22410000 - 0x00007fff22436000 	C:\Windows\System32\win32u.dll
+0x00007fff24060000 - 0x00007fff24089000 	C:\Windows\System32\GDI32.dll
+0x0000000052b50000 - 0x0000000052b63000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\k5sprt64.dll
+0x00007fff21e40000 - 0x00007fff21f63000 	C:\Windows\System32\gdi32full.dll
+0x00007fff22770000 - 0x00007fff2280a000 	C:\Windows\System32\msvcp_win.dll
+0x00007fff24180000 - 0x00007fff24a21000 	C:\Windows\System32\SHELL32.dll
+0x00007fff20540000 - 0x00007fff20638000 	C:\Windows\SYSTEM32\DNSAPI.dll
+0x00007fff224c0000 - 0x00007fff225ff000 	C:\Windows\System32\wintypes.dll
+0x00007fff21550000 - 0x00007fff2155c000 	C:\Windows\SYSTEM32\CRYPTBASE.DLL
+0x00007fff23040000 - 0x00007fff233d2000 	C:\Windows\System32\combase.dll
+0x00007fff24090000 - 0x00007fff240c1000 	C:\Windows\System32\IMM32.DLL
+0x00007fff23a80000 - 0x00007fff23a89000 	C:\Windows\System32\NSI.dll
+0x00007ffe6c710000 - 0x00007ffe6c726000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_socket.pyd
+0x00007ffea78b0000 - 0x00007ffea78b9000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\select.pyd
+0x00007fff1cbd0000 - 0x00007fff1cbfe000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_ssl.pyd
+0x00007fff22600000 - 0x00007fff22768000 	C:\Windows\System32\CRYPT32.dll
+0x00007ffee5280000 - 0x00007ffee5968000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\libcrypto-3-x64.dll
+0x00007ffee5130000 - 0x00007ffee5273000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\libssl-3-x64.dll
+0x00007fff1d5f0000 - 0x00007fff1d601000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_asyncio.pyd
+0x00007fff1d530000 - 0x00007fff1d53e000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_overlapped.pyd
+0x00007fff21270000 - 0x00007fff212d9000 	C:\Windows\system32\mswsock.dll
+0x00007ffe89f40000 - 0x00007ffe89f4b000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_bz2.pyd
+0x00007ffee2910000 - 0x00007ffee2926000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\libbz2.dll
+0x00007ffe898c0000 - 0x00007ffe898cd000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_lzma.pyd
+0x00007ffedda00000 - 0x00007ffedda32000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\liblzma.dll
+0x00007ffea4170000 - 0x00007ffea4179000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_queue.pyd
+0x00007fff1cca0000 - 0x00007fff1ccb0000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_hashlib.pyd
+0x00007fff1b380000 - 0x00007fff1b387000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\tornado\speedups.pyd
+0x00007ffe69c20000 - 0x00007ffe69c41000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_ctypes.pyd
+0x00007fff24af0000 - 0x00007fff24c90000 	C:\Windows\System32\ole32.dll
+0x00007ffefe3b0000 - 0x00007ffefe3bc000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\ffi-8.dll
+0x00007fff23f10000 - 0x00007fff23fe8000 	C:\Windows\System32\OLEAUT32.dll
+0x00007ffefb590000 - 0x00007ffefb5db000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_decimal.pyd
+0x00007fff1b3a0000 - 0x00007fff1b3a8000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_uuid.pyd
+0x00007fff04500000 - 0x00007fff0451b000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_sqlite3.pyd
+0x00007ffee31f0000 - 0x00007ffee336d000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\sqlite3.dll
+0x00007fff04a80000 - 0x00007fff04a92000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\pyexpat.pyd
+0x00007ffee5a20000 - 0x00007ffee5a89000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\libexpat.dll
+0x00007ffee30d0000 - 0x00007ffee31e8000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\unicodedata.pyd
+0x00007fff01c70000 - 0x00007fff01c84000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\psutil\_psutil_windows.pyd
+0x00007fff23030000 - 0x00007fff23038000 	C:\Windows\System32\PSAPI.DLL
+0x00007ffef3aa0000 - 0x00007ffef3af0000 	C:\Windows\SYSTEM32\pdh.dll
+0x00007fff21c90000 - 0x00007fff21cdd000 	C:\Windows\SYSTEM32\POWRPROF.dll
+0x00007fff21c70000 - 0x00007fff21c83000 	C:\Windows\SYSTEM32\UMPDC.dll
+0x00007fff20a30000 - 0x00007fff20a44000 	C:\Windows\SYSTEM32\wtsapi32.dll
+0x00007fff1d050000 - 0x00007fff1d069000 	C:\Windows\SYSTEM32\dhcpcsvc6.DLL
+0x00007fff1cf90000 - 0x00007fff1cfaf000 	C:\Windows\SYSTEM32\dhcpcsvc.DLL
+0x00007ffeedaa0000 - 0x00007ffeedaa8000 	C:\Windows\system32\wshunix.dll
+0x00007fff20c80000 - 0x00007fff20c98000 	C:\Windows\SYSTEM32\kernel.appcore.dll
+0x00007ffee59b0000 - 0x00007ffee5a17000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\debugpy\_vendored\pydevd\_pydevd_bundle\pydevd_cython.cp311-win_amd64.pyd
+0x00007fff23d90000 - 0x00007fff23e9b000 	C:\Windows\System32\shcore.dll
+0x00007fff01b20000 - 0x00007fff01b52000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pyreadstat\pyreadstat.cp311-win_amd64.pyd
+0x00007ffefa1b0000 - 0x00007ffefa1f7000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pyreadstat\_readstat_parser.cp311-win_amd64.pyd
+0x00007ffee5040000 - 0x00007ffee5129000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\iconv.dll
+0x00007fff1b390000 - 0x00007fff1b398000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\charset.dll
+0x00007ffe6b080000 - 0x00007ffe6b490000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\_core\_multiarray_umath.cp311-win_amd64.pyd
+0x00007ffe530a0000 - 0x00007ffe54a6b000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\libcblas.dll
+0x00007fff019e0000 - 0x00007fff019fe000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\linalg\_umath_linalg.cp311-win_amd64.pyd
+0x00007ffe516d0000 - 0x00007ffe5309b000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\liblapack.dll
+0x00007ffe4fd00000 - 0x00007ffe516cb000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\libblas.dll
+0x00007ffe4da90000 - 0x00007ffe4fd00000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\mkl_intel_thread.2.dll
+0x00007ffe49ed0000 - 0x00007ffe4da8a000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\mkl_core.2.dll
+0x00007ffe478b0000 - 0x00007ffe49d3d000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\mkl_avx2.2.dll
+0x00007ffe6a220000 - 0x00007ffe6b076000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin\mkl_vml_avx2.2.dll
+0x00007fff014c0000 - 0x00007fff014ef000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\random\bit_generator.cp311-win_amd64.pyd
+0x00007ffefe540000 - 0x00007ffefe570000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\random\_common.cp311-win_amd64.pyd
+0x00007ffee3020000 - 0x00007ffee30c2000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\random\mtrand.cp311-win_amd64.pyd
+0x00007ffef4720000 - 0x00007ffef4762000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\random\_bounded_integers.cp311-win_amd64.pyd
+0x00007fff019c0000 - 0x00007fff019da000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\random\_mt19937.cp311-win_amd64.pyd
+0x00007fff008b0000 - 0x00007fff008c8000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\random\_philox.cp311-win_amd64.pyd
+0x00007ffefaef0000 - 0x00007ffefaf0c000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\random\_pcg64.cp311-win_amd64.pyd
+0x00007ffefaed0000 - 0x00007ffefaee4000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\random\_sfc64.cp311-win_amd64.pyd
+0x00007ffee2f60000 - 0x00007ffee301d000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\random\_generator.cp311-win_amd64.pyd
+0x00007fff043a0000 - 0x00007fff043ab000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\pandas_parser.cp311-win_amd64.pyd
+0x00007fff03360000 - 0x00007fff0336b000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\pandas_datetime.cp311-win_amd64.pyd
+0x00007ffee2e40000 - 0x00007ffee2f51000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\interval.cp311-win_amd64.pyd
+0x00007ffedd830000 - 0x00007ffedd9f6000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\hashtable.cp311-win_amd64.pyd
+0x00007ffee6330000 - 0x00007ffee635f000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\missing.cp311-win_amd64.pyd
+0x00007ffee5980000 - 0x00007ffee59ad000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\dtypes.cp311-win_amd64.pyd
+0x00007ffee6310000 - 0x00007ffee6325000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\ccalendar.cp311-win_amd64.pyd
+0x00007ffee5020000 - 0x00007ffee5040000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\np_datetime.cp311-win_amd64.pyd
+0x00007ffee2e00000 - 0x00007ffee2e3b000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\conversion.cp311-win_amd64.pyd
+0x00007ffee2de0000 - 0x00007ffee2df1000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\base.cp311-win_amd64.pyd
+0x00007ffedd750000 - 0x00007ffedd82b000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\offsets.cp311-win_amd64.pyd
+0x00007ffee2930000 - 0x00007ffee29b1000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\timestamps.cp311-win_amd64.pyd
+0x00007ffee2da0000 - 0x00007ffee2dd6000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\nattype.cp311-win_amd64.pyd
+0x00007ffedd6d0000 - 0x00007ffedd748000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\timedeltas.cp311-win_amd64.pyd
+0x00007ffedd690000 - 0x00007ffedd6c9000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\timezones.cp311-win_amd64.pyd
+0x00007fff031f0000 - 0x00007fff031fd000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs\_zoneinfo.pyd
+0x00000290c5390000 - 0x00000290c5393000 	C:\Windows\SYSTEM32\tzres.dll
+0x00007ffea93a0000 - 0x00007ffea93e5000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\fields.cp311-win_amd64.pyd
+0x00007ffea8310000 - 0x00007ffea834f000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\tzconversion.cp311-win_amd64.pyd
+0x00007ffee2d80000 - 0x00007ffee2d94000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\properties.cp311-win_amd64.pyd
+0x00007ffea82b0000 - 0x00007ffea8302000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\parsing.cp311-win_amd64.pyd
+0x00007ffea7da0000 - 0x00007ffea7dec000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\strptime.cp311-win_amd64.pyd
+0x00007ffea7d30000 - 0x00007ffea7d97000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\period.cp311-win_amd64.pyd
+0x00007ffea7cf0000 - 0x00007ffea7d21000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs\vectorized.cp311-win_amd64.pyd
+0x00007fff014b0000 - 0x00007fff014c0000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\ops_dispatch.cp311-win_amd64.pyd
+0x00007ffea7b30000 - 0x00007ffea7cf0000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\algos.cp311-win_amd64.pyd
+0x00007ffe6cf10000 - 0x00007ffe6cfb2000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\lib.cp311-win_amd64.pyd
+0x00007ffea7af0000 - 0x00007ffea7b24000 	c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\ops.cp311-win_amd64.pyd
+
+dbghelp: loaded successfully - version: 4.0.5 - missing functions: none
+symbol engine: initialized successfully - sym options: 0x614 - pdb path: .;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env;C:\Windows\SYSTEM32;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\zmq\backend\cython;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\DLLs;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\tornado;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\psutil;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\debugpy\_vendored\pydevd\_pydevd_bundle;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pyreadstat;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\_core;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\linalg;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\random;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\tslibs;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pandas\_libs\window;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\_lib;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\linalg;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numpy\fft;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\sparse;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\sparse\linalg\_dsolve;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\sparse\linalg\_eigen\arpack;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\sparse\linalg\_propack;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\sparse\csgraph;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\special;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\interpolate;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\optimize;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\optimize\_trlib;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\optimize\_lsq;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\optimize\_highspy;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\_lib\_uarray;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\fft\_pocketfft;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\spatial;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\spatial\transform;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\integrate;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\stats;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\stats\_levy_stable;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\stats\_rcont;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\ndimage;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\statsmodels\robust;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\signal;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\statsmodels\tsa;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\statsmodels\nonparametric;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\statsmodels\tsa\statespace;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\statsmodels\tsa\statespace\_smoothers;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\statsmodels\tsa\statespace\_filters;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\statsmodels\tsa\innovations;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\statsmodels\tsa\exponential_smoothing;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\scipy\fftpack;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\statsmodels\tsa\stl;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\statsmodels\tsa\holtwinters;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\statsmodels\tsa\regime_switching;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\sklearn\__check_build;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\sklearn\utils;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\sklearn\preprocessing;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\matplotlib;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\PIL;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\kiwisolver;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\shapely;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pyproj;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\llvmlite\binding;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numba\core\typeconv;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numba;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numba\core\runtime;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\win32;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\pywin32_system32;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numba\np\ufunc;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\numba\experimental\jitclass;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\zstandard;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\simplejson;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\sklearn\metrics\cluster;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\sklearn\metrics;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\sklearn\metrics\_pairwise_distances_reduction;C:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\lib\jvm\bin\server;C:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\lib\jvm\bin
+
+VM Arguments:
+jvm_args: -Xmx13284448666 -Xcheck:jni -Xrs -Duser.language=en -Duser.country=US -Duser.variant= -Djava.io.tmpdir=C:\Users\1738037\AppData\Local\Temp\r5pyngh3u9ll 
+java_command: <unknown>
+java_class_path (initial): C:\Users\1738037\AppData\Local\r5py\r5-v7.4-r5py-all.jar;c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Lib\site-packages\org.jpype.jar
+Launcher Type: generic
+
+[Global flags]
+     intx CICompilerCount                          = 4                                         {product} {ergonomic}
+     uint ConcGCThreads                            = 3                                         {product} {ergonomic}
+     uint G1ConcRefinementThreads                  = 11                                        {product} {ergonomic}
+   size_t G1HeapRegionSize                         = 8388608                                   {product} {ergonomic}
+   size_t InitialHeapSize                          = 260046848                                 {product} {ergonomic}
+   size_t MarkStackSize                            = 4194304                                   {product} {ergonomic}
+   size_t MarkStackSizeMax                         = 536870912                                 {product} {ergonomic}
+   size_t MaxHeapSize                              = 13287555072                               {product} {command line, ergonomic}
+   size_t MaxNewSize                               = 7969177600                                {product} {ergonomic}
+   size_t MinHeapDeltaBytes                        = 8388608                                   {product} {ergonomic}
+   size_t MinHeapSize                              = 8388608                                   {product} {ergonomic}
+    uintx NonNMethodCodeHeapSize                   = 5832704                                {pd product} {ergonomic}
+    uintx NonProfiledCodeHeapSize                  = 122945536                              {pd product} {ergonomic}
+    uintx ProfiledCodeHeapSize                     = 122880000                              {pd product} {ergonomic}
+     bool ReduceSignalUsage                        = true                                      {product} {command line}
+    uintx ReservedCodeCacheSize                    = 251658240                              {pd product} {ergonomic}
+     bool SegmentedCodeCache                       = true                                      {product} {ergonomic}
+   size_t SoftMaxHeapSize                          = 13287555072                            {manageable} {ergonomic}
+     bool UseCompressedOops                        = true                           {product lp64_product} {ergonomic}
+     bool UseG1GC                                  = true                                      {product} {ergonomic}
+     bool UseLargePagesIndividualAllocation        = false                                  {pd product} {ergonomic}
+
+Logging:
+Log output configuration:
+ #0: stdout all=warning uptime,level,tags foldmultilines=false
+ #1: stderr all=off uptime,level,tags foldmultilines=false
+
+Environment Variables:
+JAVA_HOME=C:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\lib\jvm
+PATH=c:\Users\1738037\AppData\Local\miniforge3\envs\graph_env;C:\Users\1738037\AppData\Local\miniforge3\envs\graph_env;C:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\mingw-w64\bin;C:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\usr\bin;C:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Library\bin;C:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\Scripts;C:\Users\1738037\AppData\Local\miniforge3\envs\graph_env\bin;C:\Users\1738037\AppData\Local\miniforge3\condabin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0;C:\Windows\System32\OpenSSH;C:\ProgramData\chocolatey\bin;C:\Users\1738037\AppData\Local\Microsoft\WindowsApps;C:\Users\1738037\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\1738037\AppData\Local\GitHubDesktop\bin
+USERNAME=1738037
+TERM=xterm-color
+OS=Windows_NT
+PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 170 Stepping 4, GenuineIntel
+TMP=C:\Users\1738037\AppData\Local\Temp
+TEMP=C:\Users\1738037\AppData\Local\Temp
+
+
+
+
+Periodic native trim disabled
+
+---------------  S Y S T E M  ---------------
+
+OS:
+ Windows 11 , 64 bit Build 22621 (10.0.22621.5415)
+OS uptime: 1 days 4:24 hours
+Hyper-V role detected
+
+CPU: total 14 (initial active 14) (7 cores per cpu, 2 threads per core) family 6 model 170 stepping 4 microcode 0x20, cx8, cmov, fxsr, ht, mmx, 3dnowpref, sse, sse2, sse3, ssse3, sse4.1, sse4.2, popcnt, lzcnt, tsc, tscinvbit, avx, avx2, aes, erms, clmul, bmi1, bmi2, adx, sha, fma, vzeroupper, clflush, clflushopt, clwb, hv, serialize, rdtscp, rdpid, fsrm, gfni, f16c, cet_ibt, cet_ss
+Processor Information for processor 0
+  Max Mhz: 1300, Current Mhz: 1300, Mhz Limit: 1300
+Processor Information for processor 1
+  Max Mhz: 1300, Current Mhz: 1300, Mhz Limit: 1300
+Processor Information for processor 2
+  Max Mhz: 800, Current Mhz: 800, Mhz Limit: 800
+Processor Information for processor 3
+  Max Mhz: 800, Current Mhz: 800, Mhz Limit: 800
+Processor Information for processor 4
+  Max Mhz: 800, Current Mhz: 800, Mhz Limit: 800
+Processor Information for processor 5
+  Max Mhz: 800, Current Mhz: 800, Mhz Limit: 800
+Processor Information for processor 6
+  Max Mhz: 800, Current Mhz: 800, Mhz Limit: 800
+Processor Information for processor 7
+  Max Mhz: 800, Current Mhz: 800, Mhz Limit: 800
+Processor Information for processor 8
+  Max Mhz: 800, Current Mhz: 800, Mhz Limit: 800
+Processor Information for processor 9
+  Max Mhz: 800, Current Mhz: 800, Mhz Limit: 800
+Processor Information for processor 10
+  Max Mhz: 1300, Current Mhz: 1300, Mhz Limit: 1300
+Processor Information for processor 11
+  Max Mhz: 1300, Current Mhz: 1300, Mhz Limit: 1300
+Processor Information for processor 12
+  Max Mhz: 700, Current Mhz: 700, Mhz Limit: 700
+Processor Information for processor 13
+  Max Mhz: 700, Current Mhz: 700, Mhz Limit: 700
+
+Memory: 4k page, system-wide physical 15836M (5180M free)
+TotalPageFile size 29660M (AvailPageFile size 16407M)
+current process WorkingSet (physical memory assigned to process): 297M, peak: 297M
+current process commit charge ("private bytes"): 583M, peak: 583M
+
+vm_info: OpenJDK 64-Bit Server VM (23.0.2+7) for windows-amd64 JRE (23.0.2+7) (Zulu23.32+11-CA), built on 2024-12-23T17:34:43Z with MS VC++ 17.1 (VS2022)
+
+END.

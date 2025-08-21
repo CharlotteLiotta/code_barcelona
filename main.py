@@ -8,6 +8,7 @@ jpype.startJVM(classpath=[os.environ["R5_JAR"]])
 import datetime
 import warnings
 import pickle
+import copy
 
 from functions import *
 from import_data import * # type: ignore
@@ -34,11 +35,11 @@ center = "0801901025"
 
 #ABM
 SCALE = 1/100 #Nb of agents in the ABM
-PROBA_MOVE = 0.3
-DELTA = 0.5
+PROBA_MOVE = 1
+DELTA = 0.5 #inertia
 
 #Tax
-tax = 1 #Initial tax level
+tax = 5 #Initial tax level
 RATE_INCREASE_TAX = 0.05 #Rate of increase per year
 THRESHOLD = 0.5
 
@@ -53,8 +54,21 @@ gdf = import_rent_and_size(gdf, path_data)
 Y, gdf = import_income(gdf, path_data)
 gdf = import_amenities(gdf, path_data, 0, 0)
 
+zone_tax = gdf.loc[gdf.ID.str[:5].isin(["08019", "08101", "08194"]),:]
+fig, ax = plt.subplots(figsize=(8, 8))
+gdf.plot(ax = ax, color = "lightgrey")
+zone_tax.plot(ax = ax)
+
+zone_union = zone_tax.unary_union
+employment_centers = gpd.read_file(path_data + "cluster_employment.shp")
+points_in_zone = employment_centers[employment_centers.within(zone_union)]
+clusters_in_zone = points_in_zone["cluster"].unique().tolist()
+points_in_zone = gdf[gdf.centroid.within(zone_union)]
+house_in_zone = points_in_zone["ID"].unique().tolist()
+
 #Import transport data
 employment_centers = gpd.read_file(path_data + "cluster_employment.shp")
+job_in_tax = list(employment_centers.cluster)
 #import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers)
 travel_time_matrix_car, travel_time_matrix_transit = load_transport_times_poly(gdf, path_data, center)
 travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers)
@@ -92,13 +106,13 @@ del compute_transport_cost_logit, compute_cost_car_logit
 
 #Compute transport cost
 #gdf = compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax = 0)
-gdf, employed_results, travel_matrix = compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, tax = 0)
+gdf, employed_results, travel_matrix = compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, clusters_in_zone, house_in_zone, tax = 0)
 
 print(round(100 * sum(gdf["transport_mode"] * gdf["pop"]) / sum(gdf["pop"])), " % commute by public transport")
 plot_with_missing(gdf, gdf["transport_cost"])
 plot_with_missing(gdf, gdf["transport_mode"])
 #plot_employment(gdf, employment_centers, var) var = employment_centers['employment'] * 0.001, employment_centers.merge(employed_results, left_on = "cluster", right_on = "to_id")["weighted_employed"] * 0.001,  # adjust scale_factor, ARRAY_WAGE* 0.5
-
+#gdf.merge(travel_matrix.loc[travel_matrix.to_id == 5,:], left_on = "ID", right_on = "from_id").plot("proba_center", legend = True)
 
 #Calibration BETA with amenities
 gdf["size"] = gdf["size_census"] #gdf["size_census"] #gdf["size_AMB"]
@@ -246,6 +260,7 @@ agg = compare_var(gdf, n)
 N = round(np.nansum(gdf["pop"]) * SCALE)
 
 indiv_loc_matrix = compute_indiv_loc_matrix(N, len(gdf), n.to_numpy()* SCALE)
+indiv_loc_matrix_0 = copy.deepcopy(indiv_loc_matrix)
 rent_indiv = indiv_loc_matrix @ R.to_numpy()
 dwelling_size_indiv = indiv_loc_matrix @ q
 
@@ -268,12 +283,30 @@ save_transport_mode[:, 0] = deepcopy(indiv_loc_matrix @gdf["transport_mode"])
 save_utility = np.zeros((N, MAX_YEAR))
 save_utility[:, 0] = deepcopy(utility)
 save_tax = np.zeros(MAX_YEAR)
-save_tax[0] = 1
+save_tax[0] = 0
 
+#save emissions
 travel_matrix["distance_emi"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center"] * (1 - travel_matrix["transport_mode"])
 distance_emi = travel_matrix.loc[:,["distance_emi", "from_id"]].groupby("from_id").sum()
 gdf = gdf.merge(distance_emi, left_on = "ID", right_index = True)
 emissions_init = sum(save_population[:, 0] * (gdf["distance_emi"]))
+save_emissions = np.zeros(MAX_YEAR)
+save_emissions[0] = emissions_init
+
+#check distances per capita
+travel_matrix["pop"] = travel_matrix["pop"] * travel_matrix["proba_center"]
+bins = np.array([0, 0.5, 2, 5, 10, 50])
+labels = [f"{i}km" for i in bins[:-1]]
+travel_matrix['distance_bin'] = pd.cut(travel_matrix['distance_car'] / 1000, bins=bins, labels=labels, right=False)
+pop_by_bin = travel_matrix.groupby('distance_bin', observed=True)['pop'].sum()
+
+pop_by_bin.plot(kind='bar', figsize=(8, 4))
+plt.ylabel("Population")
+plt.xlabel("Distance to center")
+plt.title("Population by distance category")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
 
 save_median_support = np.zeros(MAX_YEAR)
 
@@ -288,7 +321,7 @@ while year < MAX_YEAR:
     # Urban form with the tax, without inertia
 
     #gdf = compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax = tax)
-    gdf, employed_results, travel_matrix = compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, tax = 0)
+    gdf, employed_results, travel_matrix = compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, clusters_in_zone, house_in_zone, tax)
 
     def compute_error_in_population_from_utility(u):
         """ Compute error in population associated to utility u"""
@@ -337,9 +370,11 @@ while year < MAX_YEAR:
     # Policy support
     score_welfare = compute_change_in_welfare(save_utility[:,0], save_utility[:,year])
     score_ineq = compute_change_in_inequalities(save_utility[:,0], save_utility[:,year])
-    score_emissions = compute_change_in_emissions(gdf, travel_matrix, emissions_init, save_population[:, year])
+    score_emissions, emissions = compute_change_in_emissions(gdf, travel_matrix, emissions_init, save_population[:, year])
     political_opinion = compute_political_opinion(score_welfare, score_ineq, score_emissions, BETA_OPINION)
     
+    save_emissions[year] = emissions
+
     if year > 1:
         support = (DELTA * support) + ((1 - DELTA) * political_opinion) # type: ignore
     else:
@@ -350,12 +385,63 @@ while year < MAX_YEAR:
 
     #Policy update
     if np.nanmedian(support) > THRESHOLD:
-        tax = tax * (1 + RATE_INCREASE_TAX)
+        tax = tax #* (1 + RATE_INCREASE_TAX)
 
     year = year + 1
 
 
 ### PLOT RESULTS
+print(round(100 * sum(gdf["transport_mode"] * gdf["pop"]) / sum(gdf["pop"])), " % commute by public transport")
 
-gdf.plot(compute_weighted_mean_opinions(support, indiv_loc_matrix, N), legend = True)
+ax = gdf.plot(compute_weighted_mean_opinions(support, indiv_loc_matrix, N), legend = True, edgecolor="none", linewidth=0)
+for c in ax.collections:
+    c.set_antialiased(False)
+plt.show()
+
+var_pop = (save_population[:,19] - save_population[:,0])
+#var_pop = (save_population[:,4] - save_population[:,3])>0
+var_pop[np.isinf(var_pop)] = np.nan
+ax = gdf.plot(var_pop, legend = True, edgecolor="none", linewidth=0)
+for c in ax.collections:
+    c.set_antialiased(False)
+plt.show()
+print(sum(np.abs((save_population[:,19] - save_population[:,0]))) / 2)
+
 plot_tax_suppport(save_tax, save_median_support)
+
+plt.plot(save_emissions)
+plt.plot(save_emissions[1:])
+
+plt.plot(np.nanmean(save_transport_mode, 0))
+plt.plot(np.nanmean(save_transport_mode, 0)[1:])
+
+plt.plot(np.nanmedian(save_utility, 0))
+plt.plot(np.nanmedian(save_utility, 0)[1:])
+
+indiv_loc_matrix_1 = copy.deepcopy(indiv_loc_matrix)
+
+average_utility_per_tract_0 = np.zeros(2149)
+counts = np.zeros(2149)
+tract_id = np.argmax(indiv_loc_matrix_0, axis=1)
+# Sum utilities and counts per tract
+np.add.at(average_utility_per_tract_0, tract_id, save_utility[:,0])
+np.add.at(counts, tract_id, 1)
+average_utility_per_tract_0 /= counts
+
+
+average_utility_per_tract_1 = np.zeros(2149)
+counts = np.zeros(2149)
+tract_id = np.argmax(indiv_loc_matrix_1, axis=1)
+# Sum utilities and counts per tract
+np.add.at(average_utility_per_tract_1, tract_id, save_utility[:,1])
+np.add.at(counts, tract_id, 1)
+average_utility_per_tract_1 /= counts
+
+plot_with_missing(gdf, average_utility_per_tract_0)
+plot_with_missing(gdf, average_utility_per_tract_1)
+
+plot_with_missing(gdf, (average_utility_per_tract_1 - average_utility_per_tract_0) / average_utility_per_tract_0)
+
+gdf["experienced_impact"] = (average_utility_per_tract_1 - average_utility_per_tract_0) / average_utility_per_tract_0
+
+gdf.loc[:, ['ID', 'geometry', 'transport_mode', "experienced_impact"]].to_file(path_data + "experienced_impact.geojson", driver="GeoJSON")
