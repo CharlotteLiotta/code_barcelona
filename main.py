@@ -35,7 +35,7 @@ center = "0801901025"
 
 #ABM
 SCALE = 1/100 #Nb of agents in the ABM
-PROBA_MOVE = 1
+PROBA_MOVE = 0.1
 DELTA = 0.5 #inertia
 
 #Tax
@@ -406,6 +406,33 @@ for c in ax.collections:
     c.set_antialiased(False)
 plt.show()
 print(sum(np.abs((save_population[:,19] - save_population[:,0]))) / 2)
+
+gdf = gdf.copy()
+gdf["population0"] = save_population[:, 0]
+gdf["population1"] = save_population[:, 1]
+gdf["population5"] = save_population[:, 5]
+gdf["population10"] = save_population[:, 10]
+gdf["population15"] = save_population[:, 15]
+gdf["population19"] = save_population[:, 19]
+bins = np.arange(0, gdf["distance_center"].max() + 2, 2)
+gdf["distance_bin"] = pd.cut(gdf["distance_center"], bins=bins)
+pop_by_bin0 = gdf.groupby("distance_bin")["population0"].sum()
+pop_by_bin1 = gdf.groupby("distance_bin")["population1"].sum()
+pop_by_bin5 = gdf.groupby("distance_bin")["population5"].sum()
+pop_by_bin10 = gdf.groupby("distance_bin")["population10"].sum()
+pop_by_bin15 = gdf.groupby("distance_bin")["population15"].sum()
+pop_by_bin19 = gdf.groupby("distance_bin")["population19"].sum()
+#pop_by_bin0.plot(kind="line", figsize=(10,5), label = "0")
+#pop_by_bin1.plot(kind="line", figsize=(10,5), label = "1")
+#pop_by_bin5.plot(kind="line", figsize=(10,5), label = "5")
+#pop_by_bin10.plot(kind="line", figsize=(10,5), label = "10")
+pop_by_bin15.plot(kind="line", figsize=(10,5), label = "15")
+pop_by_bin19.plot(kind="line", figsize=(10,5), label = "19")
+plt.legend()
+plt.ylabel("Population")
+plt.xlabel("Distance to city center (km)")
+plt.title("Population by distance bins")
+plt.show()
 
 plot_tax_suppport(save_tax, save_median_support)
 
