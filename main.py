@@ -10,7 +10,8 @@ import warnings
 import pickle
 import copy
 
-from functions import *
+from outcomes import *
+from ABM import *
 from import_data import * # type: ignore
 from calibration import * # type: ignore
 from model import * # type: ignore
@@ -35,12 +36,12 @@ center = "0801901025"
 
 #ABM
 SCALE = 1/100 #Nb of agents in the ABM
-PROBA_MOVE = 0.1
+PROBA_MOVE = 0.05
 DELTA = 0.5 #inertia
 
 #Tax
-tax = 5 #Initial tax level
-RATE_INCREASE_TAX = 0.05 #Rate of increase per year
+tax = 3 #Initial tax level
+RATE_INCREASE_TAX = 0.00 #Rate of increase per year
 THRESHOLD = 0.5
 
 ### IMPORT DATA
@@ -53,23 +54,11 @@ gdf = import_ppl_per_hh(gdf, path_data)
 gdf = import_rent_and_size(gdf, path_data)
 Y, gdf = import_income(gdf, path_data)
 gdf = import_amenities(gdf, path_data, 0, 0)
-
-zone_tax = gdf.loc[gdf.ID.str[:5].isin(["08019", "08101", "08194"]),:]
-fig, ax = plt.subplots(figsize=(8, 8))
-gdf.plot(ax = ax, color = "lightgrey")
-zone_tax.plot(ax = ax)
-
-zone_union = zone_tax.unary_union
 employment_centers = gpd.read_file(path_data + "cluster_employment.shp")
-points_in_zone = employment_centers[employment_centers.within(zone_union)]
-clusters_in_zone = points_in_zone["cluster"].unique().tolist()
-points_in_zone = gdf[gdf.centroid.within(zone_union)]
-house_in_zone = points_in_zone["ID"].unique().tolist()
+clusters_in_zone, house_in_zone = import_tax_zone(gdf, employment_centers)
 
 #Import transport data
-employment_centers = gpd.read_file(path_data + "cluster_employment.shp")
-job_in_tax = list(employment_centers.cluster)
-#import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers)
+#import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 0, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
 travel_time_matrix_car, travel_time_matrix_transit = load_transport_times_poly(gdf, path_data, center)
 travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers)
 gdf = import_cost_transit(gdf)
@@ -284,6 +273,8 @@ save_utility = np.zeros((N, MAX_YEAR))
 save_utility[:, 0] = deepcopy(utility)
 save_tax = np.zeros(MAX_YEAR)
 save_tax[0] = 0
+save_qol = np.zeros((MAX_YEAR))
+save_congestion = np.zeros((MAX_YEAR))
 
 #save emissions
 travel_matrix["distance_emi"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center"] * (1 - travel_matrix["transport_mode"])
@@ -292,6 +283,12 @@ gdf = gdf.merge(distance_emi, left_on = "ID", right_index = True)
 emissions_init = sum(save_population[:, 0] * (gdf["distance_emi"]))
 save_emissions = np.zeros(MAX_YEAR)
 save_emissions[0] = emissions_init
+
+
+save_score_emissions = np.zeros(MAX_YEAR)
+save_score_welfare = np.zeros((N, MAX_YEAR))
+save_score_qol = np.zeros((N, MAX_YEAR))
+save_score_congestion = np.zeros((N, MAX_YEAR))
 
 #check distances per capita
 travel_matrix["pop"] = travel_matrix["pop"] * travel_matrix["proba_center"]
@@ -311,6 +308,12 @@ plt.show()
 save_median_support = np.zeros(MAX_YEAR)
 
 year = year + 1
+
+
+
+#### COMPUTE QOL
+
+save_qol[0], save_congestion[0], proba_commuting_in_tax_zone_by_car = compute_qol(save_population[:, 0], gdf, travel_matrix, clusters_in_zone, house_in_zone)
 
 ### MODELING THE PSC
 
@@ -369,11 +372,32 @@ while year < MAX_YEAR:
 
     # Policy support
     score_welfare = compute_change_in_welfare(save_utility[:,0], save_utility[:,year])
-    score_ineq = compute_change_in_inequalities(save_utility[:,0], save_utility[:,year])
     score_emissions, emissions = compute_change_in_emissions(gdf, travel_matrix, emissions_init, save_population[:, year])
-    political_opinion = compute_political_opinion(score_welfare, score_ineq, score_emissions, BETA_OPINION)
+
+    
+    #save outcomes
+    save_qol[year], save_congestion[year], proba_commuting_in_tax_zone_by_car = compute_qol(save_population[:, year], gdf, travel_matrix, clusters_in_zone, house_in_zone)
+
+    score_qol_zone = compute_change_in_qol(save_qol[0], save_qol[year])
+    
+    score_qol = (indiv_loc_matrix @ gdf.ID.isin(house_in_zone)) * score_qol_zone
+    score_qol[score_qol == 0] = 0.5
+
+    
+    score_congestion_zone = compute_change_in_qol(save_congestion[0], save_congestion[year])
+
+    proba_commuting_in_tax_zone_by_car[np.isnan(proba_commuting_in_tax_zone_by_car)] = 0
+    score_congestion = (indiv_loc_matrix @ proba_commuting_in_tax_zone_by_car) * score_congestion_zone
+
+
+    political_opinion = compute_political_opinion(score_welfare, score_qol, score_emissions, score_congestion, BETA_OPINION)
     
     save_emissions[year] = emissions
+    save_score_emissions[year] = score_emissions
+    save_score_welfare[:,year] = score_welfare
+    save_score_qol[:,year] = score_qol
+    #save_score_congestion[year] = score_congestion
+
 
     if year > 1:
         support = (DELTA * support) + ((1 - DELTA) * political_opinion) # type: ignore
@@ -384,8 +408,8 @@ while year < MAX_YEAR:
     print("support", support)
 
     #Policy update
-    if np.nanmedian(support) > THRESHOLD:
-        tax = tax #* (1 + RATE_INCREASE_TAX)
+    #if np.nanmedian(support) > THRESHOLD:
+    tax = tax * (1 + RATE_INCREASE_TAX)
 
     year = year + 1
 
@@ -422,11 +446,11 @@ pop_by_bin5 = gdf.groupby("distance_bin")["population5"].sum()
 pop_by_bin10 = gdf.groupby("distance_bin")["population10"].sum()
 pop_by_bin15 = gdf.groupby("distance_bin")["population15"].sum()
 pop_by_bin19 = gdf.groupby("distance_bin")["population19"].sum()
-#pop_by_bin0.plot(kind="line", figsize=(10,5), label = "0")
+pop_by_bin0.plot(kind="line", figsize=(10,5), label = "0")
 #pop_by_bin1.plot(kind="line", figsize=(10,5), label = "1")
 #pop_by_bin5.plot(kind="line", figsize=(10,5), label = "5")
 #pop_by_bin10.plot(kind="line", figsize=(10,5), label = "10")
-pop_by_bin15.plot(kind="line", figsize=(10,5), label = "15")
+#pop_by_bin15.plot(kind="line", figsize=(10,5), label = "15")
 pop_by_bin19.plot(kind="line", figsize=(10,5), label = "19")
 plt.legend()
 plt.ylabel("Population")

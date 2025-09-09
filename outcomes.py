@@ -43,6 +43,13 @@ def compute_change_in_welfare(utility_without_tax, utility_with_tax):
     print("relative_change_utility", 100 * relative_change_utility, "%")
     return (1 / (1 + np.exp(-15 * relative_change_utility)))
 
+def compute_change_in_qol(utility_without_tax, utility_with_tax):
+    """ Compute the impact of the change in utility on welfare"""
+
+    relative_change_utility = (utility_with_tax - utility_without_tax) / utility_without_tax
+    print("relative_change_qol", 100 * relative_change_utility, "%")
+    return (1 / (1 + np.exp(2 * relative_change_utility)))
+
 def compute_change_in_inequalities(utility_without_tax, utility_with_tax):
     print("change gini", (gini(np.array(utility_with_tax)) - gini(np.array(utility_without_tax))))
     if gini(np.array(utility_without_tax)) != gini(np.array(utility_with_tax)):
@@ -52,8 +59,37 @@ def compute_change_in_inequalities(utility_without_tax, utility_with_tax):
 
     return Q
 
-def compute_change_in_emissions(n_with_tax, distance, transport_mode, emissions_init):
-    relative_change_emission = (sum(n_with_tax * distance * (1 - transport_mode)) - emissions_init) / emissions_init
+def compute_change_in_emissions(gdf, travel_matrix, emissions_init, n_with_tax):
+    travel_matrix["distance_emi"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center"] * (1 - travel_matrix["transport_mode"])
+    distance_emi = travel_matrix.loc[:,["distance_emi", "from_id"]].groupby("from_id").sum()
+    gdf = gdf.drop(columns = "distance_emi")
+    gdf = gdf.merge(distance_emi, left_on = "ID", right_index = True)
+    emissions = sum(n_with_tax * (gdf["distance_emi"]))
+    relative_change_emission = (emissions - emissions_init) / emissions_init
     print("relative_change_emission", 100 * relative_change_emission, "%")
-    return (1 / (1 + np.exp(2 * relative_change_emission)))
+    return (1 / (1 + np.exp(2 * relative_change_emission))), emissions
+
+def compute_qol(save_population, gdf, travel_matrix, clusters_in_zone, house_in_zone):
+    population_here = save_population
+
+    travel = travel_matrix
+    gdf["population_here"] = population_here
+
+    travel = travel.merge(gdf.loc[:,["population_here", "ID"]], left_on = "from_id", right_on = "ID")
+    travel["total_commuters"] = travel["population_here"] * travel["proba_center"]
+    travel["car_commuters"] = travel["total_commuters"] * (1 - travel["transport_mode_save"])
+
+    #working in zone
+    car_users_working_in_zone = np.nansum(travel.loc[travel.to_id.isin(clusters_in_zone),["car_commuters"]])
+    
+    #living or working in zine
+    car_users_living_or_working_in_zone = np.nansum(travel.loc[travel.from_id.isin(house_in_zone) | travel.to_id.isin(clusters_in_zone),["car_commuters"]])
+
+    #proba to commute in the tax zone by car
+    ppl_commuting_in_tax_zone_by_car = travel.loc[travel.to_id.isin(clusters_in_zone),["car_commuters", "from_id"]].groupby("from_id").sum()
+    ppl = travel.loc[:,["total_commuters", "from_id"]].groupby("from_id").sum()
+    proba_commuting_in_tax_zone_by_car = np.array(ppl_commuting_in_tax_zone_by_car.car_commuters / ppl.total_commuters)
+    
+    return car_users_living_or_working_in_zone, car_users_working_in_zone, proba_commuting_in_tax_zone_by_car
+
 

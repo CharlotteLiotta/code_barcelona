@@ -26,6 +26,20 @@ def compute_indiv_loc_matrix(N, len_gdf, n):
                 opinion_distance_matrix[i, k] = 1.0
             break
 
+    missing_ppl = int(N - opinion_distance_matrix.sum())
+
+    if missing_ppl > 0:
+        print("missing ppl", missing_ppl)
+    
+        # Get location indices sorted by population in descending order
+        pop_per_location = opinion_distance_matrix.sum(axis=0)
+        sorted_locs = np.argsort(-pop_per_location)  # descending order
+
+        # Start assigning one agent per location
+        step = int(N - missing_ppl)
+        for i in range(missing_ppl):
+            opinion_distance_matrix[step + i, sorted_locs[i % len(sorted_locs)]] = 1.0
+
     return opinion_distance_matrix
 
 @njit

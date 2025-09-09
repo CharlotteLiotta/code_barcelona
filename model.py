@@ -66,7 +66,7 @@ def compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_
     
     travel_matrix["num_proba_center"] = np.exp((travel_matrix["income"] - travel_matrix["transport_cost"]) / 140)
     travel_matrix["proba_center"] = travel_matrix['num_proba_center'] / travel_matrix.groupby('from_id')['num_proba_center'].transform('sum')
-    
+    travel_matrix["transport_mode_save"] = travel_matrix["transport_mode"]
     travel_matrix["transport_mode"] = travel_matrix["transport_mode"] * travel_matrix["proba_center"]
     travel_matrix["transport_cost"] = travel_matrix["transport_cost"] * travel_matrix["proba_center"]
     travel_matrix["wage"] = travel_matrix["income"] * travel_matrix["proba_center"]

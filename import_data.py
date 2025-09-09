@@ -6,6 +6,7 @@ import requests
 from shapely.geometry import shape, LineString, MultiLineString # type: ignore
 import json
 import os 
+import matplotlib.pyplot as plt
 
 from import_data import * # type: ignore
 
@@ -285,19 +286,19 @@ def load_transport_times(gdf, path_data, center):
 
     return load_transport_data("car"), load_transport_data("transit")
 
-def load_transport_times_poly(gdf, path_data, center):
+def load_transport_times_poly(gdf, path_data, center, option = ""):
     """ Load transport times previously retrieved with import_transport_time """
 
     def load_transport_data(mode):
         i = 100
-        travel_time_matrix = np.load(path_data + "/travel_time_matrix_poly_" + mode + "_" + str(i) + ".npy", allow_pickle= True) #"tt_" + center + 
+        travel_time_matrix = np.load(path_data + "/travel_time_matrix_poly_" + mode + "_" + str(i) + option + ".npy", allow_pickle= True) #"tt_" + center + 
     
         while i < len(gdf) - 100:
             i = i + 100
-            temp = np.load(path_data + "/travel_time_matrix_poly_" + mode + "_" + str(i) + ".npy", allow_pickle= True) #"tt_" + center + 
+            temp = np.load(path_data + "/travel_time_matrix_poly_" + mode + "_" + str(i) + option + ".npy", allow_pickle= True) #"tt_" + center + 
             travel_time_matrix = np.concatenate((travel_time_matrix, temp), axis=0)
         
-        temp = np.load(path_data + "/travel_time_matrix_poly_" + mode +  "_" + str(len(gdf)) + ".npy", allow_pickle= True) #"tt_" + center + 
+        temp = np.load(path_data + "/travel_time_matrix_poly_" + mode +  "_" + str(len(gdf)) + option + ".npy", allow_pickle= True) #"tt_" + center + 
         travel_time_matrix = np.concatenate((travel_time_matrix, temp), axis=0)
     
         travel_time_matrix = pd.DataFrame(travel_time_matrix, columns = ['from_id', 'to_id', 'travel_time'])
@@ -685,3 +686,14 @@ def import_rent_idealista(gdf, path_data):
     
     gdf = gdf.merge(agg, on="ID", how = "left")
     return gdf
+
+def import_tax_zone(gdf, employment_centers):
+    zone_tax = gdf.loc[gdf.ID.str[:5].isin(["08019", "08101", "08194"]),:]
+    fig, ax = plt.subplots(figsize=(8, 8))
+    gdf.plot(ax = ax, color = "lightgrey")
+    zone_tax.plot(ax = ax)
+    plt.show()
+    zone_union = zone_tax.union_all()
+    clusters_in_zone = employment_centers[employment_centers.within(zone_union)]["cluster"].unique().tolist()
+    house_in_zone = gdf[gdf.centroid.within(zone_union)]["ID"].unique().tolist()
+    return clusters_in_zone, house_in_zone
