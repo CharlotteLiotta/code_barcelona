@@ -59,6 +59,11 @@ def import_opinion_parameters_old(path_data):
 def import_opinion_parameters(path_data):
 
     df_reg, meta = pyreadstat.read_sav(path_data + '040023 En moviment pel clima 2025_V01 - còpia.sav')
+    
+    df_reg = gpd.GeoDataFrame(df_reg, geometry = gpd.points_from_xy(df_reg.GEO_X, df_reg.GEO_Y), crs="EPSG:4326")
+    gdf = gpd.read_file(path_data + "income_loss.geojson")
+    df_reg = df_reg.to_crs(gdf.crs)
+    df_reg = gpd.sjoin(df_reg, gdf, predicate="within")
 
     df_reg.rename(columns={'P22_4': 'acceptability'}, inplace=True)
     df_reg = df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97)]
@@ -66,9 +71,11 @@ def import_opinion_parameters(path_data):
     df_reg.rename(columns={'P21_3': 'climate_change'}, inplace=True)
     df_reg = df_reg.loc[~np.isnan(df_reg.climate_change) & (df_reg.climate_change < 80)]
     
-    df_reg.rename(columns={'P11': 'declared_impacts'}, inplace=True)
-    df_reg = df_reg.loc[(df_reg.declared_impacts != 3) & (df_reg.declared_impacts != 4),:]
-    df_reg.declared_impacts = (df_reg.declared_impacts == 1) * 1
+    #df_reg.rename(columns={'P11': 'declared_impacts'}, inplace=True)
+    #df_reg = df_reg.loc[(df_reg.declared_impacts != 3) & (df_reg.declared_impacts != 4),:]
+    #df_reg.declared_impacts = (df_reg.declared_impacts == 1) * 1
+
+    df_reg["log_absolute_loss"] = - np.log(-df_reg["income_loss_absolute"])
 
     df_reg.rename(columns={'P21_2': 'quality_of_life'}, inplace=True)
     df_reg = df_reg.loc[~np.isnan(df_reg.quality_of_life) & (df_reg.quality_of_life < 80)]
@@ -76,7 +83,7 @@ def import_opinion_parameters(path_data):
     df_reg.rename(columns={'P21_1': 'congestion'}, inplace=True)
     df_reg = df_reg.loc[~np.isnan(df_reg.congestion) & (df_reg.congestion < 80)]
 
-    X_raw = df_reg[["climate_change", "declared_impacts", "quality_of_life", 'congestion']]
+    X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life", 'congestion']]
     y_raw = df_reg["acceptability"].values.reshape(-1, 1)
 
     scaler_X = MinMaxScaler()
@@ -92,7 +99,7 @@ def import_opinion_parameters(path_data):
 
     X_scaled = sm.add_constant(X_scaled)
 
-    model_statsmodel = sm.OLS(y_scaled, X_scaled).fit()
+    model_statsmodel = sm.WLS(y_scaled, X_scaled, weights=df_reg['PESAIX']).fit()
     print(model_statsmodel.summary())
 
     return np.array(model_statsmodel.params)
@@ -100,4 +107,4 @@ def import_opinion_parameters(path_data):
 def compute_political_opinion(score_welfare, score_quality_of_life, score_emissions, score_congestion, BETA_OPINION):
     """ Compute public support based on the regression on the survey data """
     
-    return BETA_OPINION[0] + BETA_OPINION[1] * score_emissions - BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life + BETA_OPINION[4] * score_congestion
+    return BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life + BETA_OPINION[4] * score_congestion

@@ -36,7 +36,7 @@ tab_label = pd.DataFrame([meta.column_names, meta.column_labels]).T
 
 # MERGE WITH GDF TO PLOT SPATIAL VARIATIONS IN ACCEPTABILITY
 df = gpd.GeoDataFrame(df, geometry = gpd.points_from_xy(df.GEO_X, df.GEO_Y), crs="EPSG:4326")
-gdf = gpd.read_file(path_data + "experienced_impact.geojson")
+gdf = gpd.read_file(path_data + "income_loss.geojson")
 df = df.to_crs(gdf.crs)
 df.loc[df.P22_4 > 96, "P22_4"] = np.nan
 df_plot = gpd.sjoin(df, gdf, predicate="within")
@@ -56,6 +56,18 @@ plt.hist(df_reg['acceptability'], color = '#1f77b4', alpha=0.8)  # bins 0-10
 plt.xlabel('Acceptability')
 plt.ylabel('Number of Respondents')
 plt.xticks(range(0,11))  # show ticks from 0 to 10
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.tight_layout()
+plt.show()
+
+df_reg.rename(columns={'P18': 'acceptable_price'}, inplace=True)
+df_reg = df_reg.loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 20)]
+
+plt.figure(figsize=(8,5))
+plt.hist(df_reg['acceptable_price'], color = '#1f77b4', alpha=0.8)  # bins 0-10
+plt.xlabel('acceptable_price')
+plt.ylabel('Number of Respondents')
+#plt.xticks(range(0,11))  # show ticks from 0 to 10
 plt.grid(axis='y', linestyle='--', alpha=0.7)
 plt.tight_layout()
 plt.show()
@@ -383,7 +395,9 @@ plt.show()
 
 #OPTION3 - EXPERIENCED IMPACTS
 
-plt.hist(df_reg.experienced_impact)
+plt.hist(df_reg.income_loss_absolute)
+
+plt.hist(df_reg.income_loss_relative)
 
 ### Regression
 
@@ -412,7 +426,7 @@ print(model_statsmodel.summary())
 
 #v1 - With perceived impacts
 
-X_raw = df_reg[["declared_impacts", "climate_change", "congestion", "quality_of_life", "political_ideology", "institutional_trust", "knowledge", "peer_effect", "ecoanxiety", "ecological_paradigm", "age", "man", "education", "children"]]
+X_raw = df_reg[["declared_impacts", "climate_change", "congestion", "quality_of_life", "political_ideology", "institutional_trust", "knowledge", "ecoanxiety", "ecological_paradigm", "age", "man", "education", "children"]]
 #X_raw = df_reg[["declared_impacts"]]
 #X_raw = df_reg[["declared_impacts", "climate_change", "congestion", "quality_of_life"]]
 #X_raw = df_reg[["declared_impacts", "climate_change", "congestion", "quality_of_life", "institutional_trust", "ecoanxiety"]]
@@ -446,11 +460,13 @@ print(model_statsmodel.summary())
 ### car ownership variable to improve
 
 df_reg["live_or_work_in_tax_area"] = (df_reg["live_in_tax_area"] + df_reg["work_in_tax_area"]) > 0
-df_reg["live_or_work_in_tax_area_car"] = (df_reg["live_in_tax_area"] * df_reg["vehicle_ownership"])
+df_reg["live_or_work_in_tax_area_car"] = (df_reg["live_or_work_in_tax_area"] * df_reg["vehicle_ownership"])
 df_reg["live_in_tax_area_qol"] = df_reg["live_in_tax_area"] * df_reg["quality_of_life"]
 df_reg["work_in_tax_area_qol"] = df_reg["work_in_tax_area"] * df_reg["quality_of_life"]
 df_reg["live_or_work_in_tax_area_congestion"] = df_reg["live_or_work_in_tax_area"] * df_reg["congestion"]
 df_reg["live_or_work_in_tax_area_qol"] = df_reg["live_or_work_in_tax_area"] * df_reg["quality_of_life"]
+df_reg["work_in_tax_area_congestion"] = df_reg["work_in_tax_area"] * df_reg["congestion"]
+
 
 X_raw = df_reg[["live_or_work_in_tax_area", "vehicle_ownership_license", "climate_change", "live_or_work_in_tax_area_qol", "live_or_work_in_tax_area_congestion"]]
 X_raw = df_reg[["live_or_work_in_tax_area", "vehicle_ownership_license", "climate_change", "live_or_work_in_tax_area_qol", "live_or_work_in_tax_area_congestion", "political_ideology", "institutional_trust", "knowledge", "peer_effect", "ecoanxiety", "ecological_paradigm", "age", "man", "education", "children"]]
@@ -490,6 +506,53 @@ X_raw = df_reg[["experienced_impacts_declared_impacts", "experienced_impacts_dec
 X_raw = df_reg[["experienced_impacts_declared_impacts", "climate_change", "congestion", "quality_of_life"]]
 X_raw = df_reg[["experienced_impact", "climate_change", "congestion", "quality_of_life", "institutional_trust"]]
 
+#"live_or_work_in_tax_area", "vehicle_ownership_license"
+#"declared_impacts"
+df_reg["log_absolute_loss"] = np.log(-df_reg["income_loss_absolute"])
+df_reg["log_relative_loss"] = np.log(-df_reg["income_loss_relative"])
+
+df_reg["log_absolute_loss_declared_impact"] = df_reg["log_absolute_loss"] * (df_reg["declared_impacts"])
+df_reg["relative_loss_declared_impact"] = df_reg["income_loss_relative"] * df_reg["live_or_work_in_tax_area"]* df_reg["vehicle_ownership_license"]
+df_reg["log_relative_loss_declared_impact"] = df_reg["log_relative_loss"] * (7 - df_reg["declared_impacts_frequency"])
+
+df_reg["log_absolute_loss_eco"] = - df_reg["log_absolute_loss"] * df_reg["ecological_paradigm"]
+df_reg["climate_change_eco"] = - df_reg["climate_change"] * df_reg["ecological_paradigm"]
+df_reg["congestion_eco"] = - df_reg["congestion"] * df_reg["ecological_paradigm"]
+df_reg["quality_of_life_eco"] = - df_reg["quality_of_life"] * df_reg["ecological_paradigm"]
+
+X_raw = df_reg[["log_absolute_loss_declared_impact", "climate_change", "work_in_tax_area_congestion", "live_in_tax_area_qol", "congestion", "quality_of_life", "political_ideology", "institutional_trust", "knowledge", "ecoanxiety", "ecological_paradigm", "age", "man", "education", "children"]]
+
+X_raw = df_reg[["log_absolute_loss_declared_impact", "climate_change", "congestion", "quality_of_life"]]
+
+
+X_raw = df_reg[["log_absolute_loss", "climate_change", "congestion", "quality_of_life", "ecological_paradigm", "log_absolute_loss_eco", "climate_change_eco", "congestion_eco", "quality_of_life_eco"]]
+
+
+y_raw = df_reg["acceptability"].values.reshape(-1, 1)
+
+#corr_df = pd.DataFrame(np.corrcoef(X_raw.T), index = X_raw.columns, columns = X_raw.columns)
+
+scaler_X = MinMaxScaler()
+X_scaled = scaler_X.fit_transform(X_raw)
+X_scaled = pd.DataFrame(X_scaled, columns=X_raw.columns)
+scaler_y = MinMaxScaler()
+y_scaled = scaler_y.fit_transform(y_raw).flatten()
+#X_scaled = sm.add_constant(X_scaled)
+
+X_raw = sm.add_constant(X_raw)
+
+model_statsmodel = sm.WLS(y_scaled, X_scaled, weights=df_reg['PESAIX']).fit()
+#model_statsmodel = sm.WLS(y_raw, X_raw, weights=df_reg['PESAIX']).fit()
+
+print(model_statsmodel.summary())
+
+model_statsmodel = sm.OLS(y_scaled, X_scaled).fit()
+print(model_statsmodel.summary())
+
+#other
+
+X_raw = df_reg[["declared_impacts", "congestion", "quality_of_life", "institutional_trust"]]
+
 y_raw = df_reg["acceptability"].values.reshape(-1, 1)
 
 #corr_df = pd.DataFrame(np.corrcoef(X_raw.T), index = X_raw.columns, columns = X_raw.columns)
@@ -504,14 +567,11 @@ X_scaled = sm.add_constant(X_scaled)
 model_statsmodel = sm.WLS(y_scaled, X_scaled, weights=df_reg['PESAIX']).fit()
 print(model_statsmodel.summary())
 
-model_statsmodel = sm.OLS(y_scaled, X_scaled).fit()
-print(model_statsmodel.summary())
 
-#other
 
-X_raw = df_reg[["experienced_impact", "climate_change", "congestion", "quality_of_life", "institutional_trust"]]
+X_raw = df_reg[["log_absolute_loss", "vehicle_ownership_license", "congestion", "quality_of_life", "climate_change"]]
 
-y_raw = df_reg["declared_impacts"].values.reshape(-1, 1)
+y_raw = df_reg["acceptable_price"].values.reshape(-1, 1)
 
 #corr_df = pd.DataFrame(np.corrcoef(X_raw.T), index = X_raw.columns, columns = X_raw.columns)
 
@@ -522,10 +582,8 @@ scaler_y = MinMaxScaler()
 y_scaled = scaler_y.fit_transform(y_raw).flatten()
 X_scaled = sm.add_constant(X_scaled)
 
-model_statsmodel = sm.WLS(y_scaled, X_scaled, weights=df_reg['PESAIX']).fit()
+model_statsmodel = sm.WLS(y_raw, X_scaled, weights=df_reg['PESAIX']).fit()
 print(model_statsmodel.summary())
-
-
 
 
 
@@ -597,4 +655,80 @@ ax2.set_ylabel('Number of observations', color='gray')
 
 plt.show()
 
+
+
+x = -df_reg.income_loss_relative
+y = df_reg.acceptability
+
+# Define bins
+bins = np.linspace(x.min(), x.max(), 15)
+df_reg['bin'] = pd.cut(x, bins)
+
+# Compute mean and count per bin
+grouped = df_reg.groupby('bin')[y.name].agg(['mean', 'count'])
+grouped = grouped[grouped['count'] >= 10]
+bin_centers = [interval.mid for interval in grouped.index]
+
+# Line plot of mean
+fig, ax1 = plt.subplots()
+ax1.plot(bin_centers, grouped['mean'], marker='o', color='blue')
+ax1.set_xlabel('Negative experienced impact')
+ax1.set_ylabel('Average Acceptability_10', color='blue')
+
+# Secondary axis for counts
+ax2 = ax1.twinx()
+ax2.bar(bin_centers, grouped['count'], width=(bins[1]-bins[0])*0.8, alpha=0.3, color='gray')
+ax2.set_ylabel('Number of observations', color='gray')
+
+plt.show()
+
+x = -df_reg.income_loss_absolute
+y = df_reg.acceptability
+
+# Define bins
+bins = np.linspace(x.min(), x.max(), 15)
+df_reg['bin'] = pd.cut(x, bins)
+
+# Compute mean and count per bin
+grouped = df_reg.groupby('bin')[y.name].agg(['mean', 'count'])
+grouped = grouped[grouped['count'] >= 5]
+bin_centers = [interval.mid for interval in grouped.index]
+
+# Line plot of mean
+fig, ax1 = plt.subplots()
+ax1.plot(bin_centers, grouped['mean'], marker='o', color='blue')
+ax1.set_xlabel('Negative experienced impact')
+ax1.set_ylabel('Average Acceptability_10', color='blue')
+
+# Secondary axis for counts
+ax2 = ax1.twinx()
+ax2.bar(bin_centers, grouped['count'], width=(bins[1]-bins[0])*0.8, alpha=0.3, color='gray')
+ax2.set_ylabel('Number of observations', color='gray')
+
+plt.show()
+
+x = df_reg.log_absolute_loss
+y = df_reg.acceptability
+
+# Define bins
+bins = np.linspace(x.min(), x.max(), 15)
+df_reg['bin'] = pd.cut(x, bins)
+
+# Compute mean and count per bin
+grouped = df_reg.groupby('bin')[y.name].agg(['mean', 'count'])
+grouped = grouped[grouped['count'] >= 5]
+bin_centers = [interval.mid for interval in grouped.index]
+
+# Line plot of mean
+fig, ax1 = plt.subplots()
+ax1.plot(bin_centers, grouped['mean'], marker='o', color='blue')
+ax1.set_xlabel('Negative experienced impact')
+ax1.set_ylabel('Average Acceptability_10', color='blue')
+
+# Secondary axis for counts
+ax2 = ax1.twinx()
+ax2.bar(bin_centers, grouped['count'], width=(bins[1]-bins[0])*0.8, alpha=0.3, color='gray')
+ax2.set_ylabel('Number of observations', color='gray')
+
+plt.show()
 

@@ -41,14 +41,14 @@ def compute_change_in_welfare(utility_without_tax, utility_with_tax):
 
     relative_change_utility = (utility_with_tax - utility_without_tax) / utility_without_tax
     print("relative_change_utility", 100 * relative_change_utility, "%")
-    return (1 / (1 + np.exp(-15 * relative_change_utility)))
+    return (1 / (1 + np.exp(-5 * relative_change_utility)))
 
 def compute_change_in_qol(utility_without_tax, utility_with_tax):
     """ Compute the impact of the change in utility on welfare"""
 
     relative_change_utility = (utility_with_tax - utility_without_tax) / utility_without_tax
     print("relative_change_qol", 100 * relative_change_utility, "%")
-    return (1 / (1 + np.exp(2 * relative_change_utility)))
+    return (1 / (1 + np.exp(3 * relative_change_utility)))
 
 def compute_change_in_inequalities(utility_without_tax, utility_with_tax):
     print("change gini", (gini(np.array(utility_with_tax)) - gini(np.array(utility_without_tax))))
@@ -67,7 +67,7 @@ def compute_change_in_emissions(gdf, travel_matrix, emissions_init, n_with_tax):
     emissions = sum(n_with_tax * (gdf["distance_emi"]))
     relative_change_emission = (emissions - emissions_init) / emissions_init
     print("relative_change_emission", 100 * relative_change_emission, "%")
-    return (1 / (1 + np.exp(2 * relative_change_emission))), emissions
+    return (1 / (1 + np.exp(3 * relative_change_emission))), emissions
 
 def compute_qol(save_population, gdf, travel_matrix, clusters_in_zone, house_in_zone):
     population_here = save_population
@@ -77,7 +77,7 @@ def compute_qol(save_population, gdf, travel_matrix, clusters_in_zone, house_in_
 
     travel = travel.merge(gdf.loc[:,["population_here", "ID"]], left_on = "from_id", right_on = "ID")
     travel["total_commuters"] = travel["population_here"] * travel["proba_center"]
-    travel["car_commuters"] = travel["total_commuters"] * (1 - travel["transport_mode_save"])
+    travel["car_commuters"] = travel["total_commuters"] * (1 - travel["transport_mode"])
 
     #working in zone
     car_users_working_in_zone = np.nansum(travel.loc[travel.to_id.isin(clusters_in_zone),["car_commuters"]])

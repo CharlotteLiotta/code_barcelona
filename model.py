@@ -44,10 +44,10 @@ def compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CA
 
     return gdf
 
-def compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_INCOME, points_in_zone, house_in_zone, tax):
+def compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, jobs_in_toll_area, houses_in_toll_area, tax):
     """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
     
-    travel_time_matrix_car["zone_tax"] = 1 * (travel_time_matrix_car.from_id.isin(house_in_zone) | travel_time_matrix_car.to_id.isin(points_in_zone))
+    travel_time_matrix_car["zone_tax"] = 1 * (travel_time_matrix_car.from_id.isin(houses_in_toll_area) | travel_time_matrix_car.to_id.isin(jobs_in_toll_area))
     travel_time_matrix_car["COST_CAR"] = ((travel_time_matrix_car["travel_time"] / 60) * PRICE_TIME * WORKING_DAYS) + ((travel_time_matrix_car.distance_car / 1000) * PRICE_FUEL * WORKING_DAYS) + FIXED_COST_CAR + (tax * WORKING_DAYS * travel_time_matrix_car["zone_tax"])
     travel_time_matrix_transit["COST_PT"] = ((travel_time_matrix_transit["travel_time"] / 60) * PRICE_TIME * WORKING_DAYS) + travel_time_matrix_transit["monthly_cost_transit"]
 
@@ -60,30 +60,38 @@ def compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_
     travel_matrix["transport_cost"] = (travel_matrix["transport_mode"] * travel_matrix["COST_PT"]) + ((1 - travel_matrix["transport_mode"]) * travel_matrix["COST_CAR"])
     #gdf.merge(travel_matrix.loc[travel_matrix.to_id == 0.0, ["from_id", "transport_mode"]], left_on = "ID", right_on = "from_id").plot("transport_mode", legend = True)
     
-    ARRAY_INCOME = pd.DataFrame(ARRAY_INCOME, index = np.sort(np.unique(travel_matrix.to_id)))
-    ARRAY_INCOME.columns = ["income"]
-    travel_matrix = travel_matrix.merge(ARRAY_INCOME, left_on = "to_id", right_index = True)
+    ARRAY_WAGE = pd.DataFrame(ARRAY_WAGE, index = np.sort(np.unique(travel_matrix.to_id)))
+    ARRAY_WAGE.columns = ["income"]
+    travel_matrix = travel_matrix.merge(ARRAY_WAGE, left_on = "to_id", right_index = True)
     
+    #eq2
     travel_matrix["num_proba_center"] = np.exp((travel_matrix["income"] - travel_matrix["transport_cost"]) / 140)
     travel_matrix["proba_center"] = travel_matrix['num_proba_center'] / travel_matrix.groupby('from_id')['num_proba_center'].transform('sum')
-    travel_matrix["transport_mode_save"] = travel_matrix["transport_mode"]
-    travel_matrix["transport_mode"] = travel_matrix["transport_mode"] * travel_matrix["proba_center"]
-    travel_matrix["transport_cost"] = travel_matrix["transport_cost"] * travel_matrix["proba_center"]
+    
+    #reuls
+    travel_matrix["transport_mode_proba_center"] = travel_matrix["transport_mode"] * travel_matrix["proba_center"]
+    travel_matrix["transport_cost_proba_center"] = travel_matrix["transport_cost"] * travel_matrix["proba_center"]
     travel_matrix["wage"] = travel_matrix["income"] * travel_matrix["proba_center"]
 
-    travel_results = travel_matrix.loc[:, ["from_id", "transport_mode", "transport_cost", "wage"]].groupby("from_id").sum()
+    travel_results = travel_matrix.loc[:, ["from_id", "transport_mode_proba_center", "transport_cost_proba_center", "wage"]].groupby("from_id").sum()
+    travel_results.columns = ["transport_mode", "transport_cost", "wage"]
+    travel_results["income_net_of_transport_cost"] = travel_results["wage"] - travel_results["transport_cost"]
+
+
     #gdf.loc[np.isnan(gdf["transport_cost"]), "transport_cost"] = gdf["COST_CAR"]
     #gdf.loc[np.isnan(gdf["transport_mode"]), "transport_mode"] = 0
     #gdf["income_net_of_transport_cost"] = Y - gdf["transport_cost"]
-    gdf = gdf.drop(columns=[col for col in ["from_id", "transport_mode", "transport_cost", "wage"] if col in gdf.columns])
+    gdf = gdf.drop(columns=[col for col in ["from_id", "transport_mode", "transport_cost", "wage", "income_net_of_transport_cost"] if col in gdf.columns])
     gdf = gdf.merge(travel_results, left_on = "ID", right_index = True)
     
     travel_matrix = travel_matrix.merge(gdf.loc[:,["ID", "pop"]], left_on = "from_id", right_on = "ID")
     travel_matrix["employed"] = travel_matrix["pop"] * travel_matrix["proba_center"]
 
-    employed_results = travel_matrix.loc[:, ["to_id", "employed"]].groupby("to_id").sum()
+    workers_per_cluster = travel_matrix.loc[:, ["to_id", "employed"]].groupby("to_id").sum()
+
+    travel_matrix = travel_matrix.drop(columns = ["transport_mode_proba_center", "transport_cost_proba_center"])
     
-    return gdf, employed_results, travel_matrix
+    return gdf, workers_per_cluster, travel_matrix
 
 def compute_error_in_population(u, N, BETA, Y, transport_cost, B, KAPPA, RHO, L, resid_rent = 0, resid_density = 0, resid_size = 0):
     '''
