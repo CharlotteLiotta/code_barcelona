@@ -40,9 +40,9 @@ PROBA_MOVE = 0.2
 INERTIA_OPINION = 0.8 #inertia
 
 #Tax
-tax = 3 #Initial tax level
-RATE_INCREASE_TAX = 0.00 #Rate of increase per year
-OPINION_THRESHOLD = 0.00
+#tax = 3 #Initial tax level
+#RATE_INCREASE_TAX = 0.00 #Rate of increase per year
+#OPINION_THRESHOLD = 0.00
 
 ### IMPORT DATA
 

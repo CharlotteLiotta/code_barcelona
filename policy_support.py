@@ -58,6 +58,18 @@ def import_opinion_parameters_old(path_data):
 
 def import_opinion_parameters(path_data):
 
+    
+    def weighted_median(values, weights):
+        # Sort values and weights by values
+        sorted_idx = np.argsort(values)
+        values, weights = values[sorted_idx], weights[sorted_idx]
+    
+        # Compute cumulative weights
+        cum_weights = np.cumsum(weights) / np.sum(weights)
+    
+        # Find first value where cum_weight >= 0.5
+        return values[cum_weights >= 0.5][0]
+
     df_reg, meta = pyreadstat.read_sav(path_data + '040023 En moviment pel clima 2025_V01 - còpia.sav')
     
     df_reg = gpd.GeoDataFrame(df_reg, geometry = gpd.points_from_xy(df_reg.GEO_X, df_reg.GEO_Y), crs="EPSG:4326")
@@ -99,12 +111,27 @@ def import_opinion_parameters(path_data):
 
     X_scaled = sm.add_constant(X_scaled)
 
+
+
     model_statsmodel = sm.WLS(y_scaled, X_scaled, weights=df_reg['PESAIX']).fit()
     print(model_statsmodel.summary())
 
-    return np.array(model_statsmodel.params), np.nanmedian(y_scaled)
+    #X_scaled["PESAIX"] = df_reg["PESAIX"]
+
+    return np.array(model_statsmodel.params), weighted_median(y_scaled, df_reg["PESAIX"].values) #np.nanmedian(y_scaled)
 
 def import_price_parameters(path_data):
+
+    def weighted_median(values, weights):
+        # Sort values and weights by values
+        sorted_idx = np.argsort(values)
+        values, weights = values[sorted_idx], weights[sorted_idx]
+    
+        # Compute cumulative weights
+        cum_weights = np.cumsum(weights) / np.sum(weights)
+    
+        # Find first value where cum_weight >= 0.5
+        return values[cum_weights >= 0.5][0]
 
     df_reg, meta = pyreadstat.read_sav(path_data + '040023 En moviment pel clima 2025_V01 - còpia.sav')
     
@@ -153,7 +180,7 @@ def import_price_parameters(path_data):
 
     print(np.nanmedian(X_scaled, 0))
 
-    return np.array(model_statsmodel.params), np.nanmedian(y_raw)
+    return np.array(model_statsmodel.params), weighted_median(df_reg["acceptable_price"].values, df_reg["PESAIX"].values) #np.nanmedian(y_scaled) #np.nanmedian(y_raw)
 
 def compute_political_opinion(score_welfare, score_quality_of_life, score_emissions, score_congestion, BETA_OPINION):
     """ Compute public support based on the regression on the survey data """
