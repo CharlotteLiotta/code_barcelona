@@ -77,10 +77,18 @@ travel_time_matrix_transit = travel_time_matrix_transit.merge(gdf[['ID', 'monthl
 
 ### POLICY SUPPORT
 
-BETA_OPINION = import_opinion_parameters(path_data)
+BETA_OPINION, INITIAL_OPINION = import_opinion_parameters(path_data)
+BETA_PRICE, INITIAL_PRICE = import_price_parameters(path_data)
+
+#INITIAL_OPINION = compute_political_opinion(0.5, 0.5, 0.5, 0.5, BETA_OPINION)
+#INITIAL_PRICE = compute_price(0.5, 0.5, 0.5, 0.5, BETA_PRICE)
+
+
 #df_reg[["climate_change", "declared_impacts", "quality_of_life", 'congestion']]
 #-0.03, 0.21, -0.08, 0.25, 0.28
 #BETA_OPINION = np.array([0, 0.1, -0.7, 0.1, 0.1])
+tax = INITIAL_PRICE
+acceptable_price = INITIAL_PRICE
 
 ### INITIAL STATE: YEAR 0
 
@@ -252,7 +260,7 @@ agg = compare_var(gdf, n)
 
 # ABM: translate outputs at the household level
 N = round(np.nansum(gdf["pop"]) * SCALE_ABM)
-support = 0.417 * np.ones(N)
+support = INITIAL_OPINION * np.ones(N) #0.417
 
 
 indiv_loc_matrix = compute_indiv_loc_matrix(N, len(gdf), n.to_numpy()* SCALE_ABM)
@@ -341,7 +349,7 @@ while year < MAX_YEAR:
 
         return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, INTEREST_RATE, gdf["urb_area"], rent_residual, density_residual, size_residual)
 
-    solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 700)
+    solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, np.nanmedian(utility))
 
     if solving_model.fun < 1:
         utility = solving_model.x
@@ -403,6 +411,7 @@ while year < MAX_YEAR:
 
 
     political_opinion = compute_political_opinion(score_welfare, score_qol, score_emissions, score_congestion, BETA_OPINION)
+    price_here = compute_price(score_welfare, score_qol, score_emissions, score_congestion, BETA_PRICE)
     
     save_emissions[year] = emissions
     save_score_emissions[year] = score_emissions
@@ -412,13 +421,15 @@ while year < MAX_YEAR:
 
 
     support = (INERTIA_OPINION * support) + ((1 - INERTIA_OPINION) * political_opinion) # type: ignore
+    acceptable_price = (INERTIA_OPINION * acceptable_price) + ((1 - INERTIA_OPINION) * price_here) # type: ignore
    
     save_median_support[year] = np.nanmedian(support)
     print("support", support)
 
     #Policy update
-    if np.nanmedian(support) > OPINION_THRESHOLD:
-        tax = tax * (1 + RATE_INCREASE_TAX)
+    #if np.nanmedian(support) > OPINION_THRESHOLD:
+    #    tax = tax * (1 + RATE_INCREASE_TAX)
+    tax = np.nanmedian(acceptable_price)
 
     year = year + 1
 

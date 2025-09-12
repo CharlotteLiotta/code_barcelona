@@ -60,7 +60,7 @@ plt.grid(axis='y', linestyle='--', alpha=0.7)
 plt.tight_layout()
 plt.show()
 
-df_reg.rename(columns={'P18': 'acceptable_price'}, inplace=True)
+df_reg.rename(columns={'P17': 'acceptable_price'}, inplace=True)
 df_reg = df_reg.loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 20)]
 
 plt.figure(figsize=(8,5))
@@ -568,10 +568,16 @@ model_statsmodel = sm.WLS(y_scaled, X_scaled, weights=df_reg['PESAIX']).fit()
 print(model_statsmodel.summary())
 
 
+df_reg["log_absolute_loss_eco"] = - df_reg["log_absolute_loss"] * df_reg["ecological_paradigm"]
+df_reg["climate_change_eco"] = - df_reg["climate_change"] * df_reg["ecological_paradigm"]
+df_reg["congestion_eco"] = - df_reg["congestion"] * df_reg["ecological_paradigm"]
+df_reg["quality_of_life_eco"] = - df_reg["quality_of_life"] * df_reg["ecological_paradigm"]
 
-X_raw = df_reg[["log_absolute_loss", "vehicle_ownership_license", "congestion", "quality_of_life", "climate_change"]]
 
-y_raw = df_reg["acceptable_price"].values.reshape(-1, 1)
+df_reg2 = df_reg #.loc[(df_reg.acceptability > 0),:]
+X_raw = (df_reg2[["acceptability"]])
+
+y_raw = ((df_reg2["acceptable_price"].values.reshape(-1, 1)))
 
 #corr_df = pd.DataFrame(np.corrcoef(X_raw.T), index = X_raw.columns, columns = X_raw.columns)
 
@@ -582,7 +588,7 @@ scaler_y = MinMaxScaler()
 y_scaled = scaler_y.fit_transform(y_raw).flatten()
 X_scaled = sm.add_constant(X_scaled)
 
-model_statsmodel = sm.WLS(y_raw, X_scaled, weights=df_reg['PESAIX']).fit()
+model_statsmodel = sm.WLS(y_raw, X_scaled, weights=df_reg2['PESAIX']).fit()
 print(model_statsmodel.summary())
 
 
@@ -602,11 +608,11 @@ print(model_statsmodel.summary())
 
 ### Descriptive statistics
 
-x = df_reg.declared_impacts_frequency
-y = df_reg.acceptability
+x = df_reg.acceptability
+y = df_reg.acceptable_price
 
 # Define custom bins and labels
-bins = [0.5, 3.5, 6.5, 7.5]  
+bins = np.arange(0,11,1)
 labels = ["At least once a week", "Less than once a week", "Never"]
 
 df_reg['bin'] = pd.cut(x, bins=bins, labels=labels)
@@ -628,6 +634,33 @@ ax2.bar(grouped.index, grouped['count'], alpha=0.3, color='gray')
 #ax2.set_ylabel('Number of observations', color='gray')
 
 plt.show()
+
+
+x = df_reg.acceptability
+y = df_reg.acceptable_price
+
+# Define bins
+bins = [-0.5, 0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5]
+df_reg['bin'] = pd.cut(x, bins)
+
+# Compute mean and count per bin
+grouped = df_reg.groupby('bin')[y.name].agg(['mean', 'count'])
+grouped = grouped[grouped['count'] >= 5]
+bin_centers = [interval.mid for interval in grouped.index]
+
+# Line plot of mean
+fig, ax1 = plt.subplots()
+ax1.plot(bin_centers, grouped['mean'], marker='o', color='blue')
+ax1.set_xlabel('Negative experienced impact')
+ax1.set_ylabel('Average Acceptability_10', color='blue')
+
+# Secondary axis for counts
+ax2 = ax1.twinx()
+ax2.bar(bin_centers, grouped['count'], width=(bins[1]-bins[0])*0.8, alpha=0.3, color='gray')
+ax2.set_ylabel('Number of observations', color='gray')
+
+plt.show()
+
 
 
 x = -df_reg.experienced_impact
