@@ -140,8 +140,12 @@ def import_price_parameters(path_data):
     df_reg = df_reg.to_crs(gdf.crs)
     df_reg = gpd.sjoin(df_reg, gdf, predicate="within")
 
-    df_reg.rename(columns={'P18': 'acceptable_price'}, inplace=True)
+    #df_reg.rename(columns={'P18': 'acceptable_price'}, inplace=True)
+    df_reg.rename(columns={'P17': 'acceptable_price'}, inplace=True)
+    
     df_reg = df_reg.loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 15)]
+
+    #df_reg.acceptable_price = df_reg.acceptable_price / 2
 
     df_reg.rename(columns={'P21_3': 'climate_change'}, inplace=True)
     df_reg = df_reg.loc[~np.isnan(df_reg.climate_change) & (df_reg.climate_change < 80)]

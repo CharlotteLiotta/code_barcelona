@@ -1,6 +1,7 @@
 import numpy as np # type: ignore
 import scipy # type: ignore
 import statsmodels.api as sm # type: ignore
+from stargazer.stargazer import Stargazer
 
 from model import *
 
@@ -50,7 +51,7 @@ def compute_cost_car_logit(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, 
     LAMBDA = solving_transport.x[1]
     return gdf, FIXED_COST_CAR, LAMBDA
 
-def compute_cost_car_poly(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data):
+def compute_cost_car_poly(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area):
     """ Calibrate the fixed cost of private car to match the transport modes data """
 
     trans_mode = import_trans_mode(path_data)
@@ -62,7 +63,7 @@ def compute_cost_car_poly(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, P
         LAMBDA = x[1]
         ARRAY_WAGE = x[2:]
 
-        gdf_here, employed_results = compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, tax = 0)
+        gdf_here, employed_results, travel_matrix = compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, jobs_in_toll_area, houses_in_toll_area, tax = 0)
         
         error1 = np.nansum(np.abs(((1 - gdf_here["transport_mode"]) * gdf_here["pop"]) - (gdf_here["share_car"] * gdf_here["pop"])))
         print(f"x = {x}, error_mode_by_tract = {error1}") #Error on transport mode by census tract
@@ -118,6 +119,9 @@ def calibrate_b_kappa(gdf, mask, RHO, option_calib = "housing"):
     X = sm.add_constant(X)  # Adds intercept
     model_statsmodel = sm.OLS(y, X).fit()
     print(model_statsmodel.summary())
+
+    stargazer = Stargazer([model_statsmodel])
+    print(stargazer.render_latex())
 
     B = model_statsmodel.params["log_R"] / (1 + model_statsmodel.params["log_R"])
     KAPPA = np.exp(((1-B) * model_statsmodel.params["const"]) - (B * np.log(B/RHO)))

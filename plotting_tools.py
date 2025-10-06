@@ -1,5 +1,7 @@
 import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
+import matplotlib.colors as mcolors
+from matplotlib.ticker import FuncFormatter
 
 def plot_employment(gdf, employment_centers, var):
     base = gdf.plot(color='lightgrey', edgecolor='white', figsize=(10, 10))
@@ -159,20 +161,197 @@ def compute_weighted_mean_opinions(var, opinion_distance_matrix, N):
 
 def plot_tax_suppport(save_tax, save_median_support):
 
-    fig, ax1 = plt.subplots()
+    from matplotlib.ticker import FormatStrFormatter
+    fig, ax1 = plt.subplots(figsize=(8, 6))  # make figure wider
 
+    # Primary axis: tax
     color = 'tab:red'
-    ax1.set_xlabel('time (year)')
-    ax1.set_ylabel('tax', color=color)
-    ax1.plot(save_tax[1:], color=color)
+    ax1.set_xlabel('Time (year)', fontsize=14)
+    ax1.set_ylabel('Toll per entry (€)', color=color, fontsize=14)
+    ax1.plot(save_tax[1:], color=color, linewidth=1.5)
     ax1.tick_params(axis='y', labelcolor=color)
 
-    ax2 = ax1.twinx()  # instantiate a second Axes that shares the same x-axis
-
+    # Secondary axis: median support
+    ax2 = ax1.twinx()
     color = 'tab:blue'
-    ax2.set_ylabel('median support', color=color)  # we already handled the x-label with ax1
-    ax2.plot(save_median_support[1:], color=color)
+    ax2.set_ylabel('Median acceptability (%)', color=color, fontsize=14)
+    ax2.plot(save_median_support[1:] * 100, color=color, linewidth=2)
     ax2.tick_params(axis='y', labelcolor=color)
 
-    fig.tight_layout()  # otherwise the right y-label is slightly clipped
+    # Format y-axis to show 1 decimal place
+    ax2.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_scores(save_score_emissions, save_score_qol, save_score_congestion, save_score_welfare):
+
+    colors = plt.get_cmap("tab10").colors  
+    plt.figure(figsize=(8, 6))
+
+    # Plot lines (all same style, distinct colors)
+    plt.plot(save_score_emissions[1:]/save_score_emissions[1],
+         label="Emissions", linewidth=2, color=colors[0])
+
+    plt.plot(np.nanmedian(save_score_qol[:,1:], 0)/np.nanmedian(save_score_qol[:,1], 0),
+         label="Quality of life", linewidth=2, color=colors[1])
+
+    plt.plot(np.nanmedian(save_score_congestion[:,1:], 0)/np.nanmedian(save_score_congestion[:,1], 0),
+         label="Congestion", linewidth=2, color=colors[2])
+
+    plt.plot(np.nanmedian(save_score_welfare[:,1:], 0)/np.nanmedian(save_score_welfare[:,1], 0),
+         label="Welfare", linewidth=2, color=colors[3])
+
+    # Labels and title
+    plt.xlabel("Time (years)", fontsize=14)
+    plt.ylabel("Normalized score (base year = 1)", fontsize=14)
+
+    # Legend
+    plt.legend(fontsize=14, loc="best")
+
+
+    # Tight layout
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_spatial_opinions(gdf, values):
+    # --- prepare values ---
+    gdf_proj = gdf.to_crs(epsg=32632).copy()   # keep projection if needed
+    gdf_proj["value"] = values
+
+    # plotting
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
+
+    cmap_name = "cividis"
+    vmin, vmax = gdf_proj["value"].min(), gdf_proj["value"].max()
+
+    gdf_proj.plot(column="value",
+                  cmap=cmap_name,
+                  vmin=vmin, vmax=vmax,
+                  linewidth=0.2, edgecolor="black",
+                  ax=ax)
+
+    ax.set_axis_off()
+
+    # improve rendering
+    for coll in ax.collections:
+        coll.set_antialiased(False)
+
+    # continuous colorbar (no title)
+    sm = plt.cm.ScalarMappable(cmap=cmap_name, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02)
+    ticks = np.linspace(vmin, vmax, 5)
+    cbar.set_ticks(ticks)
+    cbar.ax.set_yticklabels([f"{t:.1f}%" for t in ticks], fontsize=14)  # show 1 decimal + %
+
+    # title
+    ax.set_title("Average opinions (year 19)", fontsize=14)
+
+def plot_change_population(gdf, save_population):
+
+    # --- prepare data ---
+    gdf_proj = gdf.to_crs(epsg=32632).copy()  # keep projection if needed
+    gdf_proj["value"] = (save_population[:,19] - save_population[:,0]) #.astype(int)  # discrete
+
+    print(sum(gdf_proj["value"]))
+    print(sum(np.abs(gdf_proj["value"]))/2)
+    # --- figure ---
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
+
+    # --- discrete diverging colormap ---
+    cmap_name = "RdBu_r"
+    bounds = np.arange(-3.5, 4, 1)               # edges for discrete categories -3..3
+    # plot
+    gdf_proj.plot(column="value",
+                  cmap=cmap_name,
+                  linewidth=0.01,
+                  edgecolor="grey",
+                  ax=ax, legend = True)
+
+    # remove axes
+    ax.set_axis_off()
+
+    cbar = ax.get_figure().axes[-1]
+    cbar.tick_params(labelsize=14)
+
+    # improve rendering for vector output
+    for coll in ax.collections:
+        coll.set_antialiased(False)
+
+    # --- title ---
+    ax.set_title("Changes in population (Year 19 - Year 0)", fontsize=14)
+
+    plt.tight_layout()
+
+    plt.show()
+
+def plot_transport_cost(gdf):
+
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
+
+    # Plot
+    gdf.plot(
+        column="transport_cost",
+        legend=True,
+        ax=ax,
+        cmap="YlOrRd"  # good perceptually uniform palette
+    )
+
+    # Remove axes
+    ax.set_axis_off()
+
+    # Title
+    ax.set_title("Calibrated transport costs", fontsize=14)
+
+    # Adjust legend font size
+    cbar = ax.get_figure().axes[-1]   # legend axis is added at the end
+    cbar.tick_params(labelsize=14)
+    plt.show
+
+def plot_transport_mode(gdf):
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
+
+    # Plot
+    gdf.plot(
+        column="transport_mode",
+        legend=True,
+        ax=ax,
+        cmap="cividis"  # good perceptually uniform palette
+    )
+
+    # Remove axes
+    ax.set_axis_off()
+
+    # Title
+    ax.set_title("Calibrated share of public transport users \n Average: 53%", fontsize=14)
+
+    # Adjust legend font size
+    cbar = ax.get_figure().axes[-1]  # colorbar axis
+    cbar.tick_params(labelsize=14)
+    cbar.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f'{int(y*100)}%'))
+    plt.show()
+
+
+def plot_amenities(gdf):
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
+
+    # Plot
+    gdf.plot(
+        column="amenities",
+        legend=True,
+        ax=ax,
+        cmap="RdYlGn"  # good perceptually uniform palette
+    )
+
+    # Remove axes
+    ax.set_axis_off()
+
+    # Title
+    ax.set_title("Calibrated amenities", fontsize=14)
+
+    # Adjust legend font size
+    cbar = ax.get_figure().axes[-1]  # colorbar axis
+    cbar.tick_params(labelsize=14)
     plt.show()

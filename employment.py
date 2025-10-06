@@ -56,21 +56,42 @@ gdf["employment"] = gdf["SPERSONAS"] * (gdf[347] / gdf["area_comm"])
 gdf = gdf.drop(columns = ["SPERSONAS", "area_comm"])
 gdf["density_employment"] = gdf["employment"] / gdf["area"]
 
+gdf.loc[np.isnan(gdf.density_employment), "density_employment"] = 0
 
 # Create decile bins with readable labels
-gdf['decile'] = pd.qcut(
+bins = [0, 178, 398, 709, 1074, 1573, 2427, 3626, 6038, 11521, 45937]
+
+gdf['decile'] = pd.cut(
     gdf['density_employment'],
-    q=10,
-    precision=1,
-    duplicates='drop'
+    bins=bins,
+    include_lowest=True,   # include the leftmost edge
+    right=True,            # bins are right-closed: (a, b]
+    labels=[f"{bins[i]}–{bins[i+1]}" for i in range(len(bins)-1)]           # gives integer codes 0–9 instead of intervals
 )
 
 # Plot with legend showing decile ranges
 fig, ax = plt.subplots(figsize=(10, 10))
-gdf.plot(column='decile', cmap='OrRd', linewidth=0.2, edgecolor='white', legend=True, ax=ax)
+
+gdf.plot(
+    column='decile',
+    cmap='Reds',
+    linewidth=0.2,
+    edgecolor='black',
+    legend=True,
+    ax=ax,
+    legend_kwds={
+        "fontsize": 14,   # increase legend font size
+        "loc": "lower right"  # position bottom-right
+    },
+    missing_kwds={
+        "color": "lightgrey",      # fill color for missing values
+        "edgecolor": "black",      # optional: keep outline for consistency
+        "label": "Missing values"  # shows up in legend
+    }
+)
 
 plt.axis('off')
-plt.title('Employment Density Deciles', fontsize=14)
+#plt.title('Employment Density Deciles', fontsize=14)
 plt.show()
 
 
@@ -122,7 +143,7 @@ handles = [
 ]
 
 fig, ax = plt.subplots(figsize=(12, 12))
-gdf_here.plot(color=gdf_here['color'], ax=ax, linewidth=0.1, edgecolor='white')
+gdf_here.plot(color=gdf_here['color'], ax=ax, linewidth=0.1, edgecolor='black')
 plt.axis('off')
 plt.title('Clusters (noise in grey)')
 plt.legend(handles=handles, title="Clusters", loc='lower left', fontsize='small', frameon=False)
