@@ -23,6 +23,7 @@ from policy_support import *
 ### IMPORT PARAMETERS
 
 path_data = "../data_barcelona/"
+option_function = "Cobb-Douglas"
 
 #Time
 year = 0
@@ -38,7 +39,7 @@ center = "0801901025"
 #ABM
 SCALE_ABM = 1/100 #Nb of agents in the ABM
 PROBA_MOVE = 0.2
-INERTIA_OPINION = 0.5 #0.8 #inertia
+INERTIA_OPINION = 0.8 #inertia
 
 #Tax
 #tax = 3 #Initial tax level
@@ -56,10 +57,11 @@ gdf = import_rent_and_size(gdf, path_data)
 Y, gdf = import_income(gdf, path_data)
 gdf = import_amenities(gdf, path_data, 0, 0)
 employment_centers = gpd.read_file(path_data + "cluster_employment.shp")
+employment_centers["cluster"] = employment_centers.index
 jobs_in_toll_area, houses_in_toll_area = import_tax_zone(gdf, employment_centers)
 
 #Import transport data
-#import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 0, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
+#import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
 travel_time_matrix_car, travel_time_matrix_transit = load_transport_times_poly(gdf, path_data, center)
 travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers)
 gdf = import_cost_transit(gdf)
@@ -176,25 +178,26 @@ gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1
 #Calibration B and KAPPA
 gdf["land"] = gdf["urb_area"]
 
-mask = ((gdf["rent_m2"] < 22) &(gdf["rent_m2"] > 7)
-        #&(gdf["land"] > 10000) &(gdf["land"] <10000000)
-        #&(1000000 * gdf["pop"] / gdf["land"] > 200)
-        #&(gdf["pop"] > 200)
-        #&(gdf["pop"] < 1500)
-        #&(gdf["size"] < 90)
-        &(~np.isnan(gdf["size"]))
+mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
+        #(gdf["land"] > 10000)&
+        #(gdf["land"] < 1000000)&
+        #(1000000 * gdf["pop"] / gdf["land"] > 7210)&
+        (gdf["pop"] > 484.0)& #5°°
+        #(gdf["pop"] < 1500)&
+        #(gdf["size"] < 120)&
+        (~np.isnan(gdf["size"]))
         &(~np.isnan(gdf["pop"]))
         &((gdf["pop"] > 0))
         #&(~np.isnan(gdf["active_per_hh"]))
         )
 
-B, KAPPA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_calib = "housing")
+B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
 
 # Solve the model
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, INTEREST_RATE, gdf["urb_area"])
+    return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], option_function)
 
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 700)
 
@@ -202,7 +205,7 @@ if solving_model.fun < 1:
     utility = solving_model.x
     R = compute_rents(BETA, gdf["wage"], utility / gdf["amenities"], gdf["transport_cost"])
     q = compute_dwelling_size(BETA, gdf["wage"], gdf["transport_cost"], R)
-    n = compute_population(B, KAPPA, R, INTEREST_RATE, gdf["urb_area"], q)
+    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function)
 else:
     print("Minimization failed!")
 
@@ -242,7 +245,7 @@ plt.show()
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, INTEREST_RATE, gdf["urb_area"], rent_residual, density_residual, size_residual)
+    return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], option_function, rent_residual, density_residual, size_residual)
 
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 700)
 
@@ -250,7 +253,7 @@ if solving_model.fun < 1:
     utility = solving_model.x
     R = compute_rents(BETA, gdf["wage"], utility / gdf["amenities"], gdf["transport_cost"])
     q = compute_dwelling_size(BETA, gdf["wage"], gdf["transport_cost"], R)
-    n = compute_population(B, KAPPA, R, INTEREST_RATE, gdf["urb_area"], q)
+    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function)
     R = R * np.exp(rent_residual)
     q = q * np.exp(size_residual)
     n = n * np.exp(density_residual)
@@ -351,7 +354,7 @@ while year < MAX_YEAR:
     def compute_error_in_population_from_utility(u):
         """ Compute error in population associated to utility u"""
 
-        return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, INTEREST_RATE, gdf["urb_area"], rent_residual, density_residual, size_residual)
+        return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], option_function, rent_residual, density_residual, size_residual)
 
     solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, np.nanmedian(utility))
 
@@ -359,7 +362,7 @@ while year < MAX_YEAR:
         utility = solving_model.x
         R = compute_rents(BETA, gdf["wage"], utility / gdf["amenities"], gdf["transport_cost"])
         q = compute_dwelling_size(BETA, gdf["wage"], gdf["transport_cost"], R)
-        n = compute_population(B, KAPPA, R, INTEREST_RATE, gdf["urb_area"], q)
+        n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function)
         R = R * np.exp(rent_residual)
         q = q * np.exp(size_residual)
         n = n * np.exp(density_residual)
@@ -424,7 +427,8 @@ while year < MAX_YEAR:
     save_score_congestion[:,year] = score_congestion
 
 
-    support = (INERTIA_OPINION * support) + ((1 - INERTIA_OPINION) * political_opinion) # type: ignore
+    #support = (INERTIA_OPINION * support) + ((1 - INERTIA_OPINION) * political_opinion) # type: ignore
+    support = political_opinion
     acceptable_price = (INERTIA_OPINION * acceptable_price) + ((1 - INERTIA_OPINION) * price_here) # type: ignore
    
     save_median_support[year] = np.nanmedian(support)

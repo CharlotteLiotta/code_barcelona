@@ -2,6 +2,12 @@ import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 import matplotlib.colors as mcolors
 from matplotlib.ticker import FuncFormatter
+import matplotlib.patches as mpatches
+import seaborn as sns
+import pandas as pd
+from statsmodels.nonparametric.smoothers_lowess import lowess
+
+from matplotlib.colors import TwoSlopeNorm
 
 def plot_employment(gdf, employment_centers, var):
     base = gdf.plot(color='lightgrey', edgecolor='white', figsize=(10, 10))
@@ -194,13 +200,13 @@ def plot_scores(save_score_emissions, save_score_qol, save_score_congestion, sav
          label="Emissions", linewidth=2, color=colors[0])
 
     plt.plot(np.nanmedian(save_score_qol[:,1:], 0)/np.nanmedian(save_score_qol[:,1], 0),
-         label="Quality of life", linewidth=2, color=colors[1])
+         label="Local pollution", linewidth=2, color=colors[1])
 
     plt.plot(np.nanmedian(save_score_congestion[:,1:], 0)/np.nanmedian(save_score_congestion[:,1], 0),
          label="Congestion", linewidth=2, color=colors[2])
 
     plt.plot(np.nanmedian(save_score_welfare[:,1:], 0)/np.nanmedian(save_score_welfare[:,1], 0),
-         label="Welfare", linewidth=2, color=colors[3])
+         label="Utility", linewidth=2, color=colors[3])
 
     # Labels and title
     plt.xlabel("Time (years)", fontsize=14)
@@ -220,6 +226,12 @@ def plot_spatial_opinions(gdf, values):
     gdf_proj = gdf.to_crs(epsg=32632).copy()   # keep projection if needed
     gdf_proj["value"] = values
 
+    # Dissolve by municipality to get one polygon per municipality
+    muni_gdf = gdf_proj.dissolve(by='NMUN', as_index=False)
+    muni_gdf['centroid'] = muni_gdf.geometry.centroid
+    muni_gdf['x'] = muni_gdf.centroid.x
+    muni_gdf['y'] = muni_gdf.centroid.y
+
     # plotting
     fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
 
@@ -229,7 +241,7 @@ def plot_spatial_opinions(gdf, values):
     gdf_proj.plot(column="value",
                   cmap=cmap_name,
                   vmin=vmin, vmax=vmax,
-                  linewidth=0.2, edgecolor="black",
+                  linewidth=0.2, edgecolor="grey",
                   ax=ax)
 
     ax.set_axis_off()
@@ -238,6 +250,14 @@ def plot_spatial_opinions(gdf, values):
     for coll in ax.collections:
         coll.set_antialiased(False)
 
+    for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(["Badalona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]),:].iterrows():
+        ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold', ha='center', va='center', color='black')
+    
+    
+    city_border = muni_gdf[muni_gdf.ID.str[:5].isin(["08019", "08101", "08194"])]
+    city_border.boundary.plot(ax=ax, color='black', linewidth=2, label = "Toll area")
+    
+
     # continuous colorbar (no title)
     sm = plt.cm.ScalarMappable(cmap=cmap_name, norm=plt.Normalize(vmin=vmin, vmax=vmax))
     sm.set_array([])
@@ -245,7 +265,7 @@ def plot_spatial_opinions(gdf, values):
     ticks = np.linspace(vmin, vmax, 5)
     cbar.set_ticks(ticks)
     cbar.ax.set_yticklabels([f"{t:.1f}%" for t in ticks], fontsize=14)  # show 1 decimal + %
-
+    ax.legend()
     # title
     ax.set_title("Average opinions (year 19)", fontsize=14)
 
@@ -257,18 +277,33 @@ def plot_change_population(gdf, save_population):
 
     print(sum(gdf_proj["value"]))
     print(sum(np.abs(gdf_proj["value"]))/2)
+
+    # Dissolve by municipality to get one polygon per municipality
+    muni_gdf = gdf_proj.dissolve(by='NMUN', as_index=False)
+    muni_gdf['centroid'] = muni_gdf.geometry.centroid
+    muni_gdf['x'] = muni_gdf.centroid.x
+    muni_gdf['y'] = muni_gdf.centroid.y
+
+
     # --- figure ---
     fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
 
     # --- discrete diverging colormap ---
     cmap_name = "RdBu_r"
-    bounds = np.arange(-3.5, 4, 1)               # edges for discrete categories -3..3
+
+    vmin = gdf_proj["value"].min()
+    vmax = gdf_proj["value"].max()
+    absmax = max(abs(vmin), abs(vmax))
+
+    # symmetric normalization around 0
+    norm = TwoSlopeNorm(vmin=-absmax, vcenter=0, vmax=absmax)
+    #bounds = np.arange(-5, 4, 1)               # edges for discrete categories -3..3
     # plot
     gdf_proj.plot(column="value",
                   cmap=cmap_name,
                   linewidth=0.01,
                   edgecolor="grey",
-                  ax=ax, legend = True)
+                  ax=ax, legend = True, norm = norm)
 
     # remove axes
     ax.set_axis_off()
@@ -280,6 +315,17 @@ def plot_change_population(gdf, save_population):
     for coll in ax.collections:
         coll.set_antialiased(False)
 
+    for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(["Badalona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]),:].iterrows():
+        ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold', ha='center', va='center', color='black')
+    
+    
+    city_border = muni_gdf[muni_gdf.ID.str[:5].isin(["08019", "08101", "08194"])]
+
+    # Overlay the border on top of your map
+    city_border.boundary.plot(ax=ax, color='black', linewidth=2, label = "Toll area")
+    # Add legend entry for city border
+    #city_patch = mpatches.Patch(color='red', label='Toll area')
+    ax.legend()
     # --- title ---
     ax.set_title("Changes in population (Year 19 - Year 0)", fontsize=14)
 
@@ -354,4 +400,54 @@ def plot_amenities(gdf):
     # Adjust legend font size
     cbar = ax.get_figure().axes[-1]  # colorbar axis
     cbar.tick_params(labelsize=14)
+    plt.show()
+
+def plot_calib_housing(gdf_here, fitted):
+    
+    df = gdf_here.copy()
+    df['dens_obs'] = np.exp(df['log_h'])
+    df['dens_fit'] = np.exp(fitted)
+    df = df.sort_values('distance_center')
+
+    # --- Bin distances to compute quartiles ---
+    nbins = 40
+    df['bin'] = pd.qcut(df['distance_center'], nbins, duplicates='drop')
+
+    quartiles = df.groupby('bin').agg(
+        dist_median=('distance_center','median'),
+        q25_obs=('dens_obs', lambda x: np.percentile(x,25)),
+        q75_obs=('dens_obs', lambda x: np.percentile(x,75)),
+        q25_fit=('dens_fit', lambda x: np.percentile(x,25)),
+        q75_fit=('dens_fit', lambda x: np.percentile(x,75))
+        ).reset_index()
+
+    
+    # --- Smooth central trend (optional LOESS) ---
+    loess_obs = lowess(df['dens_obs'], df['distance_center'], frac=0.3)
+    loess_fit = lowess(df['dens_fit'], df['distance_center'], frac=0.3)
+
+    # --- Plot ---
+    plt.figure(figsize=(6,8))
+
+    # Scatter points
+    plt.scatter(df['distance_center'], df['dens_obs'], s=2, alpha=0.3, color='steelblue', label='Observed')
+    plt.scatter(df['distance_center'], df['dens_fit'], s=2, alpha=0.3, color='darkorange', label='Fitted')
+
+    # Interquartile shading
+    plt.fill_between(quartiles['dist_median'],
+                        quartiles['q25_obs'], quartiles['q75_obs'],
+                        color='steelblue', alpha=0.2, label='Interquartile range (data)')
+    plt.fill_between(quartiles['dist_median'],
+                        quartiles['q25_fit'], quartiles['q75_fit'],
+                        color='darkorange', alpha=0.2, label='Interquartile range (fitted)')
+
+    # Central smooth trends
+    plt.plot(loess_obs[:,0], loess_obs[:,1], color='steelblue', lw=2)
+    plt.plot(loess_fit[:,0], loess_fit[:,1], color='darkorange', lw=2)
+
+    # Labels
+    plt.xlabel("Distance to city center (km)")
+    plt.ylabel("Housing density")
+    plt.title("Observed vs fitted housing density")
+    plt.legend()
     plt.show()

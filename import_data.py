@@ -18,7 +18,7 @@ def import_data(path_data, center, option):
         
         #Import population per census tract
         df = pd.read_csv(path_data + '70035.csv', sep = ";", encoding="latin1")
-        df = df.loc[:,["Sections", "Total"]]
+        df = df.loc[:,["Sections", "Total", "Municipalities"]]
         df = df.dropna(subset=["Sections"])
         df["CUSEC"] = df["Sections"].str[:10]
 
@@ -42,7 +42,7 @@ def import_data(path_data, center, option):
         gdf.CUSEC = gdf.CUSEC.astype(str)
         city_center = gdf.loc[gdf.CUSEC == center,:].centroid
         gdf["distance_center"] = gdf.centroid.distance(city_center.iloc[0], align = False) / 1000
-        gdf = gdf.loc[:,["CUSEC", "geometry", "Shape_Area", "Total", "distance_center"]]
+        gdf = gdf.loc[:,["CUSEC", "geometry", "Shape_Area", "Total", "distance_center", "NMUN"]]
         
     elif option == "DISTRICT":
 
@@ -63,7 +63,7 @@ def import_data(path_data, center, option):
         gdf["distance_center"] = gdf.centroid.distance(city_center.iloc[0], align = False) / 1000
         gdf = gdf.loc[:,["nom_districte", "geometry", "area", "Població", "distance_center"]]
 
-    gdf.columns = ["ID", "geometry", "area", "pop", "distance_center"]
+    gdf.columns = ["ID", "geometry", "area", "pop", "distance_center", "NMUN"]
     gdf["area"] = gdf["area"] / 1000000
     gdf["density"] = gdf["pop"] / gdf["area"]
     gdf.ID = gdf.ID.astype(str)

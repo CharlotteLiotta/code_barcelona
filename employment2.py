@@ -100,26 +100,19 @@ plt.axis('off')
 plt.show()
 
 
-### Clusters
+### Find CBD
 
-## Find CBD
-
-# Compute centroids of each tract
 gdf["centroid"] = gdf.geometry.centroid
 gdf["x"] = gdf.centroid.x
 gdf["y"] = gdf.centroid.y
-
 gdf["employment"].loc[np.isnan(gdf["employment"])] = 0
-
-# Employment-weighted barycenter
 x_cbd = np.average(gdf["x"], weights=gdf["employment"])
 y_cbd = np.average(gdf["y"], weights=gdf["employment"])
 CBD = Point(x_cbd, y_cbd)
-
 print(f"CBD coordinates: ({x_cbd:.3f}, {y_cbd:.3f})")
 
-# Compute distance (in projected units, e.g. meters)
 gdf["dist_cbd"] = gdf.centroid.distance(CBD)
+gdf.plot("dist_cbd")
 
 ## McMillen method
 
@@ -132,22 +125,22 @@ gdf["ln_density"] = np.log(gdf["density"] + 1)
 gdf["dist_km"] = gdf["dist_cbd"] / 1000
 
 # distance in km, ln_density computed as before
-smoothed = lowess(gdf["ln_density"], gdf["dist_km"], frac=0.3)  # frac controls smoothing
-gdf["ln_density_fit"] = smoothed[:, 1]
+#smoothed = lowess(gdf["density"], gdf["dist_km"], frac=0.4)  # frac controls smoothing
+#gdf["density_fit"] = smoothed[:, 1]
 
 # residuals
-gdf["residual"] = gdf["ln_density"] - gdf["ln_density_fit"]
+#gdf["residual"] = gdf["density"] - gdf["density_fit"]
 
 # Regression: ln(density) = α + β * distance + ε
-#X = sm.add_constant(gdf["dist_km"].loc[gdf["employment"]>0])
-#model = sm.OLS(gdf["ln_density"].loc[gdf["employment"]>0], X).fit()
-#print(model.summary())
+X = sm.add_constant(gdf["dist_km"].loc[gdf["employment"]>0])
+model = sm.OLS(gdf["ln_density"].loc[gdf["employment"]>0], X).fit()
+print(model.summary())
 
-#gdf["residual"] = model.resid
+gdf["residual"] = model.resid
 
 # Compute residuals
-#gdf["residual"].loc[gdf["employment"]>0] = model.resid
-#gdf["residual"].loc[gdf["employment"] == 0] = 0
+gdf["residual"].loc[gdf["employment"]>0] = model.resid
+gdf["residual"].loc[gdf["employment"] == 0] = 0
 
 
 # Spatial weights (Queen contiguity)
@@ -171,11 +164,6 @@ plt.legend()
 plt.title("Identified Employment Subcenters (McMillen, 2001)")
 plt.show()
 
-
-
-
-
-
 candidate_centers = gdf[gdf["subcenter"]].copy()
 
 for idx, row in candidate_centers.iterrows():
@@ -191,16 +179,10 @@ X_candidates = sm.add_constant(X_candidates)
 model = OLS(gdf["residual"], X_candidates).fit()
 print(model.summary())
 
-
-
-
 # 5. Select significant candidates (p < 0.05)
 significant_idx = [candidate_centers.index[i//2]  # each candidate has two columns
                    for i, p in enumerate(model.pvalues[1:]) if p < 0.05]
 true_subcenters = candidate_centers.loc[significant_idx]
-
-
-
 
 # Plot the city tracts (optional: color by employment density)
 fig, ax = plt.subplots(figsize=(12, 12))
@@ -218,25 +200,14 @@ plt.show()
 
 
 
-
-
-
-
-
-
 # Dissolve adjacent or close subcenter tracts
 
 gdf["subcenter"] = gdf.ID.isin(list(true_subcenters.ID))
 
 sub = gdf[gdf["subcenter"]].copy()
-sub["geometry"] = sub.buffer(250)  # 1.5 km merge buffer (adjust sensitivity)
-merged = sub.dissolve().explode(index_parts=True).buffer(-250)  # remove buffer
+sub["geometry"] = sub.buffer(0)  # 1.5 km merge buffer (adjust sensitivity)
+merged = sub.dissolve().explode(index_parts=True).buffer(0)  # remove buffer
 merged = gpd.GeoDataFrame(geometry=merged, crs=gdf.crs).reset_index(drop=True)
-
-
-
-
-
 
 # Compute employment within merged subcenters
 def jobs_in_poly(poly):
@@ -245,7 +216,7 @@ def jobs_in_poly(poly):
 merged["jobs"] = merged.geometry.apply(jobs_in_poly)
 
 # 1 km buffer around each subcenter
-merged["buffered_geom"] = merged.geometry.buffer(250)
+merged["buffered_geom"] = merged.geometry.buffer(100)
 
 def buffered_jobs(poly):
     return gdf[gdf.centroid.within(poly)]["employment"].sum()
@@ -256,15 +227,6 @@ total_jobs = gdf["employment"].sum()
 merged["share_total"] = merged["jobs_buffered"] / total_jobs
 print(merged[["jobs_buffered", "share_total"]])
 print(f"Total share of jobs in subcenters: {merged['share_total'].sum():.2%}")
-
-
-
-
-
-
-
-
-
 
 
 
@@ -312,48 +274,6 @@ print(f"Sum of shares: {allocation['share_total'].sum():.2%}")  # should be 100%
 
 
 
-
-# Make a categorical color map for centers
-num_centers = gdf["center_id"].nunique()
-cmap = plt.get_cmap("tab20", num_centers)  # up to 20 distinct colors
-color_dict = {cid: cmap(i) for i, cid in enumerate(gdf["center_id"].unique())}
-gdf["color"] = gdf["center_id"].map(color_dict)
-fig, ax = plt.subplots(figsize=(12, 12))
-
-# Plot each tract with color corresponding to its center
-gdf.plot(ax=ax, color=gdf["color"], linewidth=0.2, edgecolor="grey", alpha=0.7)
-
-# Plot CBD as a star
-cbd_row = gdf[gdf["center_id"] == -1].geometry.centroid.iloc[0]
-ax.scatter(cbd_row.x, cbd_row.y, color="black", marker="*", s=250, label="CBD")
-# Compute center centroids and sizes
-centers["centroid"] = centers.geometry.centroid
-centers["x"] = centers.centroid.x
-centers["y"] = centers.centroid.y
-
-# Scale marker size by total jobs per center
-total_jobs = gdf["employment"].sum()
-centers["marker_size"] = centers["jobs_buffered"] / total_jobs * 5000  # adjust constant
-
-# Plot
-ax.scatter(centers["x"], centers["y"],
-           s=centers["marker_size"],
-           color="blue",
-           alpha=0.6,
-           edgecolor="white",
-           linewidth=0.5,
-           label="Centers (size ∝ jobs)")
-ax.set_title("Employment Basins and Centers", fontsize=16, fontweight="bold")
-ax.set_xlabel("Easting")
-ax.set_ylabel("Northing")
-ax.legend()
-ax.set_aspect("equal")
-plt.tight_layout()
-plt.show()
-
-
-
-
 allocation_plot = allocation.merge(centers.loc[:,["geometry", "center_id"]], on = "center_id")
 allocation_plot["total"] = allocation_plot["share_total"] * sum(gdf["employment"])
 
@@ -380,9 +300,24 @@ allocation_plot.plot(
     label='Cluster Centroids'
 )
 
+# --- Add annotation for each center_id ---
+for _, row in allocation_plot.iterrows():
+    x, y = row.geometry.x, row.geometry.y
+    ax.text(
+        x + 100, y + 100,               # small offset in map units
+        str(row["center_id"]),
+        fontsize=10,
+        color='black',
+        ha='left',
+        va='bottom',
+        path_effects=[]  # optionally: [patheffects.withStroke(linewidth=2, foreground="white")]
+    )
+
 plt.axis('off')
 plt.title("Employment subcenters sized by job count")
 plt.show()
+
+
 
 
 
@@ -393,6 +328,7 @@ total_jobs_city = total_jobs_city.rename(columns={"total": "jobs_in_centers"})
 
 # Spatial join: assign each center to the city it is located in
 centers_in_city = gpd.sjoin(allocation_plot, gdf[["code_city", "geometry"]], how="left", predicate="within")
+
 
 # Aggregate jobs per city
 jobs_centers_city = centers_in_city.groupby("code_city")["total"].sum().reset_index()
@@ -405,11 +341,7 @@ comparison = total_jobs_city.merge(jobs_centers_city, on="code_city", how="left"
 print(comparison)
 
 allocation_plot["employment_cluster"] = allocation_plot["total"] * np.nansum(gdf["pop"]) / np.nansum(allocation_plot["total"])
-allocation_plot.loc[:,["geometry", "employment_cluster"]].to_file(path_data + "cluster_employment.shp")
 
-
-### resclae by populattion (total 1424787)
-# save as shp, columns geometry and employment_cluster, name cluster_employment.shp 
 
 
 # Assume `comparison` DataFrame from previous step
