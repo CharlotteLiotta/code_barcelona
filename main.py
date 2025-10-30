@@ -492,6 +492,11 @@ plt.legend()
 plt.show()
 
 
+moving = 0
+
+for i in range(19):
+    print(i)
+    moving = moving + np.nansum(np.abs(save_population[:, i+1] - save_population[:, i]))/2
 
 
 # Example data
