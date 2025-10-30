@@ -9,11 +9,12 @@ from copy import deepcopy
 from scipy.sparse import csr_matrix # type: ignore
 import jpype # type: ignore
 import os
-os.environ["R5_JAR"] = "C:/Users/1738037/AppData/Local/miniforge3/envs/r5py/Lib/site-packages/r5py/data/r5-v6.8-all.jar"
-jpype.startJVM(classpath=[os.environ["R5_JAR"]])
+#os.environ["R5_JAR"] = "C:/Users/1738037/AppData/Local/miniforge3/envs/r5py/Lib/site-packages/r5py/data/r5-v6.8-all.jar"
+#jpype.startJVM(classpath=[os.environ["R5_JAR"]])
 import datetime
 import warnings
 import pickle
+from stargazer.stargazer import Stargazer
 
 from functions import *
 from import_data import * # type: ignore
@@ -48,29 +49,111 @@ plot_with_missing(gdf, gdf["avg_acceptability"])
 df_reg = gpd.sjoin(df, gdf, predicate="within")
 
 # 0- ACCEPTABILITY
+df_reg.rename(columns={'P15': 'acceptability_new'}, inplace=True)
+#df_reg = df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97)]
+#plt.hist(df_reg.acceptability_new)
+
+
+# Count frequency of each response
+#counts = df_reg['acceptability_new'].value_counts().sort_index()
+counts = df_reg.groupby("acceptability_new")["PESAIX"].sum()
+
+# Labels and sizes
+labels = ["In favor", "Against", "Depends on \n implementation", "      Don't know"]
+sizes = counts.values
+sizes[3] = sizes[4] + sizes[3]
+sizes = sizes[0:4]
+
+# Colors (optional: use a colormap for consistent shading)
+cmap = plt.get_cmap('Greys')
+colors = list(cmap(np.linspace(0.45, 0.85, 4)))
+# Swap in a bright blue for the Lacrosse color.
+colors[0] = 'dodgerblue'
+
+fig, ax = plt.subplots(figsize=(6, 6))
+
+# Pie chart
+wedges, texts, autotexts = ax.pie(
+    sizes,
+    labels=labels,
+    autopct='%1.1f%%',
+    startangle=90,
+    pctdistance=0.8,    # push percentages inward
+    labeldistance=1.1,  # push labels outward,
+    counterclock=False,
+    colors=colors,
+    wedgeprops={'edgecolor': 'white', 'linewidth': 0.8}
+)
+
+# Style labels and percentages
+plt.setp(texts, fontsize=14)
+plt.setp(autotexts, fontsize=14, color='white', weight='bold')
+texts[3].set_position((0.2, 1.2))  # (x, y) in axes coordinates
+# Ensure it's a circle
+ax.axis('equal')
+
+
+plt.tight_layout()
+plt.show()
+
+
+
 df_reg.rename(columns={'P22_4': 'acceptability'}, inplace=True)
 df_reg = df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97)]
 
-plt.figure(figsize=(8,5))
-plt.hist(df_reg['acceptability'], color = '#1f77b4', alpha=0.8)  # bins 0-10
-plt.xlabel('Acceptability')
-plt.ylabel('Number of Respondents')
-plt.xticks(range(0,11))  # show ticks from 0 to 10
-plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.figure(figsize=(8, 5))
+
+# Define bins for discrete values 0–10 (11 bins)
+bins = np.arange(-0.5, 11.5, 1)  
+
+plt.hist(
+    df_reg['acceptability'],
+    weights=(df_reg["PESAIX"] / df_reg["PESAIX"].sum()) * 100,
+    bins=bins,
+    color='#1f77b4',
+    alpha=0.85,
+    edgecolor='black'  # clearer bar separation
+)
+
+# Axis labels and style
+plt.xlabel('Acceptability (0-10 scale)', fontsize=14)
+plt.ylabel('Respondents (%)', fontsize=14)
+
+# Ensure ticks line up with integer values
+plt.xticks(range(0, 11), fontsize=12)
+plt.yticks(fontsize=12)
+
+# Gridlines only on y-axis for readability
+plt.grid(axis='y', linestyle='--', alpha=0.6)
+
+# Tight layout for clean spacing
 plt.tight_layout()
+
 plt.show()
 
-df_reg.rename(columns={'P18': 'acceptable_price'}, inplace=True)
-df_reg = df_reg.loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 20)]
+df_reg.rename(columns={'P17': 'acceptable_price'}, inplace=True)
+df_reg = df_reg.loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 10.1)]
 
 plt.figure(figsize=(8,5))
-plt.hist(df_reg['acceptable_price'], color = '#1f77b4', alpha=0.8)  # bins 0-10
-plt.xlabel('acceptable_price')
-plt.ylabel('Number of Respondents')
-#plt.xticks(range(0,11))  # show ticks from 0 to 10
-plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.hist(
+    df_reg['acceptable_price'],
+    weights=(df_reg["PESAIX"] / df_reg["PESAIX"].sum()) * 100,
+    color='#1f77b4',
+    alpha=0.85,
+    edgecolor='black'  # clearer bar separation
+)
+plt.xlabel('Acceptable price', fontsize=14)
+plt.ylabel('Respondents (%)', fontsize=14)
+# Ensure ticks line up with integer values
+plt.xticks(range(0, 11), fontsize=12)
+plt.yticks(fontsize=12)
+
+# Gridlines only on y-axis for readability
+plt.grid(axis='y', linestyle='--', alpha=0.6)
+
+# Tight layout for clean spacing
 plt.tight_layout()
-plt.show()
+
 
 # 1- SOCIODEMOGRAPHIC VARIABLES
 
@@ -218,6 +301,31 @@ plt.show()
 df_reg.rename(columns={'P21_3': 'climate_change'}, inplace=True)
 df_reg = df_reg.loc[~np.isnan(df_reg.climate_change) & (df_reg.climate_change < 80)]
 plt.hist(df_reg.climate_change, bins = 11)
+
+plt.figure(figsize=(8,5))
+plt.hist(
+    df_reg['climate_change'],
+    weights=(df_reg["PESAIX"] / df_reg["PESAIX"].sum()) * 100,
+    color='#1f77b4',
+    alpha=0.85,
+    edgecolor='black'  # clearer bar separation
+)
+plt.xlabel('Perceived benefits on climate change', fontsize=14)
+plt.ylabel('Respondents (%)', fontsize=14)
+# Ensure ticks line up with integer values
+plt.xticks(range(0, 11), fontsize=12)
+plt.yticks(fontsize=12)
+
+# Gridlines only on y-axis for readability
+plt.grid(axis='y', linestyle='--', alpha=0.6)
+
+# Tight layout for clean spacing
+plt.tight_layout()
+
+
+
+
+
 bins =  [-0.1, 0.1, 2.1, 4.1, 6.1, 8.1, 10.1]
 df_reg['climate_change_group'] = pd.cut(df_reg['climate_change'], bins=bins, right=False)
 data_to_plot = [df_reg.loc[df_reg['climate_change_group'] == grp, 'acceptability'] for grp in df_reg['climate_change_group'].cat.categories]
@@ -232,6 +340,33 @@ plt.show()
 df_reg.rename(columns={'P21_1': 'congestion'}, inplace=True)
 df_reg = df_reg.loc[~np.isnan(df_reg.congestion) & (df_reg.congestion < 80)]
 plt.hist(df_reg.congestion, bins = 11)
+
+plt.figure(figsize=(8,5))
+plt.hist(
+    df_reg['congestion'],
+    weights=(df_reg["PESAIX"] / df_reg["PESAIX"].sum()) * 100,
+    color='#1f77b4',
+    alpha=0.85,
+    edgecolor='black'  # clearer bar separation
+)
+plt.xlabel('Perceived benefits on congestion', fontsize=14)
+plt.ylabel('Respondents (%)', fontsize=14)
+# Ensure ticks line up with integer values
+plt.xticks(range(0, 11), fontsize=12)
+plt.yticks(fontsize=12)
+
+# Gridlines only on y-axis for readability
+plt.grid(axis='y', linestyle='--', alpha=0.6)
+
+# Tight layout for clean spacing
+plt.tight_layout()
+
+
+
+
+
+
+
 bins =  [-0.1, 0.1, 2.1, 4.1, 6.1, 8.1, 10.1]
 df_reg['congestion_group'] = pd.cut(df_reg['congestion'], bins=bins, right=False)
 data_to_plot = [df_reg.loc[df_reg['congestion_group'] == grp, 'acceptability'] for grp in df_reg['congestion_group'].cat.categories]
@@ -246,6 +381,31 @@ plt.show()
 df_reg.rename(columns={'P21_2': 'quality_of_life'}, inplace=True)
 df_reg = df_reg.loc[~np.isnan(df_reg.quality_of_life) & (df_reg.quality_of_life < 80)]
 plt.hist(df_reg.quality_of_life, bins = 11)
+
+plt.figure(figsize=(8,5))
+plt.hist(
+    df_reg['quality_of_life'],
+    weights=(df_reg["PESAIX"] / df_reg["PESAIX"].sum()) * 100,
+    color='#1f77b4',
+    alpha=0.85,
+    edgecolor='black'  # clearer bar separation
+)
+plt.xlabel('Perceived benefits on quality of life', fontsize=14)
+plt.ylabel('Respondents (%)', fontsize=14)
+# Ensure ticks line up with integer values
+plt.xticks(range(0, 11), fontsize=12)
+plt.yticks(fontsize=12)
+
+# Gridlines only on y-axis for readability
+plt.grid(axis='y', linestyle='--', alpha=0.6)
+
+# Tight layout for clean spacing
+plt.tight_layout()
+
+
+
+
+
 bins =  [-0.1, 0.1, 2.1, 4.1, 6.1, 8.1, 10.1]
 df_reg['quality_of_life_group'] = pd.cut(df_reg['quality_of_life'], bins=bins, right=False)
 data_to_plot = [df_reg.loc[df_reg['quality_of_life_group'] == grp, 'acceptability'] for grp in df_reg['quality_of_life_group'].cat.categories]
@@ -508,27 +668,28 @@ X_raw = df_reg[["experienced_impact", "climate_change", "congestion", "quality_o
 
 #"live_or_work_in_tax_area", "vehicle_ownership_license"
 #"declared_impacts"
-df_reg["log_absolute_loss"] = np.log(-df_reg["income_loss_absolute"])
+df_reg["log_absolute_loss"] = -np.log(-df_reg["income_loss_absolute"])
 df_reg["log_relative_loss"] = np.log(-df_reg["income_loss_relative"])
 
 df_reg["log_absolute_loss_declared_impact"] = df_reg["log_absolute_loss"] * (df_reg["declared_impacts"])
 df_reg["relative_loss_declared_impact"] = df_reg["income_loss_relative"] * df_reg["live_or_work_in_tax_area"]* df_reg["vehicle_ownership_license"]
 df_reg["log_relative_loss_declared_impact"] = df_reg["log_relative_loss"] * (7 - df_reg["declared_impacts_frequency"])
 
-df_reg["log_absolute_loss_eco"] = - df_reg["log_absolute_loss"] * df_reg["ecological_paradigm"]
+df_reg["log_absolute_loss_eco"] = - df_reg["log_absolute_loss"] * df_reg["political_ideology"]
 df_reg["climate_change_eco"] = - df_reg["climate_change"] * df_reg["ecological_paradigm"]
-df_reg["congestion_eco"] = - df_reg["congestion"] * df_reg["ecological_paradigm"]
-df_reg["quality_of_life_eco"] = - df_reg["quality_of_life"] * df_reg["ecological_paradigm"]
+df_reg["congestion_eco"] = - df_reg["congestion"] * df_reg["political_ideology"]
+df_reg["quality_of_life_eco"] = - df_reg["quality_of_life"] * df_reg["climate_change_eco"]
 
-X_raw = df_reg[["log_absolute_loss_declared_impact", "climate_change", "work_in_tax_area_congestion", "live_in_tax_area_qol", "congestion", "quality_of_life", "political_ideology", "institutional_trust", "knowledge", "ecoanxiety", "ecological_paradigm", "age", "man", "education", "children"]]
+X_raw = df_reg[["log_absolute_loss", "climate_change", "congestion", "quality_of_life", "political_ideology", "institutional_trust", "knowledge", "ecoanxiety", "ecological_paradigm", "age", "man", "education", "children"]]
 
 X_raw = df_reg[["log_absolute_loss_declared_impact", "climate_change", "congestion", "quality_of_life"]]
 
 
-X_raw = df_reg[["log_absolute_loss", "climate_change", "congestion", "quality_of_life", "ecological_paradigm", "log_absolute_loss_eco", "climate_change_eco", "congestion_eco", "quality_of_life_eco"]]
+X_raw = df_reg[["log_absolute_loss", "climate_change", "congestion", "quality_of_life"]]
 
+X_raw = df_reg[["log_absolute_loss", "climate_change", "congestion", "quality_of_life", "knowledge", "climate_change_eco", "quality_of_life_eco"]]
 
-y_raw = df_reg["acceptability"].values.reshape(-1, 1)
+y_raw = df_reg["acceptable_price"].values.reshape(-1, 1)
 
 #corr_df = pd.DataFrame(np.corrcoef(X_raw.T), index = X_raw.columns, columns = X_raw.columns)
 
@@ -537,11 +698,11 @@ X_scaled = scaler_X.fit_transform(X_raw)
 X_scaled = pd.DataFrame(X_scaled, columns=X_raw.columns)
 scaler_y = MinMaxScaler()
 y_scaled = scaler_y.fit_transform(y_raw).flatten()
-#X_scaled = sm.add_constant(X_scaled)
+X_scaled = sm.add_constant(X_scaled)
 
 X_raw = sm.add_constant(X_raw)
 
-model_statsmodel = sm.WLS(y_scaled, X_scaled, weights=df_reg['PESAIX']).fit()
+model_statsmodel = sm.WLS(y_raw, X_scaled, weights=df_reg['PESAIX']).fit()
 #model_statsmodel = sm.WLS(y_raw, X_raw, weights=df_reg['PESAIX']).fit()
 
 print(model_statsmodel.summary())
@@ -568,10 +729,16 @@ model_statsmodel = sm.WLS(y_scaled, X_scaled, weights=df_reg['PESAIX']).fit()
 print(model_statsmodel.summary())
 
 
+df_reg["log_absolute_loss_eco"] = - df_reg["log_absolute_loss"] * df_reg["ecological_paradigm"]
+df_reg["climate_change_eco"] = - df_reg["climate_change"] * df_reg["ecological_paradigm"]
+df_reg["congestion_eco"] = - df_reg["congestion"] * df_reg["ecological_paradigm"]
+df_reg["quality_of_life_eco"] = - df_reg["quality_of_life"] * df_reg["ecological_paradigm"]
 
-X_raw = df_reg[["log_absolute_loss", "vehicle_ownership_license", "congestion", "quality_of_life", "climate_change"]]
 
-y_raw = df_reg["acceptable_price"].values.reshape(-1, 1)
+df_reg2 = df_reg #.loc[(df_reg.acceptability > 0),:]
+X_raw = (df_reg2[["log_absolute_loss", "congestion", "quality_of_life", "climate_change"]])
+
+y_raw = ((df_reg2["acceptable_price"].values.reshape(-1, 1)))
 
 #corr_df = pd.DataFrame(np.corrcoef(X_raw.T), index = X_raw.columns, columns = X_raw.columns)
 
@@ -582,8 +749,11 @@ scaler_y = MinMaxScaler()
 y_scaled = scaler_y.fit_transform(y_raw).flatten()
 X_scaled = sm.add_constant(X_scaled)
 
-model_statsmodel = sm.WLS(y_raw, X_scaled, weights=df_reg['PESAIX']).fit()
+model_statsmodel = sm.WLS(y_raw, X_scaled, weights=df_reg2['PESAIX']).fit()
 print(model_statsmodel.summary())
+
+
+
 
 
 
@@ -602,39 +772,104 @@ print(model_statsmodel.summary())
 
 ### Descriptive statistics
 
+
+
 x = df_reg.declared_impacts_frequency
-y = df_reg.acceptability
+y = df_reg.acceptable_price
+w = df_reg.PESAIX   # survey weights
 
 # Define custom bins and labels
 bins = [0.5, 3.5, 6.5, 7.5]  
-labels = ["At least once a week", "Less than once a week", "Never"]
-
+labels = ["> once a week", "< once a week", "Never"]
 df_reg['bin'] = pd.cut(x, bins=bins, labels=labels)
 
-# Compute mean and count per bin
-grouped = df_reg.groupby('bin')[y.name].agg(['mean', 'count'])
-grouped = grouped[grouped['count'] >= 5]
+# Weighted mean function
+def weighted_mean(series, weights):
+    return np.average(series, weights=weights)
 
-# Plot
+# Group by bin and calculate weighted stats
+grouped = (
+    df_reg.groupby('bin')
+    .apply(lambda g: pd.Series({
+        "mean": weighted_mean(g[y.name], g[w.name]),
+        "share": g[w.name].sum() / w.sum() * 100  # percentage of population
+    }))
+)
+
+# Optional: drop bins with negligible share
+grouped = grouped[grouped['share'] >= 1]
+
+# --- Plot ---
 fig, ax1 = plt.subplots()
 
+# Line: weighted mean acceptable price
 ax1.plot(grouped.index, grouped['mean'], marker='o', color='blue')
-ax1.set_xlabel('Frequency of private vehicle use in the zone')
-ax1.set_ylabel('Average Acceptability', color='blue')
+ax1.set_xlabel('Frequency of private vehicle use in the zone', fontsize=14)
+ax1.set_ylabel('Acceptable toll (€)', fontsize=14, color='blue')
+ax1.tick_params(axis='both', labelsize=12)
+ax1.tick_params(axis='y', labelcolor='blue')
 
-# Secondary axis for counts
+# Bars: share of respondents
 ax2 = ax1.twinx()
-ax2.bar(grouped.index, grouped['count'], alpha=0.3, color='gray')
-#ax2.set_ylabel('Number of observations', color='gray')
+ax2.bar(grouped.index, grouped['share'], alpha=0.3, color='gray')
+ax2.tick_params(axis='y', labelsize=12, labelcolor='black')
+ax2.set_ylabel('Share of respondents (%)', color='black', fontsize=14)
 
 plt.show()
 
 
-x = -df_reg.experienced_impact
+
+x = df_reg.declared_impacts_frequency
 y = df_reg.acceptability
+w = df_reg.PESAIX   # survey weights
+
+# Define custom bins and labels
+bins = [0.5, 3.5, 6.5, 7.5]  
+labels = ["> once a week", "< once a week", "Never"]
+df_reg['bin'] = pd.cut(x, bins=bins, labels=labels)
+
+# Weighted mean function
+def weighted_mean(series, weights):
+    return np.average(series, weights=weights)
+
+# Group by bin and calculate weighted stats
+grouped = (
+    df_reg.groupby('bin')
+    .apply(lambda g: pd.Series({
+        "mean": weighted_mean(g[y.name], g[w.name]),
+        "share": g[w.name].sum() / w.sum() * 100  # percentage of population
+    }))
+)
+
+# Optional: drop bins with negligible share
+grouped = grouped[grouped['share'] >= 1]
+
+# --- Plot ---
+fig, ax1 = plt.subplots()
+
+# Line: weighted mean acceptable price
+ax1.plot(grouped.index, grouped['mean'], marker='o', color='blue')
+ax1.set_xlabel('Frequency of private vehicle use in the zone', fontsize=14)
+ax1.set_ylabel('Average acceptability', fontsize=14, color='blue')
+ax1.tick_params(axis='both', labelsize=12)
+ax1.tick_params(axis='y', labelcolor='blue')
+
+# Bars: share of respondents
+ax2 = ax1.twinx()
+ax2.bar(grouped.index, grouped['share'], alpha=0.3, color='gray')
+ax2.tick_params(axis='y', labelsize=12, labelcolor='black')
+ax2.set_ylabel('Share of respondents (%)', color='black', fontsize=14)
+
+plt.show()
+
+
+
+
+x = df_reg.acceptability
+y = df_reg.acceptable_price
 
 # Define bins
-bins = np.linspace(x.min(), x.max(), 15)
+bins = [-0.5, 0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5]
 df_reg['bin'] = pd.cut(x, bins)
 
 # Compute mean and count per bin
@@ -654,6 +889,63 @@ ax2.bar(bin_centers, grouped['count'], width=(bins[1]-bins[0])*0.8, alpha=0.3, c
 ax2.set_ylabel('Number of observations', color='gray')
 
 plt.show()
+
+
+
+x = -df_reg.log_absolute_loss
+y = df_reg.acceptable_price
+w = df_reg.PESAIX   # survey weights
+
+# Define bins
+bins = np.linspace(x.min(), x.max(), 10)
+df_reg['bin'] = pd.cut(x, bins)
+
+# Weighted mean function
+def weighted_mean(series, weights):
+    return np.average(series, weights=weights)
+
+# Group by bin and calculate weighted stats
+grouped = (
+    df_reg.groupby('bin')
+    .apply(lambda g: pd.Series({
+        "mean": weighted_mean(g[y.name], g[w.name]),
+        "share": g[w.name].sum() / w.sum() * 100  # % of total respondents
+    }))
+)
+
+# Drop bins with too few weighted respondents (optional, e.g. <1% share)
+grouped = grouped[grouped['share'] >= 1]
+
+# Get bin centers for plotting
+bin_centers = [interval.mid for interval in grouped.index]
+
+# --- Plot ---
+fig, ax1 = plt.subplots()
+
+# Line plot: weighted mean acceptable toll
+ax1.plot(bin_centers, grouped['mean'], marker='o', color='blue')
+ax1.set_xlabel('Mobility loss due to the toll (log, €)', fontsize=14)
+ax1.set_ylabel('Acceptable toll (€)', fontsize=14, color='blue')
+ax1.tick_params(axis='x', labelsize=12)
+ax1.tick_params(axis='y', labelsize=12, colors='blue')
+
+# Bar plot: share of respondents (%)
+ax2 = ax1.twinx()
+ax2.bar(
+    bin_centers,
+    grouped['share'],
+    width=(bins[1]-bins[0]),  # a bit narrower than bin width
+    alpha=0.3,
+    color='gray',
+    edgecolor='black',
+    align="center"
+)
+ax2.set_ylabel('Share of respondents (%)', color='black', fontsize=14)
+ax2.tick_params(axis='y', labelsize=12, colors='black')
+
+plt.show()
+
+
 
 
 
@@ -682,36 +974,67 @@ ax2.set_ylabel('Number of observations', color='gray')
 
 plt.show()
 
-x = -df_reg.income_loss_absolute
+
+x = -df_reg.log_absolute_loss
 y = df_reg.acceptability
+w = df_reg.PESAIX   # survey weights
 
 # Define bins
-bins = np.linspace(x.min(), x.max(), 15)
+bins = np.linspace(x.min(), x.max(), 10)
 df_reg['bin'] = pd.cut(x, bins)
 
-# Compute mean and count per bin
-grouped = df_reg.groupby('bin')[y.name].agg(['mean', 'count'])
-grouped = grouped[grouped['count'] >= 5]
+# Weighted mean function
+def weighted_mean(series, weights):
+    return np.average(series, weights=weights)
+
+# Group by bin and calculate weighted stats
+grouped = (
+    df_reg.groupby('bin')
+    .apply(lambda g: pd.Series({
+        "mean": weighted_mean(g[y.name], g[w.name]),
+        "share": g[w.name].sum() / w.sum() * 100  # percentage
+    }))
+)
+
+# Optional: drop bins with very small shares
+grouped = grouped[grouped['share'] >= 1]
+
+# Get bin centers for plotting
 bin_centers = [interval.mid for interval in grouped.index]
 
-# Line plot of mean
+# --- Plot ---
 fig, ax1 = plt.subplots()
-ax1.plot(bin_centers, grouped['mean'], marker='o', color='blue')
-ax1.set_xlabel('Negative experienced impact')
-ax1.set_ylabel('Average Acceptability_10', color='blue')
 
-# Secondary axis for counts
+# Line: weighted mean acceptability
+ax1.plot(bin_centers, grouped['mean'], marker='o', color='blue')
+ax1.set_xlabel('Mobility loss due to the toll (log, €)', fontsize=14)
+ax1.set_ylabel('Average acceptability', fontsize=14, color='blue')
+ax1.tick_params(axis='x', labelsize=12)
+ax1.tick_params(axis='y', labelsize=12, colors='blue')
+
+# Bars: share of respondents (%)
 ax2 = ax1.twinx()
-ax2.bar(bin_centers, grouped['count'], width=(bins[1]-bins[0])*0.8, alpha=0.3, color='gray')
-ax2.set_ylabel('Number of observations', color='gray')
+ax2.bar(
+    bin_centers,
+    grouped['share'],
+    width=(bins[1]-bins[0]),
+    alpha=0.3,
+    color='gray',
+    edgecolor='black',
+    align="center"
+)
+ax2.set_ylabel('Share of respondents (%)', color='black', fontsize=14)
+ax2.tick_params(axis='y', labelsize=12, colors='black')
 
 plt.show()
+
+
 
 x = df_reg.log_absolute_loss
-y = df_reg.acceptability
+y = df_reg.acceptable_price
 
 # Define bins
-bins = np.linspace(x.min(), x.max(), 15)
+bins = np.linspace(x.min(), x.max(), 10)
 df_reg['bin'] = pd.cut(x, bins)
 
 # Compute mean and count per bin
@@ -732,3 +1055,121 @@ ax2.set_ylabel('Number of observations', color='gray')
 
 plt.show()
 
+
+
+
+
+
+
+
+
+############### clean tables
+
+df_reg, meta = pyreadstat.read_sav(path_data + '040023 En moviment pel clima 2025_V01 - còpia.sav')
+    
+df_reg = gpd.GeoDataFrame(df_reg, geometry = gpd.points_from_xy(df_reg.GEO_X, df_reg.GEO_Y), crs="EPSG:4326")
+gdf = gpd.read_file(path_data + "income_loss.geojson")
+df_reg = df_reg.to_crs(gdf.crs)
+df_reg = gpd.sjoin(df_reg, gdf, predicate="within")
+
+df_reg.rename(columns={'P18': 'acceptable_price'}, inplace=True)
+df_reg = df_reg.loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 15)]
+
+
+df_reg.rename(columns={'P22_4': 'acceptability'}, inplace=True)
+df_reg = df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97)]
+
+df_reg.rename(columns={'P21_3': 'climate_change'}, inplace=True)
+df_reg = df_reg.loc[~np.isnan(df_reg.climate_change) & (df_reg.climate_change < 80)]
+    
+df_reg["log_absolute_loss"] = -np.log(-df_reg["income_loss_absolute"])
+
+df_reg.rename(columns={'P21_2': 'quality_of_life'}, inplace=True)
+df_reg = df_reg.loc[~np.isnan(df_reg.quality_of_life) & (df_reg.quality_of_life < 80)]
+
+df_reg.rename(columns={'P21_1': 'congestion'}, inplace=True)
+df_reg = df_reg.loc[~np.isnan(df_reg.congestion) & (df_reg.congestion < 80)]
+
+df_reg.rename(columns={'P11': 'declared_impacts'}, inplace=True)
+df_reg = df_reg.loc[(df_reg.declared_impacts != 3) & (df_reg.declared_impacts != 4),:]
+df_reg.declared_impacts = (df_reg.declared_impacts == 1) * 1
+plt.hist(df_reg.declared_impacts)
+
+df_reg["impact_loss"] = df_reg["log_absolute_loss"]  * df_reg["declared_impacts"] 
+
+df_reg = df_reg.loc[df_reg.acceptability < 5,:]
+
+#model 1
+
+X_raw = df_reg[["log_absolute_loss", "climate_change", "quality_of_life", 'congestion']]
+acceptability_raw = df_reg["acceptability"].values.reshape(-1, 1)
+
+scaler_X = MinMaxScaler()
+X_scaled = scaler_X.fit_transform(X_raw)
+X_scaled = pd.DataFrame(X_scaled, columns=X_raw.columns)
+
+scaler_y = MinMaxScaler()
+acceptability_scaled = scaler_y.fit_transform(acceptability_raw).flatten()
+
+X_scaled = sm.add_constant(X_scaled)
+
+model1 = sm.WLS(acceptability_scaled, X_scaled, weights=df_reg['PESAIX']).fit()
+print(model1.summary())
+
+#model 2
+
+X_raw = df_reg[["declared_impacts", "climate_change", "quality_of_life", 'congestion']]
+acceptability_raw = df_reg["acceptability"].values.reshape(-1, 1)
+
+scaler_X = MinMaxScaler()
+X_scaled = scaler_X.fit_transform(X_raw)
+X_scaled = pd.DataFrame(X_scaled, columns=X_raw.columns)
+
+scaler_y = MinMaxScaler()
+acceptability_scaled = scaler_y.fit_transform(acceptability_raw).flatten()
+
+X_scaled = sm.add_constant(X_scaled)
+
+model2 = sm.WLS(acceptability_scaled, X_scaled, weights=df_reg['PESAIX']).fit()
+print(model2.summary())
+
+
+#model3
+
+X_raw = df_reg[["log_absolute_loss", "climate_change", "quality_of_life", 'congestion']]
+acceptable_price_raw = (df_reg["acceptable_price"].values.reshape(-1, 1))
+
+scaler_X = MinMaxScaler()
+X_scaled = scaler_X.fit_transform(X_raw)
+X_scaled = pd.DataFrame(X_scaled, columns=X_raw.columns)
+
+X_scaled = sm.add_constant(X_scaled)
+
+model3 = sm.WLS(acceptable_price_raw, X_scaled, weights=df_reg['PESAIX']).fit()
+print(model3.summary())
+
+#model4
+
+X_raw = df_reg[["declared_impacts", "climate_change", "quality_of_life", 'congestion']]
+acceptable_price_raw = (df_reg["acceptable_price"].values.reshape(-1, 1))
+
+scaler_X = MinMaxScaler()
+X_scaled = scaler_X.fit_transform(X_raw)
+X_scaled = pd.DataFrame(X_scaled, columns=X_raw.columns)
+
+X_scaled = sm.add_constant(X_scaled)
+
+model4 = sm.WLS(acceptable_price_raw, X_scaled, weights=df_reg['PESAIX']).fit()
+print(model4.summary())
+
+
+
+
+
+models = [model1, model2, model3, model4]  # your fitted models
+stargazer = Stargazer(models)
+
+# Make LaTeX table
+latex_table = stargazer.render_latex()
+
+print(latex_table)

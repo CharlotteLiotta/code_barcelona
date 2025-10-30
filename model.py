@@ -1,6 +1,8 @@
 import numpy as np # type: ignore
 import pandas as pd
 
+from model import *
+
 def compute_transport_cost(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, tax):
     """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
     
@@ -93,7 +95,7 @@ def compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_
     
     return gdf, workers_per_cluster, travel_matrix
 
-def compute_error_in_population(u, N, BETA, Y, transport_cost, B, KAPPA, RHO, L, resid_rent = 0, resid_density = 0, resid_size = 0):
+def compute_error_in_population(u, N, BETA, Y, transport_cost, B, KAPPA, SIGMA, RHO, L, option_function = "CES", resid_rent = 0, resid_density = 0, resid_size = 0):
     '''
     Compute the difference between the population estimated by the model if 
     the utility is equal to u and the actual population.
@@ -108,7 +110,7 @@ def compute_error_in_population(u, N, BETA, Y, transport_cost, B, KAPPA, RHO, L,
 
     R = compute_rents(BETA, Y, u, transport_cost)
     q = compute_dwelling_size(BETA, Y, transport_cost, R)
-    n = compute_population(B, KAPPA, R, RHO, L, q)
+    n = compute_population(B, KAPPA, SIGMA, R, RHO, L, q, option_function = option_function)
 
     R = R * np.exp(resid_rent)
     q = q * np.exp(resid_size)
@@ -155,7 +157,7 @@ def compute_dwelling_size(beta, Y, T, R):
     q = beta * (Y - T) / R
     return q
 
-def compute_population(b, kappa, R, rho, L, q):
+def compute_population(b, kappa, sigma, R, rho, L, q, option_function = "CES"):
     '''
     Compute the population at each location in the city.
 
@@ -172,5 +174,15 @@ def compute_population(b, kappa, R, rho, L, q):
     '''
 
     a = 1-b
-    n = kappa ** (1/a) * (b * R / rho) ** (b/a) * L / q
+
+    if option_function == "Cobb-Douglas":
+        n = kappa ** (1/a) * (b * R / rho) ** (b/a) * L / q
+
+    elif option_function == "CES": 
+        h = CES_func(R, kappa, a, sigma)
+        n = h * L / q
+
     return n
+
+def CES_func(x, kappa, a, sigma):
+    return kappa * (a ** (-sigma / (1 - sigma))) * ((1 - ((1 - a) ** sigma) * ((kappa * x) ** (sigma - 1))) ** (sigma / (1 - sigma)))

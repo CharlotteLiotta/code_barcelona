@@ -7,15 +7,15 @@ path_data = '../data_barcelona/'
 #Doc here: https://www.ine.es/dyngs/DataLab/en/manual.html?cid=1259945952385
 
 ### QUERY TO RETRIEVE EMPLOYMENT AT WORKPLACE
-#query = {
-#    "idioma": "EN",  # Use supported language
-#    "metrica": ["SPERSONAS"],
-#    "tabla": "viv.ppal",  
-#    "variables": [
-#        "ID_LUGAR_TRAB_N3"   
-#        
-#    ]
-#}
+query = {
+    "idioma": "EN",  # Use supported language
+    "metrica": ["SPERSONAS"],
+    "tabla": "viv.ppal",  
+    "variables": [
+        "ID_LUGAR_TRAB_N3"   
+        
+    ]
+}
 
 ### QUERY TO RETRIEVE ACTIVE PERSONS PER HOUSEHOLD
 #query = {
@@ -30,16 +30,16 @@ path_data = '../data_barcelona/'
 #}
 
 ### QUERY TO RETRIEVE ACTIVE PERSONS PER HOUSEHOLD
-query = {
-    "idioma": "EN",  # Use supported language
-    "metrica": ["SHOGARES"],
-    "tabla": "hog",  # Personal data table
-    "variables": [
-        "ID_RESIDENCIA_N4",  # Municipality level
-        "ID_SUP_VIV",   # Province of workplace
+#query = {
+#    "idioma": "EN",  # Use supported language
+#    "metrica": ["SHOGARES"],
+#    "tabla": "hog",  # Personal data table
+#    "variables": [
+#        "ID_RESIDENCIA_N4",  # Municipality level
+#        "ID_SUP_VIV",   # Province of workplace
         
-    ]
-}
+#    ]
+#}
 
 response = requests.post(url, json=query, headers={
     "Content-Type": "application/json",

@@ -53,7 +53,7 @@ def import_transport_times_poly(gdf, date_here, center, path_data, employment_ce
         
             travel_time_matrix = travel_time_matrix_computer.compute_travel_times()
 
-            np.save(path_data + "travel_time_matrix_poly_" + mode + "_" + str(i) + "_uncongested.npy", travel_time_matrix)
+            np.save(path_data + "travel_time_matrix_poly_" + mode + "_" + str(i), travel_time_matrix)
             print("Travel time " + mode + ": ", round(100 * i/len(points)), "%")
     
         travel_time_matrix_computer = TravelTimeMatrixComputer(
@@ -66,11 +66,11 @@ def import_transport_times_poly(gdf, date_here, center, path_data, employment_ce
         
         travel_time_matrix = travel_time_matrix_computer.compute_travel_times()
 
-        np.save(path_data + "travel_time_matrix_poly_" + mode + "_" + str(len(points)) + "_uncongested.npy", travel_time_matrix)
+        np.save(path_data + "travel_time_matrix_poly_" + mode + "_" + str(len(points)), travel_time_matrix)
         print("Travel time " + mode + " saved")
 
     compute_travel_times("car")
-    #compute_travel_times("transit")
+    compute_travel_times("transit")
 
 def import_transport_times(gdf, date_here, center, path_data, OPTION_SAVE):
     """ Import transport times using GTFS data for transit, OSM data for private cars, and the r5py package """
