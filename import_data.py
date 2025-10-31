@@ -105,14 +105,54 @@ def import_income(gdf, path_data):
     income.net_income = pd.to_numeric(income.net_income, errors= "coerce")
     income.net_income = income.net_income * 1000
 
+    income_ineq = pd.read_csv(path_data + '30901.csv', sep = ";", encoding="latin1")
+    income_low = income_ineq.loc[(income_ineq.Periodo == 2023) & (income_ineq['Distribución de la renta por unidad de consumo'] == 'Población con ingresos por unidad de consumo por debajo 60% de la mediana'),["Secciones", "Total"]]
+    income_low = income_low.dropna(subset=["Secciones"])
+    income_low["ID"] = income_low["Secciones"].str[:10]
+    income_low.columns = ['Secciones', 'share_low_income', 'ID']
+    income_low['share_low_income'] = income_low['share_low_income'].str.replace(',', '.', regex=False)
+    income_low.share_low_income = pd.to_numeric(income_low.share_low_income, errors= "coerce")
+
+    income_high = income_ineq.loc[(income_ineq.Periodo == 2023) & (income_ineq['Distribución de la renta por unidad de consumo'] == 'Población con ingresos por unidad de consumo por encima 140% de la mediana'),["Secciones", "Total"]]
+    income_high = income_high.dropna(subset=["Secciones"])
+    income_high["ID"] = income_high["Secciones"].str[:10]
+    income_high.columns = ['Secciones', 'share_high_income', 'ID']
+    income_high['share_high_income'] = income_high['share_high_income'].str.replace(',', '.', regex=False)
+    income_high.share_high_income = pd.to_numeric(income_high.share_high_income, errors= "coerce")
+
+
+
+
     #Merge with gdf
     gdf = gdf.merge(income.loc[:,['net_income', 'ID']], on = "ID", how = "left")
-    
-    gdf["net_income"] = gdf["net_income"] / gdf["active_per_hh"]
+    gdf = gdf.merge(income_low.loc[:,['share_low_income', 'ID']], on = "ID", how = "left")
+    gdf = gdf.merge(income_high.loc[:,['share_high_income', 'ID']], on = "ID", how = "left")
+
+    gdf["net_income"] = (gdf["net_income"] / gdf["active_per_hh"]) / 12
     #Compute average income
     Y = (np.nansum(gdf.net_income * gdf["pop"]) / np.nansum(gdf["pop"]))
-    
-    return Y / 12, gdf
+    def weighted_median(values, weights):
+        mask = ~pd.isna(values) & ~pd.isna(weights)
+        values = np.asarray(values[mask])
+        weights = np.asarray(weights[mask])
+
+        # Sort by value
+        sorted_idx = np.argsort(values)
+        values_sorted = values[sorted_idx]
+        weights_sorted = weights[sorted_idx]
+
+        # Cumulative weights
+        cum_weights = np.cumsum(weights_sorted)
+        cutoff = 0.5 * np.sum(weights_sorted)
+
+        # Weighted median
+        return values_sorted[np.searchsorted(cum_weights, cutoff)]
+    Y_median = weighted_median(gdf["net_income"], gdf["pop"])
+
+    gdf["pop_LOW"] = gdf["pop"] * gdf["share_low_income"] / 100
+    gdf["pop_HIGH"] = gdf["pop"] * gdf["share_high_income"] / 100
+    gdf["pop_MED"] = gdf["pop"] - gdf["pop_HIGH"] - gdf["pop_LOW"]
+    return Y, Y_median, gdf
 
 def import_land_use(gdf, path_data):
     """ Import data on land use - pretreated in import_land_use """

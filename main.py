@@ -54,7 +54,12 @@ gdf = import_jobs(gdf, path_data)
 gdf = import_land_use(gdf, path_data)
 gdf = import_ppl_per_hh(gdf, path_data)
 gdf = import_rent_and_size(gdf, path_data)
-Y, gdf = import_income(gdf, path_data)
+Y, Y_median, gdf = import_income(gdf, path_data)
+pop_high_income = np.nansum(gdf["pop"] * gdf["share_high_income"] / 100)
+pop_medium_income = np.nansum(gdf["pop"] * (100 - gdf["share_high_income"]- gdf["share_low_income"]) / 100)
+pop_low_income = np.nansum(gdf["pop"] * gdf["share_low_income"] / 100)
+
+
 gdf = import_amenities(gdf, path_data, 0, 0)
 employment_centers = gpd.read_file(path_data + "cluster_employment.shp")
 employment_centers["cluster"] = employment_centers.index
@@ -96,7 +101,67 @@ acceptable_price = INITIAL_PRICE
 
 ### INITIAL STATE: YEAR 0
 
+def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area):
+    """ Calibrate the fixed cost of private car to match the transport modes data """
+
+    trans_mode = import_trans_mode(path_data)
+
+    gdf = gdf.merge(trans_mode.loc[:,["code_city", "share_car"]], on = "code_city", how = "left")
+    
+    def compute_error_transport_poly(x):
+        FIXED_COST_CAR = x[0]
+        LAMBDA = x[1]
+        ARRAY_WAGE_LOW = x[2:len(employment_centers)+2]
+        ARRAY_WAGE_MED = x[len(employment_centers)+2:2*len(employment_centers)+2]
+        ARRAY_WAGE_HIGH = x[2*len(employment_centers)+2:]
+
+        gdf_here, employed_results, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax = 0)
+        
+        car_use_data = (gdf_here["share_car"] * gdf_here["pop"])
+        car_use_estimated = ((1 - gdf_here["transport_mode_LOW"]) * gdf_here["pop_LOW"]) + ((1 - gdf_here["transport_mode_MED"]) * gdf_here["pop_MED"]) + ((1 - gdf_here["transport_mode_HIGH"]) * gdf_here["pop_HIGH"])
+        error1 = np.nansum(np.abs(car_use_estimated - car_use_data))
+        print(f"x = {x}")
+        print(f"error_mode_by_tract = {error1}") #Error on transport mode by census tract
+
+        gdf_here = gdf_here.loc[~np.isnan(gdf_here.share_car),:]
+        car_use_total = np.nansum(gdf_here.share_car * gdf_here["pop"])
+        estimated_car_use_total = (np.nansum((1 - gdf_here["transport_mode_LOW"]) * gdf_here["pop_LOW"])) + (np.nansum((1 - gdf_here["transport_mode_MED"]) * gdf_here["pop_MED"])) + (np.nansum((1 - gdf_here["transport_mode_HIGH"]) * gdf_here["pop_HIGH"]))
+        error2 = np.abs(car_use_total - estimated_car_use_total)
+        print(f"error_mode_AMB = {error2}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
+        
+        #error4:ppl per employment center
+        employed_results = employed_results.merge(employment_centers, left_index = True, right_on = "cluster")
+        error4= np.nansum(np.abs(employed_results.employed_LOW + employed_results.employed_MED + employed_results.employed_HIGH - employed_results.employment)) / 2
+        print(f"error_employment = {error4}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
+        
+
+        #error3:avg wage
+        estimated_wage_LOW = np.nansum(gdf_here["pop_LOW"] * gdf_here["wage_LOW"]) / np.nansum(gdf_here["pop_LOW"])
+        estimated_wage_MED = np.nansum(gdf_here["pop_MED"] * gdf_here["wage_MED"]) / np.nansum(gdf_here["pop_MED"])
+        estimated_wage_HIGH = np.nansum(gdf_here["pop_HIGH"] * gdf_here["wage_HIGH"]) / np.nansum(gdf_here["pop_HIGH"])
+        error3 = np.abs(Y_median * 0.6 - estimated_wage_LOW) + np.abs(Y_median - estimated_wage_MED) +np.abs(Y_median * 1.4 - estimated_wage_HIGH)
+        print("estimated_wage_LOW", estimated_wage_LOW)
+        print("estimated_wage_MED", estimated_wage_MED)
+        print("estimated_wage_HIGH", estimated_wage_HIGH)
+        print(f"error_wage = {error3}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
+        
+        #error 5: spatial wage
+        estimated_wage_spatial = ((gdf_here["pop_LOW"] * gdf_here["wage_LOW"]) + (gdf_here["pop_MED"] * gdf_here["wage_MED"]) + (gdf_here["pop_HIGH"] * gdf_here["wage_HIGH"])) / (gdf["pop_LOW"] + gdf["pop_MED"] + gdf["pop_HIGH"])
+        error5 = np.nansum(np.abs(estimated_wage_spatial - gdf["net_income"])) / np.nansum(gdf["pop"])
+        print(f"error_spatial_wage = {error5}")
+        return (error1 + error2 + error3 + error4 + error5)
+
+    solving_transport = scipy.optimize.minimize(compute_error_transport_poly, x0=[200, 250] + (np.ones(len(np.unique(employment_centers.cluster))) * Y_median).tolist()+ (np.ones(len(np.unique(employment_centers.cluster))) * Y_median).tolist()+ (np.ones(len(np.unique(employment_centers.cluster))) * Y_median).tolist(), method='L-BFGS-B', bounds=[(0, 300), (0, 400)]+ [(0, 10000)] * 3 * len(np.unique(employment_centers.cluster)))
+    FIXED_COST_CAR = solving_transport.x[0]
+    LAMBDA = solving_transport.x[1]
+    ARRAY_WAGE_LOW = solving_transport.x[2:len(employment_centers)+2]
+    ARRAY_WAGE_MED = solving_transport.x[len(employment_centers)+2:2*len(employment_centers)+2]
+    ARRAY_WAGE_HIGH = solving_transport.x[2*len(employment_centers)+2:]
+
+    return gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH
+
 #Transport cost calibration
+gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area)
 #gdf, FIXED_COST_CAR, LAMBDA = compute_cost_car_logit(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, path_data)
 #gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE = compute_cost_car_poly(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area)
 #with open(path_data + "calib_trans_poly.pkl", "wb") as f:
