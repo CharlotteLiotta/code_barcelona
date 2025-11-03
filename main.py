@@ -115,6 +115,7 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
         ARRAY_WAGE_MED = x[len(employment_centers)+2:2*len(employment_centers)+2]
         ARRAY_WAGE_HIGH = x[2*len(employment_centers)+2:]
 
+
         gdf_here, employed_results, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax = 0)
         
         car_use_data = (gdf_here["share_car"] * gdf_here["pop"])
@@ -139,7 +140,7 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
         estimated_wage_LOW = np.nansum(gdf_here["pop_LOW"] * gdf_here["wage_LOW"]) / np.nansum(gdf_here["pop_LOW"])
         estimated_wage_MED = np.nansum(gdf_here["pop_MED"] * gdf_here["wage_MED"]) / np.nansum(gdf_here["pop_MED"])
         estimated_wage_HIGH = np.nansum(gdf_here["pop_HIGH"] * gdf_here["wage_HIGH"]) / np.nansum(gdf_here["pop_HIGH"])
-        error3 = np.abs(Y_median * 0.6 - estimated_wage_LOW) + np.abs(Y_median - estimated_wage_MED) +np.abs(Y_median * 1.4 - estimated_wage_HIGH)
+        error3 = ((np.abs(Y_median * 0.6 - estimated_wage_LOW) * np.nansum(gdf_here["pop_LOW"])) + (np.abs(Y_median - estimated_wage_MED) * np.nansum(gdf_here["pop_MED"])) + (np.abs(Y_median * 1.4 - estimated_wage_HIGH) * np.nansum(gdf_here["pop_HIGH"]))) / (np.nansum(gdf_here["pop_LOW"]) + np.nansum(gdf_here["pop_MED"]) + np.nansum(gdf_here["pop_HIGH"]))
         print("estimated_wage_LOW", estimated_wage_LOW)
         print("estimated_wage_MED", estimated_wage_MED)
         print("estimated_wage_HIGH", estimated_wage_HIGH)
@@ -151,7 +152,8 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
         print(f"error_spatial_wage = {error5}")
         return (error1 + error2 + error3 + error4 + error5)
 
-    solving_transport = scipy.optimize.minimize(compute_error_transport_poly, x0=[200, 250] + (np.ones(len(np.unique(employment_centers.cluster))) * Y_median).tolist()+ (np.ones(len(np.unique(employment_centers.cluster))) * Y_median).tolist()+ (np.ones(len(np.unique(employment_centers.cluster))) * Y_median).tolist(), method='L-BFGS-B', bounds=[(0, 300), (0, 400)]+ [(0, 10000)] * 3 * len(np.unique(employment_centers.cluster)))
+    init_wage = np.array([3126, 2905, 3040, 2976, 2903, 2979, 2869, 3005])
+    solving_transport = scipy.optimize.minimize(compute_error_transport_poly, x0=[200, 250] + (init_wage * 0.6).tolist()+ (init_wage).tolist()+ (init_wage * 1.4).tolist(), method='L-BFGS-B', bounds=[(0, 300), (0, 400)]+ [(0, 10000)] * 3 * len(np.unique(employment_centers.cluster)))
     FIXED_COST_CAR = solving_transport.x[0]
     LAMBDA = solving_transport.x[1]
     ARRAY_WAGE_LOW = solving_transport.x[2:len(employment_centers)+2]
@@ -161,13 +163,13 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
     return gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH
 
 #Transport cost calibration
-gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area)
+#gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area)
 #gdf, FIXED_COST_CAR, LAMBDA = compute_cost_car_logit(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, path_data)
 #gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE = compute_cost_car_poly(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area)
-#with open(path_data + "calib_trans_poly.pkl", "wb") as f:
-#    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE), f)
-with open(path_data + "calib_trans_poly.pkl", "rb") as f:
-    FIXED_COST_CAR, LAMBDA, ARRAY_WAGE = pickle.load(f)
+#with open(path_data + "calib_trans_poly_i.pkl", "wb") as f:
+#    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
+with open(path_data + "calib_trans_poly_i.pkl", "rb") as f:
+    FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
 print("FIXED_COST_CAR: ", FIXED_COST_CAR)
 print("LAMBDA: ", LAMBDA)
 del Y
@@ -175,13 +177,13 @@ del compute_transport_cost_logit, compute_cost_car_logit
 
 #Compute transport cost
 #gdf = compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax = 0)
-gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, jobs_in_toll_area, houses_in_toll_area, tax = 0)
+gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax = 0)
 
-net_income_t0 = gdf["income_net_of_transport_cost"]
+#net_income_t0 = gdf["income_net_of_transport_cost"]
 
-print(round(100 * sum(gdf["transport_mode"] * gdf["pop"]) / sum(gdf["pop"])), " % commute by public transport")
-plot_transport_cost(gdf)
-plot_transport_mode(gdf)
+print(round(100 * ((np.nansum((gdf["transport_mode_LOW"]) * gdf["pop_LOW"])) + (np.nansum((gdf["transport_mode_MED"]) * gdf["pop_MED"])) + (np.nansum((gdf["transport_mode_HIGH"]) * gdf["pop_HIGH"]))) / (np.nansum(gdf["pop_LOW"]) + np.nansum(gdf["pop_MED"]) + np.nansum(gdf["pop_HIGH"]))))
+plot_transport_cost_i(gdf, "_HIGH")
+plot_transport_mode_i(gdf, "_HIGH")
 #plot_employment(gdf, employment_centers, var) var = employment_centers['employment'] * 0.001, employment_centers.merge(employed_results, left_on = "cluster", right_on = "to_id")["weighted_employed"] * 0.001,  # adjust scale_factor, ARRAY_WAGE* 0.5
 #gdf.merge(travel_matrix.loc[travel_matrix.to_id == 5,:], left_on = "ID", right_on = "from_id").plot("proba_center", legend = True)
 
@@ -191,21 +193,17 @@ gdf["size"] = gdf["size_census"] #gdf["size_census"] #gdf["size_AMB"]
 def calibration_utility_amenity(x, print_summary, export_amenities):
     """ Do the calibration on BETA and AMENITIES by minimizing likelihood """
     
-    BETA, U = x
+    BETA, U_LOW, U_MED, U_HIGH, lambda_inc = x
     print(f"x = {x}")
 
-    #Log-likelihood on dwelling size
-    #estimated_size = BETA * gdf["income_net_of_transport_cost"]  / gdf["rent_m2"]
-    estimated_size = BETA * (gdf["wage"] - gdf["transport_cost"])  / gdf["rent_m2"]
-    diff_size = gdf["size"] - estimated_size
-    mask = ((~np.isnan(diff_size)) & (~np.isinf(diff_size)))
-    epsilon_size = np.nansum(diff_size.loc[mask] ** 2) / sum(mask)
-    log_L = - sum(mask)/2 * np.log(2 * np.pi * epsilon_size) - (1 / 2*epsilon_size) * np.nansum(diff_size.loc[mask] ** 2)
-    print("log_L = ", log_L)
-
     #Log-likelihood on amenities
-    #estimated_A = U / (((1-BETA) ** (1-BETA)) * (BETA ** BETA) * (gdf["income_net_of_transport_cost"]  / gdf["rent_m2"]))
-    estimated_A = U / (((1-BETA) ** (1-BETA)) * (BETA ** BETA) * ((gdf["wage"] - gdf["transport_cost"])  / gdf["rent_m2"]))
+    estimated_A_LOW = U_LOW / (((1-BETA) ** (1-BETA)) * (BETA ** BETA) * ((gdf["wage_LOW"] - gdf["transport_cost_LOW"])  / gdf["rent_m2"]))
+    estimated_A_MED = U_MED / (((1-BETA) ** (1-BETA)) * (BETA ** BETA) * ((gdf["wage_MED"] - gdf["transport_cost_MED"])  / gdf["rent_m2"]))
+    estimated_A_HIGH = U_HIGH / (((1-BETA) ** (1-BETA)) * (BETA ** BETA) * ((gdf["wage_HIGH"] - gdf["transport_cost_HIGH"])  / gdf["rent_m2"]))
+    
+    estimated_A = (estimated_A_LOW * gdf["pop_LOW"] + estimated_A_MED * gdf["pop_MED"] + estimated_A_HIGH * gdf["pop_HIGH"]) / (gdf["pop_LOW"] + gdf["pop_MED"] + gdf["pop_HIGH"])
+    
+    
     with np.errstate(divide='ignore', invalid='ignore'):
         gdf["log_A"] = np.log(estimated_A.replace([np.inf, -np.inf], np.nan))
     gdf_here = gdf.loc[~np.isnan(gdf.log_A) & ~np.isinf(gdf.log_A),:]
@@ -218,24 +216,63 @@ def calibration_utility_amenity(x, print_summary, export_amenities):
         stargazer = Stargazer([model_statsmodel])
         print(stargazer.render_latex())
     residuals = model_statsmodel.resid
+    print(np.nanmax(residuals))
     epsilon_A = np.nansum(np.exp(residuals) ** 2) / sum((~np.isnan(gdf.log_A) & ~np.isinf(gdf.log_A)))
     log_L_A = - (sum(~np.isnan(estimated_A))/2) * np.log(2 * np.pi * epsilon_A) - (1 / (2 * epsilon_A)) * np.nansum(np.exp(residuals) ** 2)
     print("log_L_A = ", log_L_A)
 
+    #compute bid rents
+    ### ESTIMATE_A our ESTIMATE_A_LOW/MED/HIGH?
+    estimated_rent_LOW = ((BETA**BETA) * ((1-BETA)**(1-BETA)) * (gdf["wage_LOW"] - gdf["transport_cost_LOW"]) / (U_LOW/estimated_A)) ** (1/BETA)
+    estimated_rent_MED = ((BETA**BETA) * ((1-BETA)**(1-BETA)) * (gdf["wage_MED"] - gdf["transport_cost_MED"]) / (U_MED/estimated_A)) ** (1/BETA)
+    estimated_rent_HIGH = ((BETA**BETA) * ((1-BETA)**(1-BETA)) * (gdf["wage_HIGH"] - gdf["transport_cost_HIGH"]) / (U_HIGH/estimated_A)) ** (1/BETA)
+
+    print(np.nanmax((estimated_rent_LOW/1000)/lambda_inc),
+      np.nanmax((estimated_rent_MED/1000)/lambda_inc),
+      np.nanmax((estimated_rent_HIGH/1000)/lambda_inc))
+    
+    #log-likelihood on income sorting
+    ### A VERIFIER
+    estimated_share_LOW = np.exp((estimated_rent_LOW/1000)/lambda_inc) / (np.exp((estimated_rent_LOW/1000)/lambda_inc) + np.exp((estimated_rent_MED/1000)/lambda_inc) + np.exp((estimated_rent_HIGH/1000)/lambda_inc))
+    estimated_share_MED = np.exp((estimated_rent_MED/1000)/lambda_inc) / (np.exp((estimated_rent_LOW/1000)/lambda_inc) + np.exp((estimated_rent_MED/1000)/lambda_inc) + np.exp((estimated_rent_HIGH/1000)/lambda_inc))
+    estimated_share_HIGH = np.exp((estimated_rent_HIGH/1000)/lambda_inc) / (np.exp((estimated_rent_LOW/1000)/lambda_inc) + np.exp((estimated_rent_MED/1000)/lambda_inc) + np.exp((estimated_rent_HIGH/1000)/lambda_inc))
+
+    log_sorting = (np.nansum(np.log(estimated_share_LOW) * gdf["pop_LOW"]) + np.nansum(np.log(estimated_share_MED) * gdf["pop_MED"]) + np.nansum(np.log(estimated_share_HIGH) * gdf["pop_HIGH"]))
+    print("log_sorting = ", log_sorting)
+
+    #Log-likelihood on dwelling size
+    ### USING SELECTED RENTS. AGGREGATION?
+    estimated_size_LOW = BETA * (gdf["wage_LOW"] - gdf["transport_cost_LOW"])  / estimated_rent_LOW
+    estimated_size_MED = BETA * (gdf["wage_MED"] - gdf["transport_cost_MED"])  / estimated_rent_MED
+    estimated_size_HIGH = BETA * (gdf["wage_HIGH"] - gdf["transport_cost_HIGH"])  / estimated_rent_HIGH
+    
+    estimated_size = (estimated_size_LOW * gdf["pop_LOW"] + estimated_size_MED * gdf["pop_MED"] + estimated_size_HIGH * gdf["pop_HIGH"]) / (gdf["pop_LOW"] + gdf["pop_MED"] + gdf["pop_HIGH"])
+    
+    diff_size = gdf["size"] - estimated_size
+    mask = ((~np.isnan(diff_size)) & (~np.isinf(diff_size)))
+    epsilon_size = np.nansum(diff_size.loc[mask] ** 2) / sum(mask)
+    log_L = - sum(mask)/2 * np.log(2 * np.pi * epsilon_size) - (1 / (2*epsilon_size)) * np.nansum(diff_size.loc[mask] ** 2)
+    print("log_L = ", log_L)
+
+    
+
+
     #Export results
     if export_amenities == 1:
+        print("export")
         amenities = np.exp(np.nansum(X.iloc[:,1:] * model_statsmodel.params.iloc[1:], 1))
         gdf_here = gdf_here.copy()
         gdf_here.loc[:, "amenities"] = amenities
         return gdf_here.loc[:,["ID", "amenities"]]
     else:
-        return - (log_L+log_L_A)
+        return - (log_L+log_L_A+ log_sorting)
     
 def compute_log_likelihood(x):
     return calibration_utility_amenity(x, 0, 0)
 
-calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.35, 700], bounds=[(0,1), (0,None)])
+calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.35, 800, 1000, 1200, 0.5], bounds=[(0,1), (0,None), (0,None), (0,None), (0.0001,None)])
 BETA = calib_beta.x[0]
+LAMBDA_INC = calib_beta.x[4]
 amenities = calibration_utility_amenity(calib_beta.x, 1, 1)
 gdf = gdf.merge(amenities, on = "ID", how = "left")
 gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1
@@ -262,9 +299,9 @@ B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, o
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], option_function)
+    return compute_error_in_population(u, LAMBDA_INC, gdf["amenities"], [pop_low_income, pop_medium_income, pop_high_income], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], option_function)
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, 700)
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, np.array([300, 350, 400]))
 
 if solving_model.fun < 1:
     utility = solving_model.x

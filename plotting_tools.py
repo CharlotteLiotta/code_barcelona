@@ -333,13 +333,13 @@ def plot_change_population(gdf, save_population):
 
     plt.show()
 
-def plot_transport_cost(gdf):
+def plot_transport_cost_i(gdf, group):
 
     fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
 
     # Plot
     gdf.plot(
-        column="transport_cost",
+        column="transport_cost" + group,
         legend=True,
         ax=ax,
         cmap="YlOrRd"  # good perceptually uniform palette
@@ -356,12 +356,12 @@ def plot_transport_cost(gdf):
     cbar.tick_params(labelsize=14)
     plt.show
 
-def plot_transport_mode(gdf):
+def plot_transport_mode_i(gdf, group):
     fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
 
     # Plot
     gdf.plot(
-        column="transport_mode",
+        column="transport_mode" + group,
         legend=True,
         ax=ax,
         cmap="cividis"  # good perceptually uniform palette
