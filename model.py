@@ -176,36 +176,24 @@ def compute_error_in_population(u, lambda_inc, amen, N, BETA, Y_LOW, Y_MED, Y_HI
     estimated_share_MED = np.exp((R_MED/1000)/lambda_inc) / (np.exp((R_LOW/1000)/lambda_inc) + np.exp((R_MED/1000)/lambda_inc) + np.exp((R_HIGH/1000)/lambda_inc))
     estimated_share_HIGH = np.exp((R_HIGH/1000)/lambda_inc) / (np.exp((R_LOW/1000)/lambda_inc) + np.exp((R_MED/1000)/lambda_inc) + np.exp((R_HIGH/1000)/lambda_inc))
 
-
-    q_LOW = compute_dwelling_size(BETA, Y_LOW, transport_cost_LOW, R_LOW)
-    q_MED = compute_dwelling_size(BETA, Y_MED, transport_cost_MED, R_MED)
-    q_HIGH = compute_dwelling_size(BETA, Y_HIGH, transport_cost_HIGH, R_HIGH)
+    R = R_LOW * estimated_share_LOW + R_MED * estimated_share_MED + R_HIGH * estimated_share_HIGH
     
-    ### A REVOIR
+    avg_wage = Y_LOW * estimated_share_LOW + Y_MED * estimated_share_MED + Y_HIGH * estimated_share_HIGH
+    avg_t_cost = transport_cost_LOW * estimated_share_LOW + transport_cost_MED * estimated_share_MED + transport_cost_HIGH * estimated_share_HIGH
     
-    #estimated_size = (q_LOW * estimated_share_LOW + q_MED * estimated_share_MED + q_HIGH * estimated_share_HIGH) 
-    #estimated_rent = (R_LOW * estimated_share_LOW + R_MED * estimated_share_MED + R_HIGH * estimated_share_HIGH)
+    q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
+    n = compute_population(B, KAPPA, SIGMA, R, RHO, L, q, option_function = option_function)
     
-    n_LOW = compute_population(B, KAPPA, SIGMA, R_LOW, RHO, L * estimated_share_LOW, q_LOW, option_function = option_function)
-    n_MED = compute_population(B, KAPPA, SIGMA, R_MED, RHO, L * estimated_share_MED, q_MED, option_function = option_function)
-    n_HIGH = compute_population(B, KAPPA, SIGMA, R_HIGH, RHO, L * estimated_share_HIGH, q_HIGH, option_function = option_function)
-
-    #R = R * np.exp(resid_rent)
-    #q = q * np.exp(resid_size)
-
-    n_LOW = n_LOW * np.exp(resid_density)
-    n_MED = n_MED * np.exp(resid_density)
-    n_HIGH = n_HIGH * np.exp(resid_density)
-    #print("Estimated_population", np.nansum(n))
-    #print("Error", N - np.nansum(n))
+    n = n * np.exp(resid_density)
+    
 
 
-    error_population_LOW = np.abs(N[0] - np.nansum(n_LOW))
-    print("LOW", np.nansum(n_LOW))
-    error_population_MED = np.abs(N[1] - np.nansum(n_MED))
-    print("MED", np.nansum(n_MED))
-    error_population_HIGH = np.abs(N[2] - np.nansum(n_HIGH))
-    print("HIGH", np.nansum(n_HIGH))
+    error_population_LOW = np.abs(N[0] - np.nansum(n * estimated_share_LOW))
+    print("LOW", np.nansum(n * estimated_share_LOW))
+    error_population_MED = np.abs(N[1] - np.nansum(n * estimated_share_MED))
+    print("MED", np.nansum(n * estimated_share_MED))
+    error_population_HIGH = np.abs(N[2] - np.nansum(n * estimated_share_HIGH))
+    print("HIGH", np.nansum(n * estimated_share_HIGH))
     return error_population_LOW + error_population_MED + error_population_HIGH
 
 

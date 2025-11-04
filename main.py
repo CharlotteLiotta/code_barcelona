@@ -190,6 +190,143 @@ plot_transport_mode_i(gdf, "_HIGH")
 #Calibration BETA with amenities
 gdf["size"] = gdf["size_census"] #gdf["size_census"] #gdf["size_AMB"]
 
+
+def calibration_utility_amenity(x, print_summary=0, export_amenities=0):
+    """Calibrate BETA and AMENITIES by minimizing likelihood with numerical stabilization."""
+
+    BETA, U_LOW, U_MED, U_HIGH, lambda_inc = x
+    print(f"x = {x}")
+
+    # Sanity checks on parameters (prevent invalid regions)
+    if BETA <= 0 or BETA >= 1 or lambda_inc <= 0:
+        return np.inf
+
+    # --- 1. Log-likelihood on amenities ---
+    num = ((1 - BETA) ** (1 - BETA)) * (BETA ** BETA)
+
+    # Avoid division by zero in rent_m2
+    rent_safe = np.clip(gdf["rent_m2"], 1e-6, None)
+
+    try:
+        estimated_A_LOW = U_LOW / (num * ((gdf["wage_LOW"] - gdf["transport_cost_LOW"]) / rent_safe))
+        estimated_A_MED = U_MED / (num * ((gdf["wage_MED"] - gdf["transport_cost_MED"]) / rent_safe))
+        estimated_A_HIGH = U_HIGH / (num * ((gdf["wage_HIGH"] - gdf["transport_cost_HIGH"]) / rent_safe))
+    except Exception:
+        return np.inf
+
+    # Population-weighted average amenities
+    pop_sum = gdf["pop_LOW"] + gdf["pop_MED"] + gdf["pop_HIGH"]
+    estimated_A = (estimated_A_LOW * gdf["pop_LOW"] + estimated_A_MED * gdf["pop_MED"] + estimated_A_HIGH * gdf["pop_HIGH"]) / pop_sum
+
+    # Clip to avoid log(0) or negative amenities
+    estimated_A = np.clip(estimated_A, 1e-10, None)
+    gdf["log_A"] = np.log(estimated_A)
+
+    gdf_here = gdf.loc[np.isfinite(gdf["log_A"]), :]
+    y = gdf_here["log_A"]
+    X = gdf_here.loc[:, [
+        "beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km", 
+        "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b", 
+        "station_500m", "station_500m_1km", "station_1km_2km",
+        "airport_500m", "high_tourism", "mean_activity", 
+        "pedestrian_density", "slope_20", "fgc_500m", "rodalies_500m"
+    ]]
+    X = sm.add_constant(X)
+
+    try:
+        model_statsmodel = sm.OLS(y, X).fit()
+    except Exception:
+        return np.inf
+
+    if print_summary == 1:
+        print(model_statsmodel.summary())
+        stargazer = Stargazer([model_statsmodel])
+        print(stargazer.render_latex())
+
+    residuals = model_statsmodel.resid
+    residuals = np.clip(residuals, -20, 20)  # prevent overflow in exp()
+
+    epsilon_A = np.mean(np.exp(residuals) ** 2)
+    log_L_A = -0.5 * len(y) * np.log(2 * np.pi * epsilon_A) - 0.5 * np.sum(np.exp(residuals) ** 2) / epsilon_A
+    print("log_L_A =", log_L_A)
+
+    # --- 2. Compute bid rents ---
+    estimated_A_safe = np.clip(estimated_A, 1e-10, None)
+
+    estimated_rent_LOW = ((BETA ** BETA) * ((1 - BETA) ** (1 - BETA)) * (gdf["wage_LOW"] - gdf["transport_cost_LOW"]) / (U_LOW / estimated_A_safe)) ** (1 / BETA)
+    estimated_rent_MED = ((BETA ** BETA) * ((1 - BETA) ** (1 - BETA)) * (gdf["wage_MED"] - gdf["transport_cost_MED"]) / (U_MED / estimated_A_safe)) ** (1 / BETA)
+    estimated_rent_HIGH = ((BETA ** BETA) * ((1 - BETA) ** (1 - BETA)) * (gdf["wage_HIGH"] - gdf["transport_cost_HIGH"]) / (U_HIGH / estimated_A_safe)) ** (1 / BETA)
+
+    # --- 3. Log-likelihood on income sorting (using log-sum-exp trick) ---
+    v_LOW = (estimated_rent_LOW / 1000) / lambda_inc
+    v_MED = (estimated_rent_MED / 1000) / lambda_inc
+    v_HIGH = (estimated_rent_HIGH / 1000) / lambda_inc
+
+    v_max = np.maximum.reduce([v_LOW, v_MED, v_HIGH])
+    exp_LOW = np.exp(v_LOW - v_max)
+    exp_MED = np.exp(v_MED - v_max)
+    exp_HIGH = np.exp(v_HIGH - v_max)
+    denom = exp_LOW + exp_MED + exp_HIGH
+
+    estimated_share_LOW = exp_LOW / denom
+    estimated_share_MED = exp_MED / denom
+    estimated_share_HIGH = exp_HIGH / denom
+
+    # Clip to avoid log(0)
+    estimated_share_LOW = np.clip(estimated_share_LOW, 1e-10, 1)
+    estimated_share_MED = np.clip(estimated_share_MED, 1e-10, 1)
+    estimated_share_HIGH = np.clip(estimated_share_HIGH, 1e-10, 1)
+
+    log_sorting = (
+        np.nansum(np.log(estimated_share_LOW) * gdf["pop_LOW"]) +
+        np.nansum(np.log(estimated_share_MED) * gdf["pop_MED"]) +
+        np.nansum(np.log(estimated_share_HIGH) * gdf["pop_HIGH"])
+    )
+    print("log_sorting =", log_sorting)
+
+    # --- 4. Log-likelihood on dwelling size ---
+    estimated_rent = (
+        estimated_rent_LOW * estimated_share_LOW +
+        estimated_rent_MED * estimated_share_MED +
+        estimated_rent_HIGH * estimated_share_HIGH
+    )
+
+    avg_wage = (
+        gdf["wage_LOW"] * estimated_share_LOW +
+        gdf["wage_MED"] * estimated_share_MED +
+        gdf["wage_HIGH"] * estimated_share_HIGH
+    )
+    avg_t_cost = (
+        gdf["transport_cost_LOW"] * estimated_share_LOW +
+        gdf["transport_cost_MED"] * estimated_share_MED +
+        gdf["transport_cost_HIGH"] * estimated_share_HIGH
+    )
+
+    estimated_size = BETA * (avg_wage - avg_t_cost) / np.clip(estimated_rent, 1e-10, None)
+    diff_size = gdf["size"] - estimated_size
+    mask = np.isfinite(diff_size)
+
+    epsilon_size = np.mean(diff_size[mask] ** 2)
+    log_L = -0.5 * np.sum(mask) * np.log(2 * np.pi * epsilon_size) - 0.5 * np.sum(diff_size[mask] ** 2) / epsilon_size
+    print("log_L =", log_L)
+
+    # --- 5. Export amenities (if requested) ---
+    if export_amenities == 1:
+        print("export")
+        amenities = np.exp(np.dot(X.iloc[:, 1:], model_statsmodel.params.iloc[1:]))
+        gdf_here = gdf_here.copy()
+        gdf_here["amenities"] = amenities
+        return gdf_here.loc[:, ["ID", "amenities"]]
+    else:
+        return - (log_L + log_L_A + log_sorting)
+
+
+def compute_log_likelihood(x):
+    try:
+        return calibration_utility_amenity(x, 0, 0)
+    except Exception:
+        return np.inf
+
 def calibration_utility_amenity(x, print_summary, export_amenities):
     """ Do the calibration on BETA and AMENITIES by minimizing likelihood """
     
@@ -241,12 +378,14 @@ def calibration_utility_amenity(x, print_summary, export_amenities):
     print("log_sorting = ", log_sorting)
 
     #Log-likelihood on dwelling size
-    ### USING SELECTED RENTS. AGGREGATION?
-    estimated_size_LOW = BETA * (gdf["wage_LOW"] - gdf["transport_cost_LOW"])  / estimated_rent_LOW
-    estimated_size_MED = BETA * (gdf["wage_MED"] - gdf["transport_cost_MED"])  / estimated_rent_MED
-    estimated_size_HIGH = BETA * (gdf["wage_HIGH"] - gdf["transport_cost_HIGH"])  / estimated_rent_HIGH
+    ### USING SELECTED RENTS. AGGREGATION? A REFAIRE
+
+    estimated_rent = estimated_rent_LOW * estimated_share_LOW + estimated_rent_MED * estimated_share_MED + estimated_rent_HIGH * estimated_share_HIGH
     
-    estimated_size = (estimated_size_LOW * gdf["pop_LOW"] + estimated_size_MED * gdf["pop_MED"] + estimated_size_HIGH * gdf["pop_HIGH"]) / (gdf["pop_LOW"] + gdf["pop_MED"] + gdf["pop_HIGH"])
+    avg_wage = gdf["wage_LOW"] * estimated_share_LOW + gdf["wage_MED"] * estimated_share_MED + gdf["wage_HIGH"] * estimated_share_HIGH
+    avg_t_cost = gdf["transport_cost_LOW"] * estimated_share_LOW + gdf["transport_cost_MED"] * estimated_share_MED + gdf["transport_cost_HIGH"] * estimated_share_HIGH
+    
+    estimated_size = BETA * (avg_wage - avg_t_cost)  / estimated_rent
     
     diff_size = gdf["size"] - estimated_size
     mask = ((~np.isnan(diff_size)) & (~np.isinf(diff_size)))
@@ -270,7 +409,8 @@ def calibration_utility_amenity(x, print_summary, export_amenities):
 def compute_log_likelihood(x):
     return calibration_utility_amenity(x, 0, 0)
 
-calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.35, 800, 1000, 1200, 0.5], bounds=[(0,1), (0,None), (0,None), (0,None), (0.0001,None)])
+calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.25, 1000, 1200, 1500, 2], bounds=[(0,0.5), (0,None), (0,None), (0,None), (0.0001,None)],
+    method='Nelder-Mead')
 BETA = calib_beta.x[0]
 LAMBDA_INC = calib_beta.x[4]
 amenities = calibration_utility_amenity(calib_beta.x, 1, 1)
@@ -301,13 +441,28 @@ def compute_error_in_population_from_utility(u):
 
     return compute_error_in_population(u, LAMBDA_INC, gdf["amenities"], [pop_low_income, pop_medium_income, pop_high_income], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], option_function)
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, np.array([300, 350, 400]))
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, np.array([200, 400, 450]))
 
 if solving_model.fun < 1:
     utility = solving_model.x
-    R = compute_rents(BETA, gdf["wage"], utility / gdf["amenities"], gdf["transport_cost"])
-    q = compute_dwelling_size(BETA, gdf["wage"], gdf["transport_cost"], R)
-    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function)
+    R_LOW = compute_rents(BETA, gdf["wage_LOW"], utility[0]/gdf["amenities"], gdf["transport_cost_LOW"])
+    R_MED = compute_rents(BETA, gdf["wage_MED"], utility[1]/gdf["amenities"], gdf["transport_cost_MED"])
+    R_HIGH = compute_rents(BETA, gdf["wage_HIGH"], utility[2]/gdf["amenities"], gdf["transport_cost_HIGH"])
+
+    estimated_share_LOW = np.exp((R_LOW/1000)/LAMBDA_INC) / (np.exp((R_LOW/1000)/LAMBDA_INC) + np.exp((R_MED/1000)/LAMBDA_INC) + np.exp((R_HIGH/1000)/LAMBDA_INC))
+    estimated_share_MED = np.exp((R_MED/1000)/LAMBDA_INC) / (np.exp((R_LOW/1000)/LAMBDA_INC) + np.exp((R_MED/1000)/LAMBDA_INC) + np.exp((R_HIGH/1000)/LAMBDA_INC))
+    estimated_share_HIGH = np.exp((R_HIGH/1000)/LAMBDA_INC) / (np.exp((R_LOW/1000)/LAMBDA_INC) + np.exp((R_MED/1000)/LAMBDA_INC) + np.exp((R_HIGH/1000)/LAMBDA_INC))
+
+    R = R_LOW * estimated_share_LOW + R_MED * estimated_share_MED + R_HIGH * estimated_share_HIGH
+    avg_wage = gdf["wage_LOW"] * estimated_share_LOW + gdf["wage_MED"] * estimated_share_MED + gdf["wage_HIGH"] * estimated_share_HIGH
+    avg_t_cost = gdf["transport_cost_LOW"] * estimated_share_LOW + gdf["transport_cost_MED"] * estimated_share_MED + gdf["transport_cost_HIGH"] * estimated_share_HIGH
+    
+    q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
+    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function = option_function)
+    
+    #R = compute_rents(BETA, gdf["wage"], utility / gdf["amenities"], gdf["transport_cost"])
+    #q = compute_dwelling_size(BETA, gdf["wage"], gdf["transport_cost"], R)
+    #n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function)
 else:
     print("Minimization failed!")
 
