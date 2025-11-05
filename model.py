@@ -155,7 +155,7 @@ def compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matri
     
     return gdf, workers_per_cluster, travel_matrix
 
-def compute_error_in_population(u, lambda_inc, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH, transport_cost_LOW, transport_cost_MED, transport_cost_HIGH, B, KAPPA, SIGMA, RHO, L, option_function = "CES", resid_rent = 0, resid_density = 0, resid_size = 0):
+def compute_error_in_population_old(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH, transport_cost_LOW, transport_cost_MED, transport_cost_HIGH, B, KAPPA, SIGMA, RHO, L, option_function = "CES", resid_rent = 0, resid_density = 0, resid_size = 0):
     '''
     Compute the difference between the population estimated by the model if 
     the utility is equal to u and the actual population.
@@ -168,34 +168,106 @@ def compute_error_in_population(u, lambda_inc, amen, N, BETA, Y_LOW, Y_MED, Y_HI
             error_population (float): Difference between the estimated and actual population
         '''
 
+    print("u", u)
     R_LOW = compute_rents(BETA, Y_LOW, u[0]/amen, transport_cost_LOW)
     R_MED = compute_rents(BETA, Y_MED, u[1]/amen, transport_cost_MED)
     R_HIGH = compute_rents(BETA, Y_HIGH, u[2]/amen, transport_cost_HIGH)
 
-    estimated_share_LOW = np.exp((R_LOW/1000)/lambda_inc) / (np.exp((R_LOW/1000)/lambda_inc) + np.exp((R_MED/1000)/lambda_inc) + np.exp((R_HIGH/1000)/lambda_inc))
-    estimated_share_MED = np.exp((R_MED/1000)/lambda_inc) / (np.exp((R_LOW/1000)/lambda_inc) + np.exp((R_MED/1000)/lambda_inc) + np.exp((R_HIGH/1000)/lambda_inc))
-    estimated_share_HIGH = np.exp((R_HIGH/1000)/lambda_inc) / (np.exp((R_LOW/1000)/lambda_inc) + np.exp((R_MED/1000)/lambda_inc) + np.exp((R_HIGH/1000)/lambda_inc))
+    LOW_here = (R_LOW >= R_MED) & (R_LOW >= R_HIGH)
+    MED_here = (R_MED >= R_LOW) & (R_MED >= R_HIGH)
+    HIGH_here = (R_HIGH >= R_MED) & (R_HIGH >= R_LOW)
 
-    R = R_LOW * estimated_share_LOW + R_MED * estimated_share_MED + R_HIGH * estimated_share_HIGH
-    
-    avg_wage = Y_LOW * estimated_share_LOW + Y_MED * estimated_share_MED + Y_HIGH * estimated_share_HIGH
-    avg_t_cost = transport_cost_LOW * estimated_share_LOW + transport_cost_MED * estimated_share_MED + transport_cost_HIGH * estimated_share_HIGH
-    
+    R = R_HIGH.copy()
+    R.loc[LOW_here] = R_LOW.loc[LOW_here]
+    R.loc[MED_here] = R_MED.loc[MED_here]
+
+    avg_wage = Y_HIGH.copy()
+    avg_wage.loc[LOW_here] = Y_LOW.loc[LOW_here]
+    avg_wage.loc[MED_here] = Y_MED.loc[MED_here]
+
+    avg_t_cost = transport_cost_HIGH.copy()
+    avg_t_cost.loc[LOW_here] = transport_cost_LOW.loc[LOW_here]
+    avg_t_cost.loc[MED_here] = transport_cost_MED.loc[MED_here]
+
     q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
     n = compute_population(B, KAPPA, SIGMA, R, RHO, L, q, option_function = option_function)
     
     n = n * np.exp(resid_density)
     
-
-
-    error_population_LOW = np.abs(N[0] - np.nansum(n * estimated_share_LOW))
-    print("LOW", np.nansum(n * estimated_share_LOW))
-    error_population_MED = np.abs(N[1] - np.nansum(n * estimated_share_MED))
-    print("MED", np.nansum(n * estimated_share_MED))
-    error_population_HIGH = np.abs(N[2] - np.nansum(n * estimated_share_HIGH))
-    print("HIGH", np.nansum(n * estimated_share_HIGH))
+    error_population_LOW = np.abs(N[0] - np.nansum(n[LOW_here]))
+    print("LOW", np.nansum(n[LOW_here]))
+    error_population_MED = np.abs(N[1] - np.nansum(n[MED_here]))
+    print("MED", np.nansum(n[MED_here]))
+    error_population_HIGH = np.abs(N[2] - np.nansum(n[HIGH_here]))
+    print("HIGH", np.nansum(n[HIGH_here]))
     return error_population_LOW + error_population_MED + error_population_HIGH
 
+
+import numpy as np
+
+def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
+                                transport_cost_LOW, transport_cost_MED, transport_cost_HIGH,
+                                B, KAPPA, SIGMA, RHO, L,
+                                option_function="CES", resid_rent=0, resid_density=0, resid_size=0,
+                                alpha=40):
+    """
+    Compute smooth squared error between model-estimated and observed populations
+    given a trial utility vector u = [u_low, base_rent, u_high].
+    Uses softmax weights to smooth spatial class assignment.
+    """
+
+    # --- Compute rents ---
+    R_LOW = compute_rents(BETA, Y_LOW, u[0] / amen, transport_cost_LOW)
+    R_MED = compute_rents(BETA, Y_MED, u[1] / amen, transport_cost_MED)
+    R_HIGH = compute_rents(BETA, Y_HIGH, u[2] / amen, transport_cost_HIGH)
+
+    # --- Soft assignment using a differentiable "softmax" on rents ---
+    # Higher rent => more likely to dominate
+    # --- Normalize rents to avoid overflow ---
+    # Bring rents to roughly mean-zero, unit-scale before exponentiation
+    R_stack = np.vstack([R_LOW, R_MED, R_HIGH])
+    R_mean = np.nanmean(R_stack)
+    R_std = np.nanstd(R_stack) + 1e-9  # prevent division by zero
+
+    R_LOW_n = (R_LOW - R_mean) / R_std
+    R_MED_n = (R_MED - R_mean) / R_std
+    R_HIGH_n = (R_HIGH - R_mean) / R_std
+
+    # --- Soft assignment (numerically stable softmax) ---
+    # subtract max to avoid overflow
+    R_max = np.maximum.reduce([R_LOW_n, R_MED_n, R_HIGH_n])
+    exp_LOW = np.exp(alpha * (R_LOW_n - R_max))
+    exp_MED = np.exp(alpha * (R_MED_n - R_max))
+    exp_HIGH = np.exp(alpha * (R_HIGH_n - R_max))
+    denom = exp_LOW + exp_MED + exp_HIGH
+
+    w_LOW = exp_LOW / denom
+    w_MED = exp_MED / denom
+    w_HIGH = exp_HIGH / denom
+
+    # --- Weighted averages of rent, wage, and transport cost ---
+    R = w_LOW * R_LOW + w_MED * R_MED + w_HIGH * R_HIGH
+    avg_wage = w_LOW * Y_LOW + w_MED * Y_MED + w_HIGH * Y_HIGH
+    avg_t_cost = w_LOW * transport_cost_LOW + w_MED * transport_cost_MED + w_HIGH * transport_cost_HIGH
+
+    # --- Compute dwelling size and population ---
+    q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
+    n = compute_population(B, KAPPA, SIGMA, R, RHO, L, q, option_function=option_function)
+    n = n * np.exp(resid_density)
+
+    # --- Smooth population shares ---
+    pop_LOW_model = np.nansum(w_LOW * n)
+    pop_MED_model = np.nansum(w_MED * n)
+    pop_HIGH_model = np.nansum(w_HIGH * n)
+
+    print(f"u={u}, LOW={pop_LOW_model:.2f}, MED={pop_MED_model:.2f}, HIGH={pop_HIGH_model:.2f}")
+
+    # --- Squared errors ---
+    error_population_LOW = (N[0] - pop_LOW_model) ** 2
+    error_population_MED = (N[1] - pop_MED_model) ** 2
+    error_population_HIGH = (N[2] - pop_HIGH_model) ** 2
+
+    return error_population_LOW + error_population_MED + error_population_HIGH
 
 def compute_rents(beta, Y, u, T):
     '''
