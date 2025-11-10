@@ -259,6 +259,11 @@ mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
 
 B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
 
+gdf["pop"].loc[gdf["pop"] == 0] = 1
+gdf["rent_m2"].loc[gdf["rent_m2"] == 0] = np.nanmin(gdf["rent_m2"].loc[gdf["rent_m2"]>0])
+gdf["rent_m2"].loc[np.isnan(gdf["rent_m2"])] = np.nanmin(gdf["rent_m2"].loc[gdf["rent_m2"]>0])
+gdf["size"].loc[np.isnan(gdf["size"])] = np.nansum(gdf["size"].loc[~np.isnan(gdf["size"])] * gdf["pop"].loc[~np.isnan(gdf["size"])]) / np.nansum(gdf["pop"].loc[~np.isnan(gdf["size"])])
+
 # Solve the model
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
@@ -310,12 +315,12 @@ else:
     print("Minimization failed!")
 
 density_residual = np.log(gdf["pop"] / n)
-density_residual[gdf["pop"] == 0] = 0
+#density_residual[gdf["pop"] == 0] = 0
 rent_residual = np.log(gdf["rent_m2"] / R)
-rent_residual[gdf["rent_m2"] == 0] = 0
-rent_residual[np.isnan(gdf["rent_m2"])] = 0
+#rent_residual[gdf["rent_m2"] == 0] = 0
+#rent_residual[np.isnan(gdf["rent_m2"])] = 0
 size_residual = np.log(gdf["size"] / q)
-size_residual[np.isnan(gdf["size"])] = np.nanmean(size_residual)
+#size_residual[np.isnan(gdf["size"])] = 0 #np.nanmean(size_residual)
 
 # Plot the result of the calibration
 map_calibration(gdf, n, gdf["pop"] , "Population")
@@ -348,9 +353,9 @@ def compute_error_in_population_from_utility(u):
     return compute_error_in_population(u, gdf["amenities"], [pop_low_income, pop_medium_income, pop_high_income], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], option_function, rent_residual, density_residual, size_residual)
 
 
-result_global = differential_evolution(compute_error_in_population_from_utility, bounds=[(300,600), (550,900), (800,1400)])
+#result_global = differential_evolution(compute_error_in_population_from_utility, bounds=[(300,600), (550,900), (800,1400)])
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, result_global.x)
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x)
 
 if solving_model.fun < 1:
 
@@ -393,6 +398,7 @@ if solving_model.fun < 1:
     R = R * np.exp(rent_residual)
     q = q * np.exp(size_residual)
     n = n * np.exp(density_residual)
+
     n[np.isnan(n)] = 0
 else:
     print("Minimization failed!")

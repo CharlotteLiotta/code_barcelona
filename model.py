@@ -253,6 +253,7 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
     # --- Compute dwelling size and population ---
     q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
     n = compute_population(B, KAPPA, SIGMA, R, RHO, L, q, option_function=option_function)
+    
     n = n * np.exp(resid_density)
 
     # --- Smooth population shares ---
