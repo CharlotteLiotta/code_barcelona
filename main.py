@@ -173,6 +173,10 @@ plot_transport_mode_i(gdf, "_HIGH")
 #Calibration BETA with amenities
 gdf["size"] = gdf["size_census"] #gdf["size_census"] #gdf["size_AMB"]
 
+gdf["pop"].loc[gdf["pop"] == 0] = 1
+gdf["rent_m2"].loc[gdf["rent_m2"] == 0] = np.nanmin(gdf["rent_m2"].loc[gdf["rent_m2"]>0])
+gdf["rent_m2"].loc[np.isnan(gdf["rent_m2"])] = np.nanmin(gdf["rent_m2"].loc[gdf["rent_m2"]>0])
+gdf["size"].loc[np.isnan(gdf["size"])] = np.nansum(gdf["size"].loc[~np.isnan(gdf["size"])] * gdf["pop"].loc[~np.isnan(gdf["size"])]) / np.nansum(gdf["pop"].loc[~np.isnan(gdf["size"])])
 
 def calibration_utility_amenity(x, print_summary=0, export_amenities=0):
     """Calibrate BETA and AMENITIES by minimizing likelihood with numerical stabilization."""
@@ -180,13 +184,19 @@ def calibration_utility_amenity(x, print_summary=0, export_amenities=0):
     BETA, U_LOW, U_MED, U_HIGH = x
     print(f"x = {x}")
 
+    w_LOW = gdf["pop_LOW"] / (gdf["pop_LOW"] + gdf["pop_MED"] + gdf["pop_HIGH"])
+    w_MED = gdf["pop_MED"] / (gdf["pop_LOW"] + gdf["pop_MED"] + gdf["pop_HIGH"])
+    w_HIGH = gdf["pop_HIGH"] / (gdf["pop_LOW"] + gdf["pop_MED"] + gdf["pop_HIGH"])
+
     estimated_A_LOW = U_LOW / (((1-BETA) ** (1-BETA)) * (BETA ** BETA) * ((gdf["wage_LOW"] - gdf["transport_cost_LOW"])  / gdf["rent_m2"]))
     estimated_A_MED = U_MED / (((1-BETA) ** (1-BETA)) * (BETA ** BETA) * ((gdf["wage_MED"] - gdf["transport_cost_MED"])  / gdf["rent_m2"]))
     estimated_A_HIGH = U_HIGH / (((1-BETA) ** (1-BETA)) * (BETA ** BETA) * ((gdf["wage_HIGH"] - gdf["transport_cost_HIGH"])  / gdf["rent_m2"]))
     
-    estimated_A = estimated_A_LOW
-    estimated_A[(gdf["pop_MED"] >= gdf["pop_LOW"]) & (gdf["pop_MED"] >=gdf["pop_HIGH"])] = estimated_A_MED[(gdf["pop_MED"] > gdf["pop_LOW"]) & (gdf["pop_MED"] >gdf["pop_HIGH"])]
-    estimated_A[(gdf["pop_HIGH"] >= gdf["pop_LOW"]) & (gdf["pop_HIGH"] >=gdf["pop_MED"])] = estimated_A_HIGH[(gdf["pop_HIGH"] > gdf["pop_LOW"]) & (gdf["pop_HIGH"] >gdf["pop_MED"])]
+    #estimated_A = estimated_A_LOW
+    #estimated_A[(gdf["pop_MED"] >= gdf["pop_LOW"]) & (gdf["pop_MED"] >=gdf["pop_HIGH"])] = estimated_A_MED[(gdf["pop_MED"] > gdf["pop_LOW"]) & (gdf["pop_MED"] >gdf["pop_HIGH"])]
+    #estimated_A[(gdf["pop_HIGH"] >= gdf["pop_LOW"]) & (gdf["pop_HIGH"] >=gdf["pop_MED"])] = estimated_A_HIGH[(gdf["pop_HIGH"] > gdf["pop_LOW"]) & (gdf["pop_HIGH"] >gdf["pop_MED"])]
+
+    estimated_A = estimated_A_LOW * w_LOW + estimated_A_MED * w_MED + estimated_A_HIGH * w_HIGH
 
     estimated_A[estimated_A == 0] = 1
     
@@ -212,11 +222,12 @@ def calibration_utility_amenity(x, print_summary=0, export_amenities=0):
     estimated_size_MED = BETA * (gdf["wage_MED"] - gdf["transport_cost_MED"])  / gdf["rent_m2"]
     estimated_size_HIGH = BETA * (gdf["wage_HIGH"] - gdf["transport_cost_HIGH"])  / gdf["rent_m2"]
     
-    estimated_size = estimated_size_LOW
-    estimated_size[(gdf["pop_MED"] >= gdf["pop_LOW"]) & (gdf["pop_MED"] >=gdf["pop_HIGH"])] = estimated_size_MED[(gdf["pop_MED"] > gdf["pop_LOW"]) & (gdf["pop_MED"] >gdf["pop_HIGH"])]
-    estimated_size[(gdf["pop_HIGH"] >= gdf["pop_LOW"]) & (gdf["pop_HIGH"] >=gdf["pop_MED"])] = estimated_size_HIGH[(gdf["pop_HIGH"] > gdf["pop_LOW"]) & (gdf["pop_HIGH"] >gdf["pop_MED"])]
+    #estimated_size = estimated_size_LOW
+    #estimated_size[(gdf["pop_MED"] >= gdf["pop_LOW"]) & (gdf["pop_MED"] >=gdf["pop_HIGH"])] = estimated_size_MED[(gdf["pop_MED"] > gdf["pop_LOW"]) & (gdf["pop_MED"] >gdf["pop_HIGH"])]
+    #estimated_size[(gdf["pop_HIGH"] >= gdf["pop_LOW"]) & (gdf["pop_HIGH"] >=gdf["pop_MED"])] = estimated_size_HIGH[(gdf["pop_HIGH"] > gdf["pop_LOW"]) & (gdf["pop_HIGH"] >gdf["pop_MED"])]
 
-    
+    estimated_size = estimated_size_LOW * w_LOW + estimated_size_MED * w_MED + estimated_size_HIGH * w_HIGH
+
     diff_size = gdf["size"] - estimated_size
     mask = ((~np.isnan(diff_size)) & (~np.isinf(diff_size)))
     epsilon_size = np.nansum(diff_size.loc[mask] ** 2) / sum(mask)
@@ -230,12 +241,11 @@ def calibration_utility_amenity(x, print_summary=0, export_amenities=0):
         return gdf_here.loc[:,["ID", "amenities"]]
     else:
         return - (log_L+log_L_A)
-
-
+    
 def compute_log_likelihood(x):
     return calibration_utility_amenity(x, 0, 0)
 
-calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.3, 452.4, 781, 1124], bounds=[(0.1,0.9), (0,None), (0,None), (0,None)])
+calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.3, 439, 758, 1091], bounds=[(0.1,0.9), (0,None), (0,None), (0,None)])
 BETA = calib_beta.x[0]
 amenities = calibration_utility_amenity(calib_beta.x, 1, 1)
 gdf = gdf.merge(amenities, on = "ID", how = "left")
@@ -259,10 +269,6 @@ mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
 
 B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
 
-gdf["pop"].loc[gdf["pop"] == 0] = 1
-gdf["rent_m2"].loc[gdf["rent_m2"] == 0] = np.nanmin(gdf["rent_m2"].loc[gdf["rent_m2"]>0])
-gdf["rent_m2"].loc[np.isnan(gdf["rent_m2"])] = np.nanmin(gdf["rent_m2"].loc[gdf["rent_m2"]>0])
-gdf["size"].loc[np.isnan(gdf["size"])] = np.nansum(gdf["size"].loc[~np.isnan(gdf["size"])] * gdf["pop"].loc[~np.isnan(gdf["size"])]) / np.nansum(gdf["pop"].loc[~np.isnan(gdf["size"])])
 
 # Solve the model
 def compute_error_in_population_from_utility(u):
@@ -304,6 +310,7 @@ if solving_model.fun < 1:
     w_HIGH = exp_HIGH / denom
 
     R = w_LOW * R_LOW + w_MED * R_MED + w_HIGH * R_HIGH
+    
     avg_wage = w_LOW * gdf["wage_LOW"] + w_MED * gdf["wage_MED"] + w_HIGH * gdf["wage_HIGH"]
     avg_t_cost = w_LOW * gdf["transport_cost_LOW"] + w_MED * gdf["transport_cost_MED"] + w_HIGH * gdf["transport_cost_HIGH"]
 
