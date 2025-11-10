@@ -139,7 +139,7 @@ def compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matri
     #gdf.loc[np.isnan(gdf["transport_cost"]), "transport_cost"] = gdf["COST_CAR"]
     #gdf.loc[np.isnan(gdf["transport_mode"]), "transport_mode"] = 0
     #gdf["income_net_of_transport_cost"] = Y - gdf["transport_cost"]
-    gdf = gdf.drop(columns=[col for col in ["from_id", "transport_mode", "transport_cost", "wage", "income_net_of_transport_cost"] if col in gdf.columns])
+    gdf = gdf.drop(columns=[col for col in ["from_id", "transport_mode_LOW", "transport_cost_LOW", "wage_LOW", "income_net_of_transport_cost_LOW", "transport_mode_MED", "transport_cost_MED", "wage_MED", "income_net_of_transport_cost_MED", "transport_mode_HIGH", "transport_cost_HIGH", "wage_HIGH", "income_net_of_transport_cost_HIGH"] if col in gdf.columns])
     gdf = gdf.merge(travel_results_LOW, left_on = "ID", right_index = True)
     gdf = gdf.merge(travel_results_MED, left_on = "ID", right_index = True)
     gdf = gdf.merge(travel_results_HIGH, left_on = "ID", right_index = True)

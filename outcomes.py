@@ -59,37 +59,69 @@ def compute_change_in_inequalities(utility_without_tax, utility_with_tax):
 
     return Q
 
-def compute_change_in_emissions(gdf, travel_matrix, emissions_init, n_with_tax):
-    travel_matrix["distance_emi"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center"] * (1 - travel_matrix["transport_mode"])
-    distance_emi = travel_matrix.loc[:,["distance_emi", "from_id"]].groupby("from_id").sum()
-    gdf = gdf.drop(columns = "distance_emi")
-    gdf = gdf.merge(distance_emi, left_on = "ID", right_index = True)
-    emissions = sum(n_with_tax * (gdf["distance_emi"]))
+def compute_change_in_emissions(gdf, travel_matrix, emissions_init, n_with_tax_LOW, n_with_tax_MED,n_with_tax_HIGH):
+    travel_matrix["distance_emi_LOW"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center_LOW"] * (1 - travel_matrix["transport_mode_LOW"])
+    distance_emi_LOW = travel_matrix.loc[:,["distance_emi_LOW", "from_id"]].groupby("from_id").sum()
+    gdf = gdf.drop(columns = "distance_emi_LOW")
+    gdf = gdf.merge(distance_emi_LOW, left_on = "ID", right_index = True)
+    
+    travel_matrix["distance_emi_MED"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center_MED"] * (1 - travel_matrix["transport_mode_MED"])
+    distance_emi_MED = travel_matrix.loc[:,["distance_emi_MED", "from_id"]].groupby("from_id").sum()
+    gdf = gdf.drop(columns = "distance_emi_MED")
+    gdf = gdf.merge(distance_emi_MED, left_on = "ID", right_index = True)
+    
+    travel_matrix["distance_emi_HIGH"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center_HIGH"] * (1 - travel_matrix["transport_mode_HIGH"])
+    distance_emi_HIGH = travel_matrix.loc[:,["distance_emi_HIGH", "from_id"]].groupby("from_id").sum()
+    gdf = gdf.drop(columns = "distance_emi_HIGH")
+    gdf = gdf.merge(distance_emi_HIGH, left_on = "ID", right_index = True)
+    
+    
+    emissions = sum(n_with_tax_LOW * (gdf["distance_emi_LOW"])) + sum(n_with_tax_MED * (gdf["distance_emi_MED"])) + sum(n_with_tax_HIGH * (gdf["distance_emi_HIGH"]))
     relative_change_emission = (emissions - emissions_init) / emissions_init
     print("relative_change_emission", 100 * relative_change_emission, "%")
     return (1 / (1 + np.exp(3 * relative_change_emission))), emissions
 
-def compute_qol(save_population, gdf, travel_matrix, clusters_in_zone, house_in_zone):
-    population_here = save_population
+def compute_qol(save_population_LOW, save_population_MED, save_population_HIGH, gdf, travel_matrix, clusters_in_zone, house_in_zone):
+    population_here_LOW = save_population_LOW
+    population_here_MED = save_population_MED
+    population_here_HIGH = save_population_HIGH
 
     travel = travel_matrix
-    gdf["population_here"] = population_here
+    gdf["population_here_LOW"] = population_here_LOW
+    gdf["population_here_MED"] = population_here_MED
+    gdf["population_here_HIGH"] = population_here_HIGH
 
-    travel = travel.merge(gdf.loc[:,["population_here", "ID"]], left_on = "from_id", right_on = "ID")
-    travel["total_commuters"] = travel["population_here"] * travel["proba_center"]
-    travel["car_commuters"] = travel["total_commuters"] * (1 - travel["transport_mode"])
+    travel = travel.merge(gdf.loc[:,["population_here_LOW", "population_here_MED","population_here_HIGH","ID"]], left_on = "from_id", right_on = "ID")
+    travel["total_commuters_LOW"] = travel["population_here_LOW"] * travel["proba_center_LOW"]
+    travel["total_commuters_MED"] = travel["population_here_MED"] * travel["proba_center_MED"]
+    travel["total_commuters_HIGH"] = travel["population_here_HIGH"] * travel["proba_center_HIGH"]
+    
+    travel["car_commuters_LOW"] = travel["total_commuters_LOW"] * (1 - travel["transport_mode_LOW"])
+    travel["car_commuters_MED"] = travel["total_commuters_MED"] * (1 - travel["transport_mode_MED"])
+    travel["car_commuters_HIGH"] = travel["total_commuters_HIGH"] * (1 - travel["transport_mode_HIGH"])
+    travel["car_commuters"] = travel["car_commuters_LOW"] + travel["car_commuters_MED"] + travel["car_commuters_HIGH"]
 
     #working in zone
     car_users_working_in_zone = np.nansum(travel.loc[travel.to_id.isin(clusters_in_zone),["car_commuters"]])
     
-    #living or working in zine
+    #living or working in zone
     car_users_living_or_working_in_zone = np.nansum(travel.loc[travel.from_id.isin(house_in_zone) | travel.to_id.isin(clusters_in_zone),["car_commuters"]])
 
     #proba to commute in the tax zone by car
-    ppl_commuting_in_tax_zone_by_car = travel.loc[travel.to_id.isin(clusters_in_zone),["car_commuters", "from_id"]].groupby("from_id").sum()
-    ppl = travel.loc[:,["total_commuters", "from_id"]].groupby("from_id").sum()
-    proba_commuting_in_tax_zone_by_car = np.array(ppl_commuting_in_tax_zone_by_car.car_commuters / ppl.total_commuters)
+    ppl_commuting_in_tax_zone_by_car_LOW = travel.loc[travel.to_id.isin(clusters_in_zone),["car_commuters_LOW", "from_id"]].groupby("from_id").sum()
+    ppl = travel.loc[:,["total_commuters_LOW", "from_id"]].groupby("from_id").sum()
+    proba_commuting_in_tax_zone_by_car_LOW = np.array(ppl_commuting_in_tax_zone_by_car_LOW.car_commuters_LOW / ppl.total_commuters_LOW)
+
+    ppl_commuting_in_tax_zone_by_car_MED = travel.loc[travel.to_id.isin(clusters_in_zone),["car_commuters_MED", "from_id"]].groupby("from_id").sum()
+    ppl = travel.loc[:,["total_commuters_MED", "from_id"]].groupby("from_id").sum()
+    proba_commuting_in_tax_zone_by_car_MED = np.array(ppl_commuting_in_tax_zone_by_car_MED.car_commuters_MED / ppl.total_commuters_MED)
     
-    return car_users_living_or_working_in_zone, car_users_working_in_zone, proba_commuting_in_tax_zone_by_car
+
+    ppl_commuting_in_tax_zone_by_car_HIGH = travel.loc[travel.to_id.isin(clusters_in_zone),["car_commuters_HIGH", "from_id"]].groupby("from_id").sum()
+    ppl = travel.loc[:,["total_commuters_HIGH", "from_id"]].groupby("from_id").sum()
+    proba_commuting_in_tax_zone_by_car_HIGH = np.array(ppl_commuting_in_tax_zone_by_car_HIGH.car_commuters_HIGH / ppl.total_commuters_HIGH)
+    
+    
+    return car_users_living_or_working_in_zone, car_users_working_in_zone, proba_commuting_in_tax_zone_by_car_LOW, proba_commuting_in_tax_zone_by_car_MED, proba_commuting_in_tax_zone_by_car_HIGH
 
 

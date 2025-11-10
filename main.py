@@ -73,32 +73,15 @@ travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, emp
 gdf = import_cost_transit(gdf)
 travel_time_matrix_transit = travel_time_matrix_transit.merge(gdf[['ID', 'monthly_cost_transit']].rename(columns={'ID': 'from_id'}), on='from_id', how='left')
 
-#Transport times
-#import_transport_times(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, 1)
-#import_car_distance(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data)
-#travel_time_matrix_car, travel_time_matrix_transit = load_transport_times(gdf, path_data, center)
-#travel_distance_matrix_car = load_transport_distance(gdf, path_data, center)
-#gdf = add_transport(gdf, travel_time_matrix_car, travel_time_matrix_transit, center)
-#gdf = gdf.merge(travel_distance_matrix_car.loc[travel_distance_matrix_car.to_id == center,:], left_on = "ID", right_on = "from_id", how = "left").drop(columns = ['from_id', 'to_id'])
-#center_centroid = gdf.loc[gdf['ID'] == center].geometry.centroid.values[0]
-#gdf.loc[np.isnan(gdf.distance_car), 'distance_car'] = gdf.geometry.centroid.distance(center_centroid).loc[np.isnan(gdf.distance_car)]
-#gdf = import_cost_transit(gdf)
-
 ### POLICY SUPPORT
 
 BETA_OPINION, INITIAL_OPINION = import_opinion_parameters(path_data)
 BETA_PRICE, INITIAL_PRICE = import_price_parameters(path_data)
 
-#INITIAL_OPINION = compute_political_opinion(0.5, 0.5, 0.5, 0.5, BETA_OPINION)
-#INITIAL_PRICE = compute_price(0.5, 0.5, 0.5, 0.5, BETA_PRICE)
-
-
-#df_reg[["climate_change", "declared_impacts", "quality_of_life", 'congestion']]
-#-0.03, 0.21, -0.08, 0.25, 0.28
-#BETA_OPINION = np.array([0, 0.1, -0.7, 0.1, 0.1])
-
 tax = INITIAL_PRICE
-acceptable_price = INITIAL_PRICE
+acceptable_price_LOW = INITIAL_PRICE
+acceptable_price_MED = INITIAL_PRICE
+acceptable_price_HIGH = INITIAL_PRICE
 
 ### INITIAL STATE: YEAR 0
 
@@ -115,7 +98,6 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
         ARRAY_WAGE_LOW = x[2:len(employment_centers)+2]
         ARRAY_WAGE_MED = x[len(employment_centers)+2:2*len(employment_centers)+2]
         ARRAY_WAGE_HIGH = x[2*len(employment_centers)+2:]
-
 
         gdf_here, employed_results, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax = 0)
         
@@ -206,7 +188,7 @@ def calibration_utility_amenity(x, print_summary=0, export_amenities=0):
     estimated_A[(gdf["pop_MED"] >= gdf["pop_LOW"]) & (gdf["pop_MED"] >=gdf["pop_HIGH"])] = estimated_A_MED[(gdf["pop_MED"] > gdf["pop_LOW"]) & (gdf["pop_MED"] >gdf["pop_HIGH"])]
     estimated_A[(gdf["pop_HIGH"] >= gdf["pop_LOW"]) & (gdf["pop_HIGH"] >=gdf["pop_MED"])] = estimated_A_HIGH[(gdf["pop_HIGH"] > gdf["pop_LOW"]) & (gdf["pop_HIGH"] >gdf["pop_MED"])]
 
-    #estimated_A[estimated_A == 0] = 1
+    estimated_A[estimated_A == 0] = 1
     
     with np.errstate(divide='ignore', invalid='ignore'):
         gdf["log_A"] = np.log(estimated_A.replace([np.inf, -np.inf], np.nan))
@@ -224,11 +206,8 @@ def calibration_utility_amenity(x, print_summary=0, export_amenities=0):
     log_L_A = - (sum(~np.isnan(estimated_A))/2) * np.log(2 * np.pi * epsilon_A) - (1 / (2 * epsilon_A)) * np.nansum(np.exp(residuals) ** 2)
     print("log_L_A = ", log_L_A)
 
-    
-    
+
     # --- 2. Compute bid rents ---
-    #### WITH AMENITIES??
-    ### DATA OR ESTIMATED RENTS AND DISTRIBUTION?
     estimated_size_LOW = BETA * (gdf["wage_LOW"] - gdf["transport_cost_LOW"])  / gdf["rent_m2"]
     estimated_size_MED = BETA * (gdf["wage_MED"] - gdf["transport_cost_MED"])  / gdf["rent_m2"]
     estimated_size_HIGH = BETA * (gdf["wage_HIGH"] - gdf["transport_cost_HIGH"])  / gdf["rent_m2"]
@@ -243,85 +222,6 @@ def calibration_utility_amenity(x, print_summary=0, export_amenities=0):
     epsilon_size = np.nansum(diff_size.loc[mask] ** 2) / sum(mask)
     log_L = - sum(mask)/2 * np.log(2 * np.pi * epsilon_size) - (1 / 2*epsilon_size) * np.nansum(diff_size.loc[mask] ** 2)
     print("log_L = ", log_L)
-
-
-
-    #estimated_A_safe = estimated_A
-
-    #estimated_rent_LOW = ((BETA ** BETA) * ((1 - BETA) ** (1 - BETA)) * (gdf["wage_LOW"] - gdf["transport_cost_LOW"]) / (U_LOW / estimated_A_safe)) ** (1 / BETA)
-    #estimated_rent_MED = ((BETA ** BETA) * ((1 - BETA) ** (1 - BETA)) * (gdf["wage_MED"] - gdf["transport_cost_MED"]) / (U_MED / estimated_A_safe)) ** (1 / BETA)
-    #estimated_rent_HIGH = ((BETA ** BETA) * ((1 - BETA) ** (1 - BETA)) * (gdf["wage_HIGH"] - gdf["transport_cost_HIGH"]) / (U_HIGH / estimated_A_safe)) ** (1 / BETA)
-
-    # --- 3. Log-likelihood on income sorting (using log-sum-exp trick) ---
-    #v_LOW = (estimated_rent_LOW / 1000) / lambda_inc
-    #v_MED = (estimated_rent_MED / 1000) / lambda_inc
-    #v_HIGH = (estimated_rent_HIGH / 1000) / lambda_inc
-
-    ##v_max = np.maximum.reduce([v_LOW, v_MED, v_HIGH])
-    #exp_LOW = np.exp(v_LOW - v_max)
-    #exp_MED = np.exp(v_MED - v_max)
-    #exp_HIGH = np.exp(v_HIGH - v_max)
-    #denom = exp_LOW + exp_MED + exp_HIGH
-
-    #estimated_share_LOW = exp_LOW / denom
-    #estimated_share_MED = exp_MED / denom
-    #estimated_share_HIGH = exp_HIGH / denom
-
-    #LOW_here = (estimated_rent_LOW >= estimated_rent_MED) & (estimated_rent_LOW >= estimated_rent_HIGH)
-    #MED_here = (estimated_rent_MED >= estimated_rent_LOW) & (estimated_rent_MED >= estimated_rent_HIGH)
-    #HIGH_here = (estimated_rent_HIGH >= estimated_rent_MED) & (estimated_rent_HIGH >= estimated_rent_LOW)
-
-    ##estimated_rent = estimated_rent_HIGH
-    #estimated_rent[LOW_here] = estimated_rent_LOW[LOW_here]
-    #estimated_rent[MED_here] = estimated_rent_MED[MED_here]
-
-    # Clip to avoid log(0)
-    #estimated_share_LOW = np.clip(estimated_share_LOW, 1e-10, 1)
-    #estimated_share_MED = np.clip(estimated_share_MED, 1e-10, 1)
-    #estimated_share_HIGH = np.clip(estimated_share_HIGH, 1e-10, 1)
-
-    #log_sorting = (
-    #    np.nansum(np.log(estimated_share_LOW) * gdf["pop_LOW"]) +
-    #    np.nansum(np.log(estimated_share_MED) * gdf["pop_MED"]) +
-    #    np.nansum(np.log(estimated_share_HIGH) * gdf["pop_HIGH"])
-    #)
-    #print("log_sorting =", log_sorting)
-
-    # --- 4. Log-likelihood on dwelling size ---
-    ##estimated_rent = (
-    #    estimated_rent_LOW * estimated_share_LOW +
-    #    estimated_rent_MED * estimated_share_MED +
-    #    estimated_rent_HIGH * estimated_share_HIGH
-    #)
-
-    #avg_wage = (
-    #    gdf["wage_LOW"] * estimated_share_LOW +
-    #    gdf["wage_MED"] * estimated_share_MED +
-    #    gdf["wage_HIGH"] * estimated_share_HIGH
-    #)
-    #avg_t_cost = (
-    #    gdf["transport_cost_LOW"] * estimated_share_LOW +
-    #    gdf["transport_cost_MED"] * estimated_share_MED +
-    #    gdf["transport_cost_HIGH"] * estimated_share_HIGH
-    #)
-
-    #wage = gdf["wage_HIGH"].copy()
-    #wage.loc[LOW_here] = gdf.loc[LOW_here, "wage_LOW"]
-    #wage.loc[MED_here] = gdf.loc[MED_here, "wage_MED"]
-
-    #tcost = gdf["transport_cost_HIGH"].copy()
-    #tcost.loc[LOW_here] = gdf.loc[LOW_here, "transport_cost_LOW"]
-    #tcost.loc[MED_here] = gdf.loc[MED_here, "transport_cost_MED"]
-
-    #estimated_size = estimated_rent.copy()
-    #estimated_size[estimated_rent > 0] = BETA * (wage[estimated_rent > 0] - tcost[estimated_rent > 0]) / rent_safe[rent_safe > 0] #estimated_rent[estimated_rent > 0]
-    #estimated_size[estimated_rent == 0] = 0
-    #diff_size = gdf["size"] - estimated_size
-    #mask = np.isfinite(diff_size)
-
-    #epsilon_size = np.mean(diff_size[mask] ** 2)
-    #log_L = -0.5 * np.sum(mask) * np.log(2 * np.pi * epsilon_size) - 0.5 * np.sum(diff_size[mask] ** 2) / epsilon_size
-    #print("log_L =", log_L)
 
     if export_amenities == 1:
         amenities = np.exp(np.nansum(X.iloc[:,1:] * model_statsmodel.params.iloc[1:], 1))
@@ -338,8 +238,6 @@ def compute_log_likelihood(x):
 calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.3, 452.4, 781, 1124], bounds=[(0.1,0.9), (0,None), (0,None), (0,None)])
 BETA = calib_beta.x[0]
 amenities = calibration_utility_amenity(calib_beta.x, 1, 1)
-#amenities.loc[amenities["amenities"] < 0.9, "amenities"] =0.9
-#amenities.loc[amenities["amenities"] > 1.1, "amenities"] = 1.1
 gdf = gdf.merge(amenities, on = "ID", how = "left")
 gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1
 
@@ -371,7 +269,7 @@ result_global = differential_evolution(compute_error_in_population_from_utility,
 
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, result_global.x, bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800])
 
-if solving_model.fun < 10000:
+if solving_model.fun < 1:
     alpha = 40
     utility = solving_model.x
     R_LOW = compute_rents(BETA, gdf["wage_LOW"], utility[0]/gdf["amenities"], gdf["transport_cost_LOW"])
@@ -400,23 +298,6 @@ if solving_model.fun < 10000:
     w_MED = exp_MED / denom
     w_HIGH = exp_HIGH / denom
 
-
-    #LOW_here = (R_LOW >= R_MED) & (R_LOW >= R_HIGH)
-    #MED_here = (R_MED >= R_LOW) & (R_MED >= R_HIGH)
-    #HIGH_here = (R_HIGH >= R_MED) & (R_HIGH >= R_LOW)
-
-    #R = R_HIGH
-    #R[LOW_here] = R_LOW[LOW_here]
-    #R[MED_here] = R_MED[MED_here]
-
-    #avg_wage = gdf["wage_HIGH"].copy()
-    ##avg_wage[LOW_here] = gdf["wage_LOW"][LOW_here]
-    #avg_wage[MED_here] = gdf["wage_MED"][MED_here]
-
-    #avg_t_cost = gdf["transport_cost_HIGH"].copy()
-    #avg_t_cost[LOW_here] = gdf["transport_cost_LOW"][LOW_here]
-    #avg_t_cost[MED_here] = gdf["transport_cost_MED"][MED_here]
-
     R = w_LOW * R_LOW + w_MED * R_MED + w_HIGH * R_HIGH
     avg_wage = w_LOW * gdf["wage_LOW"] + w_MED * gdf["wage_MED"] + w_HIGH * gdf["wage_HIGH"]
     avg_t_cost = w_LOW * gdf["transport_cost_LOW"] + w_MED * gdf["transport_cost_MED"] + w_HIGH * gdf["transport_cost_HIGH"]
@@ -425,9 +306,6 @@ if solving_model.fun < 10000:
     q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
     n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function = option_function)
     
-    #R = compute_rents(BETA, gdf["wage"], utility / gdf["amenities"], gdf["transport_cost"])
-    #q = compute_dwelling_size(BETA, gdf["wage"], gdf["transport_cost"], R)
-    #n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function)
 else:
     print("Minimization failed!")
 
@@ -475,10 +353,43 @@ result_global = differential_evolution(compute_error_in_population_from_utility,
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, result_global.x)
 
 if solving_model.fun < 1:
+
+    alpha = 40
     utility = solving_model.x
-    R = compute_rents(BETA, gdf["wage"], utility / gdf["amenities"], gdf["transport_cost"])
-    q = compute_dwelling_size(BETA, gdf["wage"], gdf["transport_cost"], R)
-    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function)
+    R_LOW = compute_rents(BETA, gdf["wage_LOW"], utility[0]/gdf["amenities"], gdf["transport_cost_LOW"])
+    R_MED = compute_rents(BETA, gdf["wage_MED"], utility[1]/gdf["amenities"], gdf["transport_cost_MED"])
+    R_HIGH = compute_rents(BETA, gdf["wage_HIGH"], utility[2]/gdf["amenities"], gdf["transport_cost_HIGH"])
+
+    # --- Normalize rents to avoid overflow ---
+    # Bring rents to roughly mean-zero, unit-scale before exponentiation
+    R_stack = np.vstack([R_LOW, R_MED, R_HIGH])
+    R_mean = np.nanmean(R_stack)
+    R_std = np.nanstd(R_stack) + 1e-9  # prevent division by zero
+
+    R_LOW_n = (R_LOW - R_mean) / R_std
+    R_MED_n = (R_MED - R_mean) / R_std
+    R_HIGH_n = (R_HIGH - R_mean) / R_std
+
+    # --- Soft assignment (numerically stable softmax) ---
+    # subtract max to avoid overflow
+    R_max = np.maximum.reduce([R_LOW_n, R_MED_n, R_HIGH_n])
+    exp_LOW = np.exp(alpha * (R_LOW_n - R_max))
+    exp_MED = np.exp(alpha * (R_MED_n - R_max))
+    exp_HIGH = np.exp(alpha * (R_HIGH_n - R_max))
+    denom = exp_LOW + exp_MED + exp_HIGH
+
+    w_LOW = exp_LOW / denom
+    w_MED = exp_MED / denom
+    w_HIGH = exp_HIGH / denom
+
+    R = w_LOW * R_LOW + w_MED * R_MED + w_HIGH * R_HIGH
+    avg_wage = w_LOW * gdf["wage_LOW"] + w_MED * gdf["wage_MED"] + w_HIGH * gdf["wage_HIGH"]
+    avg_t_cost = w_LOW * gdf["transport_cost_LOW"] + w_MED * gdf["transport_cost_MED"] + w_HIGH * gdf["transport_cost_HIGH"]
+
+
+    q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
+    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function = option_function)
+    
     R = R * np.exp(rent_residual)
     q = q * np.exp(size_residual)
     n = n * np.exp(density_residual)
@@ -491,60 +402,134 @@ agg = compare_rent_or_size(gdf, "rent_m2", R, 1)
 agg = compare_var(gdf, n)
 
 # ABM: translate outputs at the household level
-N = round(np.nansum(gdf["pop"]) * SCALE_ABM)
-support = INITIAL_OPINION * np.ones(N) #0.417
+N_LOW = round(pop_low_income * SCALE_ABM)
+N_MED = round(pop_medium_income * SCALE_ABM)
+N_HIGH = round(pop_high_income * SCALE_ABM)
+
+support_low = INITIAL_OPINION * np.ones(N_LOW) #0.417
+support_med = INITIAL_OPINION * np.ones(N_LOW) #0.417
+support_high = INITIAL_OPINION * np.ones(N_LOW) #0.417
 
 
-indiv_loc_matrix = compute_indiv_loc_matrix(N, len(gdf), n.to_numpy()* SCALE_ABM)
-indiv_loc_matrix_0 = copy.deepcopy(indiv_loc_matrix)
-rent_indiv = indiv_loc_matrix @ R.to_numpy()
-dwelling_size_indiv = indiv_loc_matrix @ q
+indiv_loc_matrix_LOW = compute_indiv_loc_matrix(N_LOW, len(gdf), (n* SCALE_ABM * w_LOW).to_numpy())
+indiv_loc_matrix_MED = compute_indiv_loc_matrix(N_MED, len(gdf), (n* SCALE_ABM * w_MED).to_numpy())
+indiv_loc_matrix_HIGH = compute_indiv_loc_matrix(N_HIGH, len(gdf), (n* SCALE_ABM * w_HIGH).to_numpy())
 
-utility = compute_utility_manually(indiv_loc_matrix @gdf["wage"], indiv_loc_matrix @gdf["transport_cost"], 
-                                                dwelling_size_indiv, rent_indiv, BETA)
+#indiv_loc_matrix_0 = copy.deepcopy(indiv_loc_matrix)
+rent_indiv_LOW = indiv_loc_matrix_LOW @ R.to_numpy()
+dwelling_size_indiv_LOW = indiv_loc_matrix_LOW @ q
 
-housing_indiv = dwelling_size_indiv @ csr_matrix(indiv_loc_matrix)  # shape: (10,)
+rent_indiv_MED = indiv_loc_matrix_MED @ R.to_numpy()
+dwelling_size_indiv_MED = indiv_loc_matrix_MED @ q
+
+rent_indiv_HIGH = indiv_loc_matrix_HIGH @ R.to_numpy()
+dwelling_size_indiv_HIGH = indiv_loc_matrix_HIGH @ q
+
+utility_LOW = compute_utility_manually(indiv_loc_matrix_LOW @gdf["wage_LOW"], indiv_loc_matrix_LOW @gdf["transport_cost_LOW"], 
+                                                dwelling_size_indiv_LOW, rent_indiv_LOW, BETA)
+utility_LOW[np.isnan(utility_LOW)] = 0
+
+utility_MED = compute_utility_manually(indiv_loc_matrix_MED @gdf["wage_MED"], indiv_loc_matrix_MED @gdf["transport_cost_MED"], 
+                                                dwelling_size_indiv_MED, rent_indiv_MED, BETA)
+utility_MED[np.isnan(utility_MED)] = 0
+
+utility_HIGH = compute_utility_manually(indiv_loc_matrix_HIGH @gdf["wage_HIGH"], indiv_loc_matrix_HIGH @gdf["transport_cost_HIGH"], 
+                                                dwelling_size_indiv_HIGH, rent_indiv_HIGH, BETA)
+utility_HIGH[np.isnan(utility_HIGH)] = 0
+
+housing_indiv_LOW = dwelling_size_indiv_LOW @ csr_matrix(indiv_loc_matrix_LOW)  # shape: (10,)
+housing_indiv_MED = dwelling_size_indiv_MED @ csr_matrix(indiv_loc_matrix_MED)  # shape: (10,)
+housing_indiv_HIGH = dwelling_size_indiv_HIGH @ csr_matrix(indiv_loc_matrix_HIGH)  # shape: (10,)
 
 # Save outputs
-save_housing = np.zeros((len(gdf["area"]), MAX_YEAR))
-save_housing[:, 0] = deepcopy(housing_indiv)
-save_rent = np.zeros((N, MAX_YEAR))
-save_rent[:, 0] = deepcopy(rent_indiv)
-save_dwelling_size = np.zeros((N, MAX_YEAR))
-save_dwelling_size[:, 0] = deepcopy(dwelling_size_indiv)
+save_housing_LOW = np.zeros((len(gdf["area"]), MAX_YEAR))
+save_housing_LOW[:, 0] = deepcopy(housing_indiv_LOW)
+
+save_housing_MED = np.zeros((len(gdf["area"]), MAX_YEAR))
+save_housing_MED[:, 0] = deepcopy(housing_indiv_MED)
+
+save_housing_HIGH = np.zeros((len(gdf["area"]), MAX_YEAR))
+save_housing_HIGH[:, 0] = deepcopy(housing_indiv_HIGH)
+
 save_population = np.zeros((len(gdf["area"]), MAX_YEAR))
-save_population[:, 0] = np.nansum(indiv_loc_matrix, 0)
-save_transport_mode = np.zeros((N, MAX_YEAR))
-save_transport_mode[:, 0] = deepcopy(indiv_loc_matrix @gdf["transport_mode"])
-save_utility = np.zeros((N, MAX_YEAR))
-save_utility[:, 0] = deepcopy(utility)
+save_population[:, 0] = np.nansum(indiv_loc_matrix_LOW, 0) + np.nansum(indiv_loc_matrix_MED, 0) + np.nansum(indiv_loc_matrix_HIGH, 0)
+
+save_rent_LOW = np.zeros((N_LOW, MAX_YEAR))
+save_rent_LOW[:, 0] = deepcopy(rent_indiv_LOW)
+save_rent_MED = np.zeros((N_MED, MAX_YEAR))
+save_rent_MED[:, 0] = deepcopy(rent_indiv_MED)
+save_rent_HIGH = np.zeros((N_HIGH, MAX_YEAR))
+save_rent_HIGH[:, 0] = deepcopy(rent_indiv_HIGH)
+
+save_dwelling_size_LOW = np.zeros((N_LOW, MAX_YEAR))
+save_dwelling_size_LOW[:, 0] = deepcopy(dwelling_size_indiv_LOW)
+save_dwelling_size_MED = np.zeros((N_MED, MAX_YEAR))
+save_dwelling_size_MED[:, 0] = deepcopy(dwelling_size_indiv_MED)
+save_dwelling_size_HIGH = np.zeros((N_HIGH, MAX_YEAR))
+save_dwelling_size_HIGH[:, 0] = deepcopy(dwelling_size_indiv_HIGH)
+
+save_transport_mode_LOW = np.zeros((N_LOW, MAX_YEAR))
+save_transport_mode_LOW[:, 0] = deepcopy(indiv_loc_matrix_LOW @gdf["transport_mode_LOW"])
+save_transport_mode_MED = np.zeros((N_MED, MAX_YEAR))
+save_transport_mode_MED[:, 0] = deepcopy(indiv_loc_matrix_MED @gdf["transport_mode_MED"])
+save_transport_mode_HIGH = np.zeros((N_HIGH, MAX_YEAR))
+save_transport_mode_HIGH[:, 0] = deepcopy(indiv_loc_matrix_HIGH @gdf["transport_mode_HIGH"])
+
+
+save_utility_LOW = np.zeros((N_LOW, MAX_YEAR))
+save_utility_LOW[:, 0] = deepcopy(utility_LOW)
+save_utility_MED = np.zeros((N_MED, MAX_YEAR))
+save_utility_MED[:, 0] = deepcopy(utility_MED)
+save_utility_HIGH = np.zeros((N_HIGH, MAX_YEAR))
+save_utility_HIGH[:, 0] = deepcopy(utility_HIGH)
+
 save_tax = np.zeros(MAX_YEAR)
 save_tax[0] = 0
 save_qol = np.zeros((MAX_YEAR))
 save_congestion = np.zeros((MAX_YEAR))
 
 #save emissions
-travel_matrix["distance_emi"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center"] * (1 - travel_matrix["transport_mode"])
-distance_emi = travel_matrix.loc[:,["distance_emi", "from_id"]].groupby("from_id").sum()
-gdf = gdf.merge(distance_emi, left_on = "ID", right_index = True)
-emissions_init = sum(save_population[:, 0] * (gdf["distance_emi"]))
+travel_matrix["distance_emi_LOW"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center_LOW"] * (1 - travel_matrix["transport_mode_LOW"])
+distance_emi_LOW = travel_matrix.loc[:,["distance_emi_LOW", "from_id"]].groupby("from_id").sum()
+gdf = gdf.merge(distance_emi_LOW, left_on = "ID", right_index = True)
+travel_matrix["distance_emi_MED"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center_MED"] * (1 - travel_matrix["transport_mode_MED"])
+distance_emi_MED = travel_matrix.loc[:,["distance_emi_MED", "from_id"]].groupby("from_id").sum()
+gdf = gdf.merge(distance_emi_MED, left_on = "ID", right_index = True)
+travel_matrix["distance_emi_HIGH"] = (travel_matrix["distance_car"] /1000) * travel_matrix["proba_center_HIGH"] * (1 - travel_matrix["transport_mode_HIGH"])
+distance_emi_HIGH = travel_matrix.loc[:,["distance_emi_HIGH", "from_id"]].groupby("from_id").sum()
+gdf = gdf.merge(distance_emi_HIGH, left_on = "ID", right_index = True)
+
+emissions_init = sum(np.nansum(indiv_loc_matrix_LOW, 0) * (gdf["distance_emi_LOW"])) + sum(np.nansum(indiv_loc_matrix_MED, 0) * (gdf["distance_emi_MED"])) + sum(np.nansum(indiv_loc_matrix_HIGH, 0) * (gdf["distance_emi_HIGH"]))
 save_emissions = np.zeros(MAX_YEAR)
 save_emissions[0] = emissions_init
 
 
 save_score_emissions = np.zeros(MAX_YEAR)
-save_score_welfare = np.zeros((N, MAX_YEAR))
-save_score_qol = np.zeros((N, MAX_YEAR))
-save_score_congestion = np.zeros((N, MAX_YEAR))
+save_score_welfare_LOW = np.zeros((N_LOW, MAX_YEAR))
+save_score_qol_LOW = np.zeros((N_LOW, MAX_YEAR))
+save_score_congestion_LOW = np.zeros((N_LOW, MAX_YEAR))
+
+save_score_welfare_MED = np.zeros((N_MED, MAX_YEAR))
+save_score_qol_MED = np.zeros((N_MED, MAX_YEAR))
+save_score_congestion_MED = np.zeros((N_MED, MAX_YEAR))
+
+save_score_welfare_HIGH = np.zeros((N_HIGH, MAX_YEAR))
+save_score_qol_HIGH = np.zeros((N_HIGH, MAX_YEAR))
+save_score_congestion_HIGH = np.zeros((N_HIGH, MAX_YEAR))
 
 #check distances per capita
-travel_matrix["pop"] = travel_matrix["pop"] * travel_matrix["proba_center"]
+travel_matrix["pop_LOW"] = travel_matrix["pop_LOW"] * travel_matrix["proba_center_LOW"]
+travel_matrix["pop_MED"] = travel_matrix["pop_MED"] * travel_matrix["proba_center_MED"]
+travel_matrix["pop_HIGH"] = travel_matrix["pop_HIGH"] * travel_matrix["proba_center_HIGH"]
+
 bins = np.array([0, 0.5, 2, 5, 10, 50])
 labels = [f"{i}km" for i in bins[:-1]]
 travel_matrix['distance_bin'] = pd.cut(travel_matrix['distance_car'] / 1000, bins=bins, labels=labels, right=False)
-pop_by_bin = travel_matrix.groupby('distance_bin', observed=True)['pop'].sum()
+pop_by_bin_LOW = travel_matrix.groupby('distance_bin', observed=True)['pop_LOW'].sum()
+pop_by_bin_MED = travel_matrix.groupby('distance_bin', observed=True)['pop_MED'].sum()
+pop_by_bin_HIGH = travel_matrix.groupby('distance_bin', observed=True)['pop_HIGH'].sum()
 
-pop_by_bin.plot(kind='bar', figsize=(8, 4))
+pop_by_bin_HIGH.plot(kind='bar', figsize=(8, 4))
 plt.ylabel("Population")
 plt.xlabel("Distance to center")
 plt.title("Population by distance category")
@@ -560,7 +545,7 @@ year = year + 1
 
 #### COMPUTE QOL
 
-save_qol[0], save_congestion[0], proba_commuting_in_tax_zone_by_car = compute_qol(save_population[:, 0], gdf, travel_matrix, jobs_in_toll_area, houses_in_toll_area)
+save_qol[0], save_congestion[0], proba_commuting_in_tax_zone_by_car_LOW, proba_commuting_in_tax_zone_by_car_MED, proba_commuting_in_tax_zone_by_car_HIGH = compute_qol(np.nansum(indiv_loc_matrix_LOW, 0), np.nansum(indiv_loc_matrix_MED, 0), np.nansum(indiv_loc_matrix_HIGH, 0), gdf, travel_matrix, jobs_in_toll_area, houses_in_toll_area)
 
 ### MODELING THE PSC
 
@@ -571,106 +556,241 @@ while year < MAX_YEAR:
     # Urban form with the tax, without inertia
 
     #gdf = compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax = tax)
-    gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE, jobs_in_toll_area, houses_in_toll_area, tax)
+    gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax)
 
-    if year == 1:
-        net_income_t1 = gdf["income_net_of_transport_cost"]
+    #if year == 1:
+    #    net_income_t1 = gdf["income_net_of_transport_cost"]
 
     def compute_error_in_population_from_utility(u):
         """ Compute error in population associated to utility u"""
 
-        return compute_error_in_population(u / gdf["amenities"], np.nansum(gdf["pop"]), BETA, gdf["wage"], gdf["transport_cost"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], option_function, rent_residual, density_residual, size_residual)
+        return compute_error_in_population(u, gdf["amenities"], [pop_low_income, pop_medium_income, pop_high_income], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], option_function, rent_residual, density_residual, size_residual)
 
-    solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, np.nanmedian(utility))
+    result_global = differential_evolution(compute_error_in_population_from_utility, bounds=[(300,600), (550,900), (800,1400)])
+    solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, result_global.x)
 
     if solving_model.fun < 1:
+
+        alpha = 40
         utility = solving_model.x
-        R = compute_rents(BETA, gdf["wage"], utility / gdf["amenities"], gdf["transport_cost"])
-        q = compute_dwelling_size(BETA, gdf["wage"], gdf["transport_cost"], R)
-        n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function)
+        R_LOW = compute_rents(BETA, gdf["wage_LOW"], utility[0]/gdf["amenities"], gdf["transport_cost_LOW"])
+        R_MED = compute_rents(BETA, gdf["wage_MED"], utility[1]/gdf["amenities"], gdf["transport_cost_MED"])
+        R_HIGH = compute_rents(BETA, gdf["wage_HIGH"], utility[2]/gdf["amenities"], gdf["transport_cost_HIGH"])
+
+        # --- Normalize rents to avoid overflow ---
+        # Bring rents to roughly mean-zero, unit-scale before exponentiation
+        R_stack = np.vstack([R_LOW, R_MED, R_HIGH])
+        R_mean = np.nanmean(R_stack)
+        R_std = np.nanstd(R_stack) + 1e-9  # prevent division by zero
+
+        R_LOW_n = (R_LOW - R_mean) / R_std
+        R_MED_n = (R_MED - R_mean) / R_std
+        R_HIGH_n = (R_HIGH - R_mean) / R_std
+
+        # --- Soft assignment (numerically stable softmax) ---
+        # subtract max to avoid overflow
+        R_max = np.maximum.reduce([R_LOW_n, R_MED_n, R_HIGH_n])
+        exp_LOW = np.exp(alpha * (R_LOW_n - R_max))
+        exp_MED = np.exp(alpha * (R_MED_n - R_max))
+        exp_HIGH = np.exp(alpha * (R_HIGH_n - R_max))
+        denom = exp_LOW + exp_MED + exp_HIGH
+
+        w_LOW = exp_LOW / denom
+        w_MED = exp_MED / denom
+        w_HIGH = exp_HIGH / denom
+
+        R = w_LOW * R_LOW + w_MED * R_MED + w_HIGH * R_HIGH
+        avg_wage = w_LOW * gdf["wage_LOW"] + w_MED * gdf["wage_MED"] + w_HIGH * gdf["wage_HIGH"]
+        avg_t_cost = w_LOW * gdf["transport_cost_LOW"] + w_MED * gdf["transport_cost_MED"] + w_HIGH * gdf["transport_cost_HIGH"]
+
+
+        q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
+        n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function = option_function)
+    
         R = R * np.exp(rent_residual)
         q = q * np.exp(size_residual)
         n = n * np.exp(density_residual)
         n[np.isnan(n)] = 0
+
     else:
         print("Minimization failed!")
 
     housing_without_inertia = n * q
 
     # AMB
-    proba_of_moving_from, proba_of_moving_to = compute_proba_of_moving(save_housing[:, year - 1], housing_without_inertia.to_numpy()* SCALE_ABM)
-    indiv_loc_matrix_new = deepcopy(indiv_loc_matrix)
-    indiv_loc_matrix, has_moved = make_people_move(indiv_loc_matrix_new, N, len(gdf), indiv_loc_matrix, proba_of_moving_from, proba_of_moving_to, PROBA_MOVE)
+    proba_of_moving_from_LOW, proba_of_moving_to_LOW = compute_proba_of_moving(save_housing_LOW[:, year - 1], (housing_without_inertia * SCALE_ABM * w_LOW).to_numpy())
+    indiv_loc_matrix_new_LOW = deepcopy(indiv_loc_matrix_LOW)
+    indiv_loc_matrix_LOW, has_moved_LOW = make_people_move(indiv_loc_matrix_new_LOW, N_LOW, len(gdf), indiv_loc_matrix_LOW, proba_of_moving_from_LOW, proba_of_moving_to_LOW, PROBA_MOVE)
+
+    proba_of_moving_from_MED, proba_of_moving_to_MED = compute_proba_of_moving(save_housing_MED[:, year - 1], (housing_without_inertia * SCALE_ABM * w_MED).to_numpy())
+    indiv_loc_matrix_new_MED = deepcopy(indiv_loc_matrix_MED)
+    indiv_loc_matrix_MED, has_moved_MED = make_people_move(indiv_loc_matrix_new_MED, N_MED, len(gdf), indiv_loc_matrix_MED, proba_of_moving_from_MED, proba_of_moving_to_MED, PROBA_MOVE)
+    
+    proba_of_moving_from_HIGH, proba_of_moving_to_HIGH = compute_proba_of_moving(save_housing_HIGH[:, year - 1], (housing_without_inertia * SCALE_ABM * w_HIGH).to_numpy())
+    indiv_loc_matrix_new_HIGH = deepcopy(indiv_loc_matrix_HIGH)
+    indiv_loc_matrix_HIGH, has_moved_HIGH = make_people_move(indiv_loc_matrix_new_HIGH, N_HIGH, len(gdf), indiv_loc_matrix_HIGH, proba_of_moving_from_HIGH, proba_of_moving_to_HIGH, PROBA_MOVE)
     
     
-    rent_indiv_new = indiv_loc_matrix @ R
-    dwelling_size_indiv_new = indiv_loc_matrix @ q
-    rent_indiv[has_moved == 1] = rent_indiv_new[has_moved == 1]
-    dwelling_size_indiv[has_moved == 1] = dwelling_size_indiv_new[has_moved == 1]
+    
+    rent_indiv_new_LOW = indiv_loc_matrix_LOW @ R
+    dwelling_size_indiv_new_LOW = indiv_loc_matrix_LOW @ q
+    rent_indiv_LOW[has_moved_LOW == 1] = rent_indiv_new_LOW[has_moved_LOW == 1]
+    dwelling_size_indiv_LOW[has_moved_LOW == 1] = dwelling_size_indiv_new_LOW[has_moved_LOW == 1]
 
-    utility = compute_utility_manually(indiv_loc_matrix @ gdf["wage"], indiv_loc_matrix @gdf["transport_cost"], 
-                                                dwelling_size_indiv, rent_indiv, BETA)
+    utility_LOW = compute_utility_manually(indiv_loc_matrix_LOW @ gdf["wage_LOW"], indiv_loc_matrix_LOW @gdf["transport_cost_LOW"], 
+                                                dwelling_size_indiv_LOW, rent_indiv_LOW, BETA)
 
-    housing_indiv = dwelling_size_indiv @ csr_matrix(indiv_loc_matrix)  # shape: (10,)
+    housing_indiv_LOW = dwelling_size_indiv_LOW @ csr_matrix(indiv_loc_matrix_LOW)  # shape: (10,)
 
+    rent_indiv_new_MED = indiv_loc_matrix_MED @ R
+    dwelling_size_indiv_new_MED = indiv_loc_matrix_MED @ q
+    rent_indiv_MED[has_moved_MED == 1] = rent_indiv_new_MED[has_moved_MED == 1]
+    dwelling_size_indiv_MED[has_moved_MED == 1] = dwelling_size_indiv_new_MED[has_moved_MED == 1]
+
+    utility_MED = compute_utility_manually(indiv_loc_matrix_MED @ gdf["wage_MED"], indiv_loc_matrix_MED @gdf["transport_cost_MED"], 
+                                                dwelling_size_indiv_MED, rent_indiv_MED, BETA)
+
+    housing_indiv_MED = dwelling_size_indiv_MED @ csr_matrix(indiv_loc_matrix_MED)  # shape: (10,)
+
+    rent_indiv_new_HIGH = indiv_loc_matrix_HIGH @ R
+    dwelling_size_indiv_new_HIGH = indiv_loc_matrix_HIGH @ q
+    rent_indiv_HIGH[has_moved_HIGH == 1] = rent_indiv_new_HIGH[has_moved_HIGH == 1]
+    dwelling_size_indiv_HIGH[has_moved_HIGH == 1] = dwelling_size_indiv_new_HIGH[has_moved_HIGH == 1]
+
+    utility_HIGH = compute_utility_manually(indiv_loc_matrix_HIGH @ gdf["wage_HIGH"], indiv_loc_matrix_HIGH @gdf["transport_cost_HIGH"], 
+                                                dwelling_size_indiv_HIGH, rent_indiv_HIGH, BETA)
+
+    housing_indiv_HIGH = dwelling_size_indiv_HIGH @ csr_matrix(indiv_loc_matrix_HIGH)  # shape: (10,)
+
+    
+    utility_LOW[np.isnan(utility_LOW)] = 0
+    utility_MED[np.isnan(utility_MED)] = 0
+    utility_HIGH[np.isnan(utility_HIGH)] = 0
+    
     #Save outputs
-    save_housing[:, year] = deepcopy(housing_indiv)
-    save_rent[:, year] = deepcopy(rent_indiv)
-    save_dwelling_size[:, year] = deepcopy(dwelling_size_indiv)
-    save_population[:, year] = np.nansum(indiv_loc_matrix, 0)
-    save_utility[:, year] = deepcopy(utility)
+    save_population[:, year] = np.nansum(indiv_loc_matrix_LOW, 0) + np.nansum(indiv_loc_matrix_MED, 0) + np.nansum(indiv_loc_matrix_HIGH, 0)
     save_tax[year] = tax
-    save_transport_mode[:, year] = deepcopy(indiv_loc_matrix@gdf["transport_mode"])
 
+    save_housing_LOW[:, year] = deepcopy(housing_indiv_LOW)
+    save_rent_LOW[:, year] = deepcopy(rent_indiv_LOW)
+    save_dwelling_size_LOW[:, year] = deepcopy(dwelling_size_indiv_LOW)
+    save_utility_LOW[:, year] = deepcopy(utility_LOW)
+    save_transport_mode_LOW[:, year] = deepcopy(indiv_loc_matrix_LOW@gdf["transport_mode_LOW"])
+
+    save_housing_MED[:, year] = deepcopy(housing_indiv_MED)
+    save_rent_MED[:, year] = deepcopy(rent_indiv_MED)
+    save_dwelling_size_MED[:, year] = deepcopy(dwelling_size_indiv_MED)
+    save_utility_MED[:, year] = deepcopy(utility_MED)
+    save_transport_mode_MED[:, year] = deepcopy(indiv_loc_matrix_MED@gdf["transport_mode_MED"])
+
+    save_housing_HIGH[:, year] = deepcopy(housing_indiv_HIGH)
+    save_rent_HIGH[:, year] = deepcopy(rent_indiv_HIGH)
+    save_dwelling_size_HIGH[:, year] = deepcopy(dwelling_size_indiv_HIGH)
+    save_utility_HIGH[:, year] = deepcopy(utility_HIGH)
+    save_transport_mode_HIGH[:, year] = deepcopy(indiv_loc_matrix_HIGH@gdf["transport_mode_HIGH"])
+
+    
+    
+    
     # Policy support
-    score_welfare = compute_change_in_welfare(save_utility[:,0], save_utility[:,year])
-    score_emissions, emissions = compute_change_in_emissions(gdf, travel_matrix, emissions_init, save_population[:, year])
+    score_welfare_LOW = compute_change_in_welfare(save_utility_LOW[:,0], save_utility_LOW[:,year])
+    score_welfare_MED = compute_change_in_welfare(save_utility_MED[:,0], save_utility_MED[:,year])
+    score_welfare_HIGH = compute_change_in_welfare(save_utility_HIGH[:,0], save_utility_HIGH[:,year])
+    
+    
+    score_emissions, emissions = compute_change_in_emissions(gdf, travel_matrix, emissions_init, np.nansum(indiv_loc_matrix_LOW, 0), np.nansum(indiv_loc_matrix_MED, 0), np.nansum(indiv_loc_matrix_HIGH, 0))
 
     
     #save outcomes
-    save_qol[year], save_congestion[year], proba_commuting_in_tax_zone_by_car = compute_qol(save_population[:, year], gdf, travel_matrix, jobs_in_toll_area, houses_in_toll_area)
+    save_qol[year], save_congestion[year], proba_commuting_in_tax_zone_by_car_LOW, proba_commuting_in_tax_zone_by_car_MED, proba_commuting_in_tax_zone_by_car_HIGH = compute_qol(np.nansum(indiv_loc_matrix_LOW, 0), np.nansum(indiv_loc_matrix_MED, 0), np.nansum(indiv_loc_matrix_HIGH, 0), gdf, travel_matrix, jobs_in_toll_area, houses_in_toll_area)
 
     score_qol_zone = compute_change_in_qol(save_qol[0], save_qol[year])
     
-    score_qol = (indiv_loc_matrix @ gdf.ID.isin(houses_in_toll_area)) * score_qol_zone
-    score_qol[score_qol == 0] = 0.5
+    score_qol_LOW = (indiv_loc_matrix_LOW @ gdf.ID.isin(houses_in_toll_area)) * score_qol_zone
+    score_qol_LOW[score_qol_LOW == 0] = 0.5
 
-    
+    score_qol_MED = (indiv_loc_matrix_MED @ gdf.ID.isin(houses_in_toll_area)) * score_qol_zone
+    score_qol_MED[score_qol_MED == 0] = 0.5
+
+
+    score_qol_HIGH = (indiv_loc_matrix_HIGH @ gdf.ID.isin(houses_in_toll_area)) * score_qol_zone
+    score_qol_HIGH[score_qol_HIGH == 0] = 0.5
+
     score_congestion_zone = compute_change_in_qol(save_congestion[0], save_congestion[year])
 
-    proba_commuting_in_tax_zone_by_car[np.isnan(proba_commuting_in_tax_zone_by_car)] = 0
-    score_congestion = (indiv_loc_matrix @ proba_commuting_in_tax_zone_by_car) * score_congestion_zone + (indiv_loc_matrix @ (1-proba_commuting_in_tax_zone_by_car)) * 0.5
+    
+    proba_commuting_in_tax_zone_by_car_LOW[np.isnan(proba_commuting_in_tax_zone_by_car_LOW)] = 0
+    score_congestion_LOW = (indiv_loc_matrix_LOW @ proba_commuting_in_tax_zone_by_car_LOW) * score_congestion_zone + (indiv_loc_matrix_LOW @ (1-proba_commuting_in_tax_zone_by_car_LOW)) * 0.5
+
+    proba_commuting_in_tax_zone_by_car_MED[np.isnan(proba_commuting_in_tax_zone_by_car_MED)] = 0
+    score_congestion_MED = (indiv_loc_matrix_MED @ proba_commuting_in_tax_zone_by_car_MED) * score_congestion_zone + (indiv_loc_matrix_MED @ (1-proba_commuting_in_tax_zone_by_car_MED)) * 0.5
+
+    proba_commuting_in_tax_zone_by_car_HIGH[np.isnan(proba_commuting_in_tax_zone_by_car_HIGH)] = 0
+    score_congestion_HIGH = (indiv_loc_matrix_HIGH @ proba_commuting_in_tax_zone_by_car_HIGH) * score_congestion_zone + (indiv_loc_matrix_HIGH @ (1-proba_commuting_in_tax_zone_by_car_HIGH)) * 0.5
 
 
-    political_opinion = compute_political_opinion(score_welfare, score_qol, score_emissions, score_congestion, BETA_OPINION)
-    price_here = compute_price(score_welfare, score_qol, score_emissions, score_congestion, BETA_PRICE)
     
     save_emissions[year] = emissions
     save_score_emissions[year] = score_emissions
-    save_score_welfare[:,year] = score_welfare
-    save_score_qol[:,year] = score_qol
-    save_score_congestion[:,year] = score_congestion
+
+    save_score_welfare_LOW[:,year] = score_welfare_LOW
+    save_score_qol_LOW[:,year] = score_qol_LOW
+    save_score_congestion_LOW[:,year] = score_congestion_LOW
+
+    save_score_welfare_MED[:,year] = score_welfare_MED
+    save_score_qol_MED[:,year] = score_qol_MED
+    save_score_congestion_MED[:,year] = score_congestion_MED
+
+    save_score_welfare_HIGH[:,year] = score_welfare_HIGH
+    save_score_qol_HIGH[:,year] = score_qol_HIGH
+    save_score_congestion_HIGH[:,year] = score_congestion_HIGH
 
 
-    #support = (INERTIA_OPINION * support) + ((1 - INERTIA_OPINION) * political_opinion) # type: ignore
-    support = political_opinion
-    acceptable_price = (INERTIA_OPINION * acceptable_price) + ((1 - INERTIA_OPINION) * price_here) # type: ignore
+    political_opinion_LOW = compute_political_opinion(score_welfare_LOW, score_qol_LOW, score_emissions, score_congestion_LOW, BETA_OPINION)   
+    price_here_LOW = compute_price(score_welfare_LOW, score_qol_LOW, score_emissions, score_congestion_LOW, BETA_PRICE)
+    support_LOW = political_opinion_LOW
+    acceptable_price_LOW = (INERTIA_OPINION * acceptable_price_LOW) + ((1 - INERTIA_OPINION) * price_here_LOW) # type: ignore
    
-    save_median_support[year] = np.nanmedian(support)
-    print("support", support)
+    political_opinion_MED = compute_political_opinion(score_welfare_MED, score_qol_MED, score_emissions, score_congestion_MED, BETA_OPINION)   
+    price_here_MED = compute_price(score_welfare_MED, score_qol_MED, score_emissions, score_congestion_MED, BETA_PRICE)
+    support_MED = political_opinion_MED
+    acceptable_price_MED = (INERTIA_OPINION * acceptable_price_MED) + ((1 - INERTIA_OPINION) * price_here_MED) # type: ignore
+   
+    political_opinion_HIGH = compute_political_opinion(score_welfare_HIGH, score_qol_HIGH, score_emissions, score_congestion_HIGH, BETA_OPINION)   
+    price_here_HIGH = compute_price(score_welfare_HIGH, score_qol_HIGH, score_emissions, score_congestion_HIGH, BETA_PRICE)
+    support_HIGH = political_opinion_HIGH
+    acceptable_price_HIGH = (INERTIA_OPINION * acceptable_price_HIGH) + ((1 - INERTIA_OPINION) * price_here_HIGH) # type: ignore
+   
+    save_median_support[year] = np.nanmedian(np.concatenate((support_LOW, support_MED, support_HIGH)))
+    #print("support", support)
 
     #Policy update
-    tax = np.nanmedian(acceptable_price)
+    tax = np.nanmedian(np.concatenate((acceptable_price_LOW, acceptable_price_MED, acceptable_price_HIGH)))
     #tax = np.fmin(tax * 1.05, np.nanmedian(acceptable_price))
 
     year = year + 1
 
 
 ### PLOT RESULTS
-print(round(100 * sum(gdf["transport_mode"] * gdf["pop"]) / sum(gdf["pop"])), " % commute by public transport")
+#print(round(100 * sum(gdf["transport_mode"] * gdf["pop"]) / sum(gdf["pop"])), " % commute by public transport")
 
-values = compute_weighted_mean_opinions(support, indiv_loc_matrix, N) * 100
+print(round(100 * ((np.nansum((gdf["transport_mode_LOW"]) * np.nansum(indiv_loc_matrix_LOW, 0))) + (np.nansum((gdf["transport_mode_MED"]) * np.nansum(indiv_loc_matrix_MED, 0))) + (np.nansum((gdf["transport_mode_HIGH"]) * np.nansum(indiv_loc_matrix_HIGH, 0)))) / (np.nansum(np.nansum(indiv_loc_matrix_LOW, 0)) + np.nansum(np.nansum(indiv_loc_matrix_MED, 0)) + np.nansum(np.nansum(indiv_loc_matrix_HIGH, 0)))))
+
+
+print(round(100 * sum(gdf["transport_mode_LOW"] * np.nansum(indiv_loc_matrix_LOW, 0) ) / sum(np.nansum(indiv_loc_matrix_LOW, 0) )), " % commute by public transport")
+print(round(100 * sum(gdf["transport_mode_MED"] * np.nansum(indiv_loc_matrix_MED, 0) ) / sum(np.nansum(indiv_loc_matrix_MED, 0) )), " % commute by public transport")
+print(round(100 * sum(gdf["transport_mode_HIGH"] * np.nansum(indiv_loc_matrix_HIGH, 0) ) / sum(np.nansum(indiv_loc_matrix_HIGH, 0) )), " % commute by public transport")
+
+
+values_LOW = compute_weighted_mean_opinions(support_LOW, indiv_loc_matrix_LOW, N_LOW) * 100
+plot_spatial_opinions(gdf, values_LOW)
+
+values_MED = compute_weighted_mean_opinions(support_MED, indiv_loc_matrix_MED, N_MED) * 100
+plot_spatial_opinions(gdf, values_MED)
+
+values_HIGH = compute_weighted_mean_opinions(support_HIGH, indiv_loc_matrix_HIGH, N_HIGH) * 100
 plot_spatial_opinions(gdf, values)
+
 
 plot_change_population(gdf, save_population)
 
@@ -703,7 +823,9 @@ plt.title("Population by distance bins")
 plt.show()
 
 plot_tax_suppport(save_tax, save_median_support)
-plot_scores(save_score_emissions, save_score_qol, save_score_congestion, save_score_welfare)
+plot_scores(save_score_emissions, save_score_qol_LOW, save_score_congestion_LOW, save_score_welfare_LOW)
+plot_scores(save_score_emissions, save_score_qol_MED, save_score_congestion_MED, save_score_welfare_MED)
+plot_scores(save_score_emissions, save_score_qol_HIGH, save_score_congestion_HIGH, save_score_welfare_HIGH)
 
 fig, ax1 = plt.subplots(figsize=(8, 6))  # make figure wider
 ax1.set_xlabel('Time (year)', fontsize=14)
