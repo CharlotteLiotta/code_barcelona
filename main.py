@@ -331,22 +331,22 @@ density_residual = np.log(gdf["pop"] / n)
 rent_residual = np.log(gdf["rent_m2"] / R)
 #rent_residual[gdf["rent_m2"] == 0] = 0
 #rent_residual[np.isnan(gdf["rent_m2"])] = 0
-size_residual = np.log(gdf["size"] / q)
+size_residual = np.log(gdf["size"] / (w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH))
 #size_residual[np.isnan(gdf["size"])] = 0 #np.nanmean(size_residual)
 
 # Plot the result of the calibration
 map_calibration(gdf, n, gdf["pop"] , "Population")
-map_calibration(gdf, q, gdf["size"], "Dwelling size per capita")
+map_calibration(gdf, w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, gdf["size"], "Dwelling size per capita")
 map_calibration(gdf, R, gdf["rent_m2"], "Rent per m2")
 map_calibration(gdf, 1000000 * n / gdf["urb_area"], 1000000 * gdf["pop"] / gdf["urb_area"], "Population density")
 
 scatter_calibration(gdf, n, gdf["pop"] , "Population")
-scatter_calibration(gdf, q, gdf["size"], "Dwelling size per capita")
+scatter_calibration(gdf, w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, gdf["size"], "Dwelling size per capita")
 scatter_calibration(gdf, R, gdf["rent_m2"], "Rent per m2")
-scatter_calibration(gdf, n * q / gdf["urb_area"], gdf["pop"] * gdf["size"] / gdf["urb_area"], "Housing")
+scatter_calibration(gdf, n * w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH / gdf["urb_area"], gdf["pop"] * gdf["size"] / gdf["urb_area"], "Housing")
 scatter_calibration(gdf, 1000000 * n / gdf["urb_area"], 1000000 * gdf["pop"] / gdf["urb_area"], "Population density")
 
-agg = compare_rent_or_size(gdf, "size", q, 1)
+agg = compare_rent_or_size(gdf, "size", w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, 1)
 agg = compare_rent_or_size(gdf, "rent_m2", R, 1)
 agg = compare_var(gdf, n)
 
@@ -412,7 +412,7 @@ if solving_model.fun < 1:
     n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, option_function = option_function)
     
     R = R * np.exp(rent_residual)
-    q = q * np.exp(size_residual)
+    q = (w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH) * np.exp(size_residual)
     n = n * np.exp(density_residual)
 
     n[np.isnan(n)] = 0
