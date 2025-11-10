@@ -442,7 +442,9 @@ while year < MAX_YEAR:
 
 
 ### PLOT RESULTS
-print(round(100 * sum(gdf["transport_mode"] * gdf["pop"]) / sum(gdf["pop"])), " % commute by public transport")
+print(round(100 * ((np.nansum((gdf["transport_mode"]) * np.nansum(indiv_loc_matrix, 0)))) / (np.nansum(np.nansum(indiv_loc_matrix, 0)))))
+ 
+
 
 values = compute_weighted_mean_opinions(support, indiv_loc_matrix, N) * 100
 plot_spatial_opinions(gdf, values)
