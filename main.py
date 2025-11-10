@@ -311,12 +311,17 @@ if solving_model.fun < 1:
 
     R = w_LOW * R_LOW + w_MED * R_MED + w_HIGH * R_HIGH
     
-    avg_wage = w_LOW * gdf["wage_LOW"] + w_MED * gdf["wage_MED"] + w_HIGH * gdf["wage_HIGH"]
-    avg_t_cost = w_LOW * gdf["transport_cost_LOW"] + w_MED * gdf["transport_cost_MED"] + w_HIGH * gdf["transport_cost_HIGH"]
+    #avg_wage = w_LOW * gdf["wage_LOW"] + w_MED * gdf["wage_MED"] + w_HIGH * gdf["wage_HIGH"]
+    #avg_t_cost = w_LOW * gdf["transport_cost_LOW"] + w_MED * gdf["transport_cost_MED"] + w_HIGH * gdf["transport_cost_HIGH"]
 
 
-    q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
-    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function = option_function)
+    #q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
+    # --- Compute dwelling size and population ---
+    q_LOW = compute_dwelling_size(BETA, gdf["wage_LOW"], gdf["transport_cost_LOW"], R)
+    q_MED = compute_dwelling_size(BETA, gdf["wage_MED"], gdf["transport_cost_MED"], R)
+    q_HIGH = compute_dwelling_size(BETA, gdf["wage_HIGH"], gdf["transport_cost_HIGH"], R)
+    
+    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, option_function = option_function)
     
 else:
     print("Minimization failed!")
@@ -395,12 +400,16 @@ if solving_model.fun < 1:
     w_HIGH = exp_HIGH / denom
 
     R = w_LOW * R_LOW + w_MED * R_MED + w_HIGH * R_HIGH
-    avg_wage = w_LOW * gdf["wage_LOW"] + w_MED * gdf["wage_MED"] + w_HIGH * gdf["wage_HIGH"]
-    avg_t_cost = w_LOW * gdf["transport_cost_LOW"] + w_MED * gdf["transport_cost_MED"] + w_HIGH * gdf["transport_cost_HIGH"]
+    #avg_wage = w_LOW * gdf["wage_LOW"] + w_MED * gdf["wage_MED"] + w_HIGH * gdf["wage_HIGH"]
+    #avg_t_cost = w_LOW * gdf["transport_cost_LOW"] + w_MED * gdf["transport_cost_MED"] + w_HIGH * gdf["transport_cost_HIGH"]
 
+    q_LOW = compute_dwelling_size(BETA, gdf["wage_LOW"], gdf["transport_cost_LOW"], R)
+    q_MED = compute_dwelling_size(BETA, gdf["wage_MED"], gdf["transport_cost_MED"], R)
+    q_HIGH = compute_dwelling_size(BETA, gdf["wage_HIGH"], gdf["transport_cost_HIGH"], R)
 
-    q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
-    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function = option_function)
+    #q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
+    #n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function = option_function)
+    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, option_function = option_function)
     
     R = R * np.exp(rent_residual)
     q = q * np.exp(size_residual)

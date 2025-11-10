@@ -247,12 +247,16 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
 
     # --- Weighted averages of rent, wage, and transport cost ---
     R = w_LOW * R_LOW + w_MED * R_MED + w_HIGH * R_HIGH
-    avg_wage = w_LOW * Y_LOW + w_MED * Y_MED + w_HIGH * Y_HIGH
-    avg_t_cost = w_LOW * transport_cost_LOW + w_MED * transport_cost_MED + w_HIGH * transport_cost_HIGH
+    
+    #avg_wage = w_LOW * Y_LOW + w_MED * Y_MED + w_HIGH * Y_HIGH
+    #avg_t_cost = w_LOW * transport_cost_LOW + w_MED * transport_cost_MED + w_HIGH * transport_cost_HIGH
 
     # --- Compute dwelling size and population ---
-    q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
-    n = compute_population(B, KAPPA, SIGMA, R, RHO, L, q, option_function=option_function)
+    q_LOW = compute_dwelling_size(BETA, Y_LOW, transport_cost_LOW, R)
+    q_MED = compute_dwelling_size(BETA, Y_MED, transport_cost_MED, R)
+    q_HIGH = compute_dwelling_size(BETA, Y_HIGH, transport_cost_HIGH, R)
+    
+    n = compute_population(B, KAPPA, SIGMA, R, RHO, L, w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, option_function=option_function)
     
     n = n * np.exp(resid_density)
 
