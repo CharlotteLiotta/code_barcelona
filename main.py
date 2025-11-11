@@ -244,7 +244,7 @@ def calibration_utility_amenity_old(x, print_summary=0, export_amenities=0):
     
 def calibration_utility_amenity_v1(x, print_summary=0, export_amenities=0):
     """Calibrate BETA and AMENITIES by minimizing likelihood with numerical stabilization."""
-    alpha = 40
+    alpha = 30
     BETA, U_LOW, U_MED, U_HIGH = x
     print(f"x = {x}")
 
@@ -373,7 +373,7 @@ def calibration_utility_amenity_v1(x, print_summary=0, export_amenities=0):
     
 def calibration_utility_amenity(x, print_summary=0, export_amenities=0):
     """Calibrate BETA and U_LOW/MED/HIGH by minimizing likelihood with numerical stabilization."""
-    alpha = 40
+    alpha = 50
     BETA, U_LOW, U_MED, U_HIGH = x
     print(f"x = {x}")
 
@@ -462,11 +462,11 @@ def calibration_utility_amenity(x, print_summary=0, export_amenities=0):
     log_L_size = - np.sum(mask)/2*np.log(2*np.pi*epsilon_size) - np.nansum(diff_size[mask]**2)/(2*epsilon_size)
 
     # --- 6. Compute population density ---
-    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], size_est, option_function=option_function)
-    diff_density = np.log(gdf["pop"]) - np.log(n)
-    mask_d = (~np.isnan(diff_density)) & (~np.isinf(diff_density))
-    epsilon_density = max(np.nanmean(diff_density[mask_d]**2), 1e-12)
-    log_L_density = - np.sum(mask_d)/2*np.log(2*np.pi*epsilon_density) - np.nansum(diff_density[mask_d]**2)/(2*epsilon_density)
+    #n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], size_est, option_function=option_function)
+    ##diff_density = np.log(gdf["pop"]) - np.log(n)
+    #mask_d = (~np.isnan(diff_density)) & (~np.isinf(diff_density))
+    #epsilon_density = max(np.nanmean(diff_density[mask_d]**2), 1e-12)
+    #log_L_density = - np.sum(mask_d)/2*np.log(2*np.pi*epsilon_density) - np.nansum(diff_density[mask_d]**2)/(2*epsilon_density)
 
     # --- 7. Export amenities if requested ---
     if export_amenities == 1:
@@ -476,7 +476,7 @@ def calibration_utility_amenity(x, print_summary=0, export_amenities=0):
         return gdf_here[["ID", "amenities"]]
     else:
         # Final log-likelihood (maximize sum of log-likelihoods and sorting)
-        return - (log_L_A + log_sorting)
+        return - (log_L_A + log_sorting + log_L_size)
 
 def compute_log_likelihood(x):
     return calibration_utility_amenity(x, 0, 0)
@@ -512,14 +512,14 @@ B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, o
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u, gdf["amenities"], [pop_low_income, pop_medium_income, pop_high_income], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], option_function)
+    return compute_error_in_population(u, gdf["amenities"], [pop_low_income, pop_medium_income, pop_high_income], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], option_function, alpha = 50)
 
 result_global = differential_evolution(compute_error_in_population_from_utility, bounds=[(0,1000), (0,1500), (0,1400)])
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [100, 150, 200], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800])
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [180, 420, 600], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800])
 
 if solving_model.fun < 1:
-    alpha = 40
+    alpha = 50
     utility = solving_model.x
     R_LOW = compute_rents(BETA, gdf["wage_LOW"], utility[0]/gdf["amenities"], gdf["transport_cost_LOW"])
     R_MED = compute_rents(BETA, gdf["wage_MED"], utility[1]/gdf["amenities"], gdf["transport_cost_MED"])
@@ -609,7 +609,7 @@ solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility
 
 if solving_model.fun < 1:
 
-    alpha = 40
+    alpha = 30
     utility = solving_model.x
     R_LOW = compute_rents(BETA, gdf["wage_LOW"], utility[0]/gdf["amenities"], gdf["transport_cost_LOW"])
     R_MED = compute_rents(BETA, gdf["wage_MED"], utility[1]/gdf["amenities"], gdf["transport_cost_MED"])
@@ -831,7 +831,7 @@ while year < MAX_YEAR:
 
     if solving_model.fun < 1:
 
-        alpha = 40
+        alpha = 30
         utility = solving_model.x
         R_LOW = compute_rents(BETA, gdf["wage_LOW"], utility[0]/gdf["amenities"], gdf["transport_cost_LOW"])
         R_MED = compute_rents(BETA, gdf["wage_MED"], utility[1]/gdf["amenities"], gdf["transport_cost_MED"])
