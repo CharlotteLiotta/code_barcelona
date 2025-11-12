@@ -54,21 +54,21 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
     # Compute car and transit costs
     for level in income_levels:
         factor = wage_factors[level]
-        travel_time_car[f"COST_CAR_{level}"] = (
+        travel_time_car.loc[:,f"COST_CAR_{level}"] = (
             (travel_time_car["travel_time"] / 60) * PRICE_TIME * factor * WORKING_DAYS
             + (travel_time_car["distance_car"] / 1000) * PRICE_FUEL * WORKING_DAYS
             + FIXED_COST_CAR
             + tax * WORKING_DAYS * travel_time_car["zone_tax"]
         )
-        travel_time_transit[f"COST_PT_{level}"] = (
+        travel_time_transit.loc[:,f"COST_PT_{level}"] = (
             (travel_time_transit["travel_time"] / 60) * PRICE_TIME * factor * WORKING_DAYS
             + travel_time_transit["monthly_cost_transit"]
         )
 
         # Fill missing costs
-        travel_time_car[f"COST_CAR_{level}"].fillna(600, inplace=True)
-        travel_time_transit[f"COST_PT_{level}"].fillna(3500, inplace=True)
-    
+        travel_time_car[f"COST_CAR_{level}"] = travel_time_car[f"COST_CAR_{level}"].fillna(600)
+        travel_time_transit[f"COST_PT_{level}"] = travel_time_transit[f"COST_PT_{level}"].fillna(3500)
+
     travel_matrix = travel_time_car.loc[:,['from_id', 'to_id', "COST_CAR_LOW", "COST_CAR_MED", "COST_CAR_HIGH", "distance_car"]].merge(travel_time_transit.loc[:,['from_id', 'to_id', "COST_PT_LOW", "COST_PT_MED", "COST_PT_HIGH"]], on = ['from_id', 'to_id'])
     
     for level in income_levels:
@@ -85,6 +85,7 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
         "MED": pd.DataFrame(ARRAY_WAGE_MED, index=np.sort(np.unique(travel_matrix.to_id)), columns=["income_MED"]),
         "HIGH": pd.DataFrame(ARRAY_WAGE_HIGH, index=np.sort(np.unique(travel_matrix.to_id)), columns=["income_HIGH"])
     }
+    
     for level in income_levels:
         travel_matrix = travel_matrix.merge(wages[level], left_on="to_id", right_index=True)
 
@@ -123,55 +124,6 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
 
     return gdf, workers_per_cluster, travel_matrix
 
-def compute_error_in_population_old(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH, transport_cost_LOW, transport_cost_MED, transport_cost_HIGH, B, KAPPA, SIGMA, RHO, L, option_function = "CES", resid_rent = 0, resid_density = 0, resid_size = 0):
-    '''
-    Compute the difference between the population estimated by the model if 
-    the utility is equal to u and the actual population.
-
-        Parameters:
-            N (float): Actual population
-            u (float): Utility
-                        
-        Returns:
-            error_population (float): Difference between the estimated and actual population
-        '''
-
-    print("u", u)
-    R_LOW = compute_rents(BETA, Y_LOW, u[0]/amen, transport_cost_LOW)
-    R_MED = compute_rents(BETA, Y_MED, u[1]/amen, transport_cost_MED)
-    R_HIGH = compute_rents(BETA, Y_HIGH, u[2]/amen, transport_cost_HIGH)
-
-    LOW_here = (R_LOW >= R_MED) & (R_LOW >= R_HIGH)
-    MED_here = (R_MED >= R_LOW) & (R_MED >= R_HIGH)
-    HIGH_here = (R_HIGH >= R_MED) & (R_HIGH >= R_LOW)
-
-    R = R_HIGH.copy()
-    R.loc[LOW_here] = R_LOW.loc[LOW_here]
-    R.loc[MED_here] = R_MED.loc[MED_here]
-
-    avg_wage = Y_HIGH.copy()
-    avg_wage.loc[LOW_here] = Y_LOW.loc[LOW_here]
-    avg_wage.loc[MED_here] = Y_MED.loc[MED_here]
-
-    avg_t_cost = transport_cost_HIGH.copy()
-    avg_t_cost.loc[LOW_here] = transport_cost_LOW.loc[LOW_here]
-    avg_t_cost.loc[MED_here] = transport_cost_MED.loc[MED_here]
-
-    q = compute_dwelling_size(BETA, avg_wage, avg_t_cost, R)
-    n = compute_population(B, KAPPA, SIGMA, R, RHO, L, q, option_function = option_function)
-    
-    n = n * np.exp(resid_density)
-    
-    error_population_LOW = np.abs(N[0] - np.nansum(n[LOW_here]))
-    print("LOW", np.nansum(n[LOW_here]))
-    error_population_MED = np.abs(N[1] - np.nansum(n[MED_here]))
-    print("MED", np.nansum(n[MED_here]))
-    error_population_HIGH = np.abs(N[2] - np.nansum(n[HIGH_here]))
-    print("HIGH", np.nansum(n[HIGH_here]))
-    return error_population_LOW + error_population_MED + error_population_HIGH
-
-
-import numpy as np
 
 def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
                                 transport_cost_LOW, transport_cost_MED, transport_cost_HIGH,
@@ -232,7 +184,7 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
     pop_MED_model = np.nansum(w_MED * n)
     pop_HIGH_model = np.nansum(w_HIGH * n)
 
-    print(f"u={u}, LOW={pop_LOW_model:.2f}, MED={pop_MED_model:.2f}, HIGH={pop_HIGH_model:.2f}")
+    #print(f"u={u}, LOW={pop_LOW_model:.2f}, MED={pop_MED_model:.2f}, HIGH={pop_HIGH_model:.2f}")
 
     # --- Squared errors ---
     error_population_LOW = (N[0] - pop_LOW_model) ** 2
@@ -306,3 +258,37 @@ def compute_population(b, kappa, sigma, R, rho, L, q, option_function = "CES"):
 
 def CES_func(x, kappa, a, sigma):
     return kappa * (a ** (-sigma / (1 - sigma))) * ((1 - ((1 - a) ** sigma) * ((kappa * x) ** (sigma - 1))) ** (sigma / (1 - sigma)))
+
+def compute_outcomes(utility, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, alpha, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function = "CES"):
+
+
+    R_group = {
+        lvl: compute_rents(BETA, gdf[f"wage_{lvl}"], utility[i]/gdf["amenities"], gdf[f"transport_cost_{lvl}"])
+        for i, lvl in enumerate(income_levels)
+        }
+
+    # --- Normalize rents to avoid overflow ---
+    R_stack = np.vstack(list(R_group.values()))
+    R_mean, R_std = np.nanmean(R_stack), np.nanstd(R_stack) + 1e-9
+    R_n = {lvl: (R_group[lvl] - R_mean) / R_std for lvl in income_levels}
+
+    # --- Soft assignment (numerically stable softmax) ---
+    R_max = np.maximum.reduce(list(R_n.values()))
+    exp_R = {lvl: np.exp(alpha * (R_n[lvl] - R_max)) for lvl in income_levels}
+    denom = sum(exp_R.values())
+    w = {lvl: exp_R[lvl] / denom for lvl in income_levels}
+
+
+    R = sum(w[lvl] * R_group[lvl] for lvl in income_levels)
+    
+    # --- Compute dwelling sizes ---
+    q_group = {
+        lvl: compute_dwelling_size(BETA, gdf[f"wage_{lvl}"], gdf[f"transport_cost_{lvl}"], R)
+        for lvl in income_levels
+        }
+
+    # --- Compute total population ---
+    q = sum(w[lvl] * q_group[lvl] for lvl in income_levels)
+    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function=option_function)
+
+    return R, q, n, w, R_group, q_group

@@ -4,9 +4,9 @@ import geopandas as gpd # type: ignore
 from shapely import wkt, Point # type: ignore
 import requests
 from shapely.geometry import shape, LineString, MultiLineString # type: ignore
-import json
 import os 
 import matplotlib.pyplot as plt
+import warnings
 
 from import_data import * # type: ignore
 
@@ -30,7 +30,9 @@ def import_data(path_data, center, option):
             return s
 
         #Merge with shapefile
-        gdf = gpd.read_file(path_data + 'seccionado_2024/SECC_CE_20240101.shp')
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            gdf = gpd.read_file(path_data + 'seccionado_2024/SECC_CE_20240101.shp')
         gdf = gdf.loc[gdf.NMUN.isin(["Cornellà de Llobregat", 'Badalona', 'Badia del Vallès', 'Barberà del Vallès', 'Barcelona','Begues','Castellbisbal', 'Castelldefels', 'Cerdanyola del Vallès', 'Cervelló','Corbera de Llobregat','Papiol, El', 'Prat de Llobregat, El', 'Esplugues de Llobregat','Gavà', "Hospitalet de Llobregat, L'",'Palma de Cervelló, La','Molins de Rei', 'Montcada i Reixac', 'Montgat', 'Pallejà', 'Ripollet','Sant Adrià de Besòs', 'Sant Andreu de la Barca','Sant Boi de Llobregat', 'Sant Climent de Llobregat', 'Sant Cugat del Vallès', 'Sant Feliu de Llobregat','Sant Joan Despí','Sant Just Desvern','Sant Vicenç dels Horts', 'Santa Coloma de Cervelló', 'Santa Coloma de Gramenet','Tiana', 'Torrelles de Llobregat', 'Viladecans']),:]
         gdf = gdf.merge(df, on = "CUSEC", how = "left")
 
@@ -729,10 +731,10 @@ def import_rent_idealista(gdf, path_data):
 
 def import_tax_zone(gdf, employment_centers):
     zone_tax = gdf.loc[gdf.ID.str[:5].isin(["08019", "08101", "08194"]),:]
-    fig, ax = plt.subplots(figsize=(8, 8))
-    gdf.plot(ax = ax, color = "lightgrey")
-    zone_tax.plot(ax = ax)
-    plt.show()
+    #fig, ax = plt.subplots(figsize=(8, 8))
+    #gdf.plot(ax = ax, color = "lightgrey")
+    #zone_tax.plot(ax = ax)
+    #plt.show()
     zone_union = zone_tax.union_all()
     clusters_in_zone = employment_centers[employment_centers.within(zone_union)]["cluster"].unique().tolist()
     house_in_zone = gdf[gdf.centroid.within(zone_union)]["ID"].unique().tolist()

@@ -6,7 +6,9 @@ def compute_utility_manually(Y, T, q, R, BETA, OPTION_HEALTH = 0, N = 0, vkm = 0
     """ Compute agents' utility """
     
     if OPTION_HEALTH == 0:
-        u = (Y - T - q * R) ** (1 - BETA) * q ** BETA
+        composite_good = Y - T - q * R
+        composite_good[composite_good < 0] = 0
+        u = (composite_good) ** (1 - BETA) * q ** BETA
     elif OPTION_HEALTH == 1:
         health = vkm * marginal_cost_pollution / N
         u = (Y - T - q * R - health) ** (1 - BETA) * q ** BETA
@@ -38,16 +40,20 @@ def gini(array):
 
 def compute_change_in_welfare(utility_without_tax, utility_with_tax):
     """ Compute the impact of the change in utility on welfare"""
+    
+    relative_change_utility = np.empty(len(utility_with_tax))
+    relative_change_utility[utility_without_tax > 0] = ((utility_with_tax[utility_without_tax > 0] - utility_without_tax[utility_without_tax > 0]) / utility_without_tax[utility_without_tax > 0])
+    relative_change_utility[((utility_without_tax == 0) & (utility_with_tax > 0))] = 1
+    relative_change_utility[((utility_without_tax == 0) & (utility_with_tax == 0))] = 0
 
-    relative_change_utility = (utility_with_tax - utility_without_tax) / utility_without_tax
-    print("relative_change_utility", 100 * relative_change_utility, "%")
+    #print("relative_change_utility", 100 * relative_change_utility, "%")
     return (1 / (1 + np.exp(-5 * relative_change_utility)))
 
 def compute_change_in_qol(utility_without_tax, utility_with_tax):
     """ Compute the impact of the change in utility on welfare"""
 
     relative_change_utility = (utility_with_tax - utility_without_tax) / utility_without_tax
-    print("relative_change_qol", 100 * relative_change_utility, "%")
+    #print("relative_change_qol", 100 * relative_change_utility, "%")
     return (1 / (1 + np.exp(3 * relative_change_utility)))
 
 def compute_change_in_inequalities(utility_without_tax, utility_with_tax):
@@ -78,7 +84,7 @@ def compute_change_in_emissions(gdf, travel_matrix, emissions_init, n_with_tax_L
     
     emissions = sum(n_with_tax_LOW * (gdf["distance_emi_LOW"])) + sum(n_with_tax_MED * (gdf["distance_emi_MED"])) + sum(n_with_tax_HIGH * (gdf["distance_emi_HIGH"]))
     relative_change_emission = (emissions - emissions_init) / emissions_init
-    print("relative_change_emission", 100 * relative_change_emission, "%")
+    #print("relative_change_emission", 100 * relative_change_emission, "%")
     return (1 / (1 + np.exp(3 * relative_change_emission))), emissions
 
 def compute_qol(save_population_LOW, save_population_MED, save_population_HIGH, gdf, travel_matrix, clusters_in_zone, house_in_zone):

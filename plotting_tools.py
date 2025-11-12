@@ -269,6 +269,22 @@ def plot_spatial_opinions(gdf, values):
     # title
     ax.set_title("Average opinions (year 19)", fontsize=14)
 
+def plot_change_pop_line(gdf, save_population):
+    gdf = gdf.copy()
+    gdf["population0"] = save_population[:, 0]
+    gdf["population19"] = save_population[:, 19]
+    bins = np.arange(0, gdf["distance_center"].max() + 2, 2)
+    gdf["distance_bin"] = pd.cut(gdf["distance_center"], bins=bins)
+    pop_by_bin0 = gdf.groupby("distance_bin")["population0"].sum()
+    pop_by_bin19 = gdf.groupby("distance_bin")["population19"].sum()
+    pop_by_bin0.plot(kind="line", figsize=(10,5), label = "0")
+    pop_by_bin19.plot(kind="line", figsize=(10,5), label = "19")
+    plt.legend()
+    plt.ylabel("Population")
+    plt.xlabel("Distance to city center (km)")
+    plt.title("Population by distance bins")
+    plt.show()
+    
 def plot_change_population(gdf, save_population):
 
     # --- prepare data ---
@@ -413,7 +429,7 @@ def plot_calib_housing(gdf_here, fitted):
     nbins = 40
     df['bin'] = pd.qcut(df['distance_center'], nbins, duplicates='drop')
 
-    quartiles = df.groupby('bin').agg(
+    quartiles = df.groupby('bin', observed=False).agg(
         dist_median=('distance_center','median'),
         q25_obs=('dens_obs', lambda x: np.percentile(x,25)),
         q75_obs=('dens_obs', lambda x: np.percentile(x,75)),
@@ -450,4 +466,52 @@ def plot_calib_housing(gdf_here, fitted):
     plt.ylabel("Housing density")
     plt.title("Observed vs fitted housing density")
     plt.legend()
+    plt.show()
+
+def print_maps(gdf, n, q, R):
+    map_calibration(gdf, n, gdf["pop"] , "Population")
+    map_calibration(gdf, q, gdf["size"], "Dwelling size per capita")
+    map_calibration(gdf, R, gdf["rent_m2"], "Rent per m2")
+    map_calibration(gdf, 1000000 * n / gdf["urb_area"], 1000000 * gdf["pop"] / gdf["urb_area"], "Population density")
+
+def print_scatterplots(gdf, n, q, R):
+    scatter_calibration(gdf, n, gdf["pop"] , "Population")
+    scatter_calibration(gdf, q, gdf["size"], "Dwelling size per capita")
+    scatter_calibration(gdf, R, gdf["rent_m2"], "Rent per m2")
+    scatter_calibration(gdf, n * q / gdf["urb_area"], gdf["pop"] * gdf["size"] / gdf["urb_area"], "Housing")
+    scatter_calibration(gdf, 1000000 * n / gdf["urb_area"], 1000000 * gdf["pop"] / gdf["urb_area"], "Population density")
+
+def plot_line_charts(gdf, n, q, R):
+    agg = compare_rent_or_size(gdf, "size", q, 1)
+    agg = compare_rent_or_size(gdf, "rent_m2", R, 1)
+    agg = compare_var(gdf, n)
+
+    plt.plot(agg["distance_bin"], agg["mean_density_pop"], color='red', linewidth=2, label="Densité moyenne (pop)")
+    plt.plot(agg["distance_bin"], agg["mean_density_n"], color='blue', linewidth=2, label="Densité moyenne (n)")
+    plt.xlabel("Distance au centre-ville (km)")
+    plt.ylabel("Densité de population (hab/km²)")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+def plot_distance_distrib_check(income_levels, travel_matrix, level):
+
+    for lvl in income_levels:
+        travel_matrix[f"pop_{lvl}"] *= travel_matrix[f"proba_center_{lvl}"]
+
+    bins = np.array([0, 0.5, 2, 5, 10, 50])
+    labels = [f"{i}km" for i in bins[:-1]]
+    travel_matrix['distance_bin'] = pd.cut(travel_matrix['distance_car'] / 1000, bins=bins, labels=labels, right=False)
+
+    pop_by_bin = {
+        lvl: travel_matrix.groupby('distance_bin', observed=True)[f'pop_{lvl}'].sum()
+        for lvl in income_levels
+    }
+
+    pop_by_bin[level].plot(kind='bar', figsize=(8, 4))
+    plt.ylabel("Population")
+    plt.xlabel("Distance to center")
+    plt.title("Population by distance category")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
     plt.show()
