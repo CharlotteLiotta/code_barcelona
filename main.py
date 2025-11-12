@@ -379,7 +379,7 @@ while year < MAX_YEAR:
         price_here[lvl] = compute_price(score_welfare[lvl], score_qol[lvl],
                                         score_emissions, score_congestion[lvl], BETA_PRICE)
         support[lvl] = political_opinion[lvl]
-        acceptable_price_new[lvl] = (INERTIA_OPINION * acceptable_price[lvl]) + ((1 - INERTIA_OPINION) * price_here[lvl])
+        acceptable_price[lvl] = (INERTIA_OPINION * acceptable_price[lvl]) + ((1 - INERTIA_OPINION) * price_here[lvl])
 
         # Save scores
         save_score_welfare[lvl][:, year] = score_welfare[lvl]
@@ -389,7 +389,7 @@ while year < MAX_YEAR:
     save_median_support[year] = np.nanmedian(np.concatenate([support[lvl] for lvl in income_levels]))
 
     #Policy update
-    tax = np.nanmedian(np.concatenate([acceptable_price_new[lvl] for lvl in income_levels]))
+    tax = np.nanmedian(np.concatenate([acceptable_price[lvl] for lvl in income_levels]))
     #tax = np.fmin(tax * 1.05, np.nanmedian(acceptable_price))
 
     year = year + 1
