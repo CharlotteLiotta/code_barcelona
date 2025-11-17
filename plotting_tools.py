@@ -196,16 +196,16 @@ def plot_scores(save_score_emissions, save_score_qol, save_score_congestion, sav
     plt.figure(figsize=(8, 6))
 
     # Plot lines (all same style, distinct colors)
-    plt.plot(save_score_emissions[1:]/save_score_emissions[1],
+    plt.plot(save_score_emissions[1:],#/save_score_emissions[1],
          label="Emissions", linewidth=2, color=colors[0])
 
-    plt.plot(np.nanmedian(save_score_qol[:,1:], 0)/np.nanmedian(save_score_qol[:,1], 0),
+    plt.plot(np.nanmean(save_score_qol[:,1:], 0), #/np.nanmean(save_score_qol[:,1], 0),
          label="Local pollution", linewidth=2, color=colors[1])
 
-    plt.plot(np.nanmedian(save_score_congestion[:,1:], 0)/np.nanmedian(save_score_congestion[:,1], 0),
+    plt.plot(np.nanmean(save_score_congestion[:,1:], 0), #/np.nanmean(save_score_congestion[:,1], 0),
          label="Congestion", linewidth=2, color=colors[2])
 
-    plt.plot(np.nanmedian(save_score_welfare[:,1:], 0)/np.nanmedian(save_score_welfare[:,1], 0),
+    plt.plot(np.nanmean(save_score_welfare[:,1:], 0), #/np.nanmean(save_score_welfare[:,1], 0),
          label="Utility", linewidth=2, color=colors[3])
 
     # Labels and title
@@ -275,8 +275,8 @@ def plot_change_pop_line(gdf, save_population):
     gdf["population19"] = save_population[:, 19]
     bins = np.arange(0, gdf["distance_center"].max() + 2, 2)
     gdf["distance_bin"] = pd.cut(gdf["distance_center"], bins=bins)
-    pop_by_bin0 = gdf.groupby("distance_bin")["population0"].sum()
-    pop_by_bin19 = gdf.groupby("distance_bin")["population19"].sum()
+    pop_by_bin0 = gdf.groupby("distance_bin", observed=False)["population0"].sum()
+    pop_by_bin19 = gdf.groupby("distance_bin", observed=False)["population19"].sum()
     pop_by_bin0.plot(kind="line", figsize=(10,5), label = "0")
     pop_by_bin19.plot(kind="line", figsize=(10,5), label = "19")
     plt.legend()

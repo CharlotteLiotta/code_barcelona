@@ -127,8 +127,8 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
 
 def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
                                 transport_cost_LOW, transport_cost_MED, transport_cost_HIGH,
-                                B, KAPPA, SIGMA, RHO, L, alpha,
-                                option_function="CES", resid_rent=0, resid_density=0, resid_size=0,):
+                                B, KAPPA, SIGMA, RHO, L, alpha, option_resid,
+                                option_function="CES", resid_rent=0, resid_density=0, resid_size=0):
     """
     Compute smooth squared error between model-estimated and observed populations
     given a trial utility vector u = [u_low, base_rent, u_high].
@@ -177,12 +177,17 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
     
     n = compute_population(B, KAPPA, SIGMA, R, RHO, L, w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, option_function=option_function)
     
-    n = n * np.exp(resid_density)
+    #n = n * np.exp(resid_density)
 
     # --- Smooth population shares ---
-    pop_LOW_model = np.nansum(w_LOW * n)
-    pop_MED_model = np.nansum(w_MED * n)
-    pop_HIGH_model = np.nansum(w_HIGH * n)
+    if option_resid == True:
+        pop_LOW_model = np.nansum(w_LOW * n * np.exp(resid_density["LOW"]))
+        pop_MED_model = np.nansum(w_MED * n * np.exp(resid_density["MED"]))
+        pop_HIGH_model = np.nansum(w_HIGH * n * np.exp(resid_density["HIGH"]))
+    else:
+        pop_LOW_model = np.nansum(w_LOW * n)
+        pop_MED_model = np.nansum(w_MED * n)
+        pop_HIGH_model = np.nansum(w_HIGH * n)
 
     #print(f"u={u}, LOW={pop_LOW_model:.2f}, MED={pop_MED_model:.2f}, HIGH={pop_HIGH_model:.2f}")
 

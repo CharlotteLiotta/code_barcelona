@@ -98,6 +98,7 @@ gdf["size"] = gdf["size_census"] #gdf["size_census"] #gdf["size_AMB"]
 gdf.loc[gdf["pop"] == 0, "pop"] = 1
 gdf.loc[gdf["rent_m2"] == 0, "rent_m2"] = np.nanmin(gdf.loc[gdf["rent_m2"]>0, "rent_m2"])
 gdf.loc[np.isnan(gdf["rent_m2"]), "rent_m2"] = np.nanmin(gdf.loc[gdf["rent_m2"]>0, "rent_m2"])
+#gdf.loc[gdf["rent_m2"] > 25, "rent_m2"] = np.nanmax(gdf.loc[gdf["rent_m2"]<25, "rent_m2"])
 gdf.loc[np.isnan(gdf["size"]), "size"] = np.nansum(gdf.loc[~np.isnan(gdf["size"]), "size"] * gdf.loc[~np.isnan(gdf["size"]), "pop"]) / np.nansum(gdf.loc[~np.isnan(gdf["size"]), "pop"])
 
 #Calibrate beta and amenities
@@ -127,7 +128,7 @@ B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, o
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, option_function)
+    return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function)
 
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [180, 420, 600], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800])
 
@@ -136,12 +137,19 @@ if solving_model.fun < 1:
 else:
     print("Minimization failed!")
 
-density_residual = np.log(gdf["pop"] / n)
+share_col = {"LOW": "share_low_income", "MED": None, "HIGH": "share_high_income"}
+density_residual = {
+    lvl: np.log(
+        (gdf["pop"] * (gdf[share_col[lvl]] / 100 if share_col[lvl] else (100 - gdf["share_low_income"] - gdf["share_high_income"]) / 100))
+        / (w[lvl] * n)
+    )
+    for lvl in income_levels
+}
 rent_residual = np.log(gdf["rent_m2"] / R)
 size_residual = np.log(gdf["size"] / q)
 
 # Plot the result of the calibration
-#print_maps(gdf, n, q, R)
+print_maps(gdf, n, q, R)
 #print_scatterplots(gdf, n, q, R)
 plot_line_charts(gdf, n, q, R)
 
@@ -149,7 +157,7 @@ plot_line_charts(gdf, n, q, R)
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, option_function, rent_residual, density_residual, size_residual)
+    return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
 
 
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x)
@@ -160,8 +168,11 @@ if solving_model.fun < 1:
 
     R = R * np.exp(rent_residual)
     q = q * np.exp(size_residual)
-    n = n * np.exp(density_residual)
+    n_group = {lvl: n * w[lvl] * np.exp(density_residual[lvl]) for lvl in ["LOW", "MED", "HIGH"]}
+    n = np.nansum(list(n_group.values()), axis=0)
     n[np.isnan(n)] = 0
+    for lvl in income_levels:
+        n_group[lvl][np.isnan(n_group[lvl])] = 0
 
 else:
     print("Minimization failed!")
@@ -173,7 +184,7 @@ N = {lvl: round(pop[lvl] * SCALE_ABM) for lvl in income_levels}
 support = {lvl: INITIAL_OPINION * np.ones(N[lvl]) for lvl in income_levels}
 indiv_loc_matrix = {
     lvl: compute_indiv_loc_matrix(
-        N[lvl], len(gdf), (n * SCALE_ABM * w[lvl]).to_numpy()
+        N[lvl], len(gdf), (n_group[lvl] * SCALE_ABM).to_numpy()
     )
     for lvl in income_levels
 }
@@ -266,7 +277,7 @@ while year < MAX_YEAR:
     def compute_error_in_population_from_utility(u):
         """ Compute error in population associated to utility u"""
 
-        return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, option_function, rent_residual, density_residual, size_residual)
+        return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
 
     solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x)
 
@@ -276,8 +287,11 @@ while year < MAX_YEAR:
 
         R = R * np.exp(rent_residual)
         q = q * np.exp(size_residual)
-        n = n * np.exp(density_residual)
+        n_group = {lvl: n * w[lvl] * np.exp(density_residual[lvl]) for lvl in ["LOW", "MED", "HIGH"]}
+        n = np.nansum(list(n_group.values()), axis=0)
         n[np.isnan(n)] = 0
+        for lvl in income_levels:
+            n_group[lvl][np.isnan(n_group[lvl])] = 0
 
     else:
         print("Minimization failed!")
@@ -406,7 +420,6 @@ for lvl in income_levels:
         save_score_congestion[lvl],
         save_score_welfare[lvl]
     )
-
 
 #Spatial analysis: weighted opinion and population
 plot_change_population(gdf, save_population)
