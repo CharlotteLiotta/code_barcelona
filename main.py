@@ -57,42 +57,6 @@ pop = {
     "HIGH": np.nansum(gdf["pop"] * gdf["share_high_income"] / 100),
 }
 
-#Import transport data
-#import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
-travel_time_matrix_car, travel_time_matrix_transit = load_transport_times_poly(gdf, path_data, center)
-travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers)
-gdf = import_cost_transit(gdf)
-travel_time_matrix_transit = travel_time_matrix_transit.merge(gdf[['ID', 'monthly_cost_transit']].rename(columns={'ID': 'from_id'}), on='from_id', how='left')
-
-### POLICY SUPPORT
-
-BETA_OPINION, INITIAL_OPINION = import_opinion_parameters(path_data)
-BETA_PRICE, INITIAL_PRICE = import_price_parameters(path_data)
-
-tax = INITIAL_PRICE
-acceptable_price = {"LOW": INITIAL_PRICE, "MED": INITIAL_PRICE, "HIGH": INITIAL_PRICE}
-
-### INITIAL STATE: YEAR 0
-
-#Transport cost calibration
-#gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area)
-#with open(path_data + "calib_trans_poly_i.pkl", "wb") as f:
-#    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
-with open(path_data + "calib_trans_poly_i.pkl", "rb") as f:
-    FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
-print("FIXED_COST_CAR: ", FIXED_COST_CAR)
-print("LAMBDA: ", LAMBDA)
-del Y
-del compute_transport_cost_logit, compute_cost_car_logit
-
-#Compute transport cost
-gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0, income_levels, wage_factors)
-print("Modal share of public transport (%):", round(100 * sum(np.nansum(gdf[f"transport_mode_{lvl}"] * gdf[f"pop_{lvl}"]) for lvl in income_levels) / sum(np.nansum(gdf[f"pop_{lvl}"]) for lvl in income_levels)))
-plot_transport_cost_i(gdf, "_HIGH")
-plot_transport_mode_i(gdf, "_HIGH")
-#plot_employment(gdf, employment_centers, var) var = employment_centers['employment'] * 0.001, employment_centers.merge(employed_results, left_on = "cluster", right_on = "to_id")["weighted_employed"] * 0.001,  # adjust scale_factor, ARRAY_WAGE* 0.5
-#gdf.merge(travel_matrix.loc[travel_matrix.to_id == 5,:], left_on = "ID", right_on = "from_id").plot("proba_center", legend = True)
-
 #Prepare variables
 gdf["size"] = gdf["size_census"] #gdf["size_census"] #gdf["size_AMB"]
 gdf.loc[gdf["pop"] == 0, "pop"] = 1
@@ -101,16 +65,13 @@ gdf.loc[np.isnan(gdf["rent_m2"]), "rent_m2"] = np.nanmin(gdf.loc[gdf["rent_m2"]>
 #gdf.loc[gdf["rent_m2"] > 25, "rent_m2"] = np.nanmax(gdf.loc[gdf["rent_m2"]<25, "rent_m2"])
 gdf.loc[np.isnan(gdf["size"]), "size"] = np.nansum(gdf.loc[~np.isnan(gdf["size"]), "size"] * gdf.loc[~np.isnan(gdf["size"]), "pop"]) / np.nansum(gdf.loc[~np.isnan(gdf["size"]), "pop"])
 
-#Calibrate beta and amenities
-def compute_log_likelihood(x):
-    return calibration_utility_amenity(x, gdf, income_levels, SOFT_RENT, 0, 0)
+### POLICY SUPPORT
 
-calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.57, 140, 241, 348], bounds=[(0.1,0.9), (100,2000), (100,2000), (100,2000)])
-BETA = calib_beta.x[0]
-print("BETA:", BETA)
-amenities = calibration_utility_amenity(calib_beta.x, gdf, income_levels, SOFT_RENT, 1, 1)
-gdf = gdf.merge(amenities, on = "ID", how = "left")
-gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1
+BETA_OPINION, INITIAL_OPINION = import_opinion_parameters(path_data)
+BETA_PRICE, INITIAL_PRICE = import_price_parameters(path_data)
+
+tax = INITIAL_PRICE
+acceptable_price = {"LOW": INITIAL_PRICE, "MED": INITIAL_PRICE, "HIGH": INITIAL_PRICE}
 
 #Calibration of B and KAPPA
 gdf["land"] = gdf["urb_area"]
@@ -124,12 +85,56 @@ mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
 
 B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
 
+#Import transport data
+#import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
+travel_time_matrix_car, travel_time_matrix_transit = load_transport_times_poly(gdf, path_data, center)
+travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers)
+gdf = import_cost_transit(gdf)
+travel_time_matrix_transit = travel_time_matrix_transit.merge(gdf[['ID', 'monthly_cost_transit']].rename(columns={'ID': 'from_id'}), on='from_id', how='left')
+
+travel_time_matrix_car["uncongested_speed"] = (travel_time_matrix_car.distance_car / 1000) / (travel_time_matrix_car.travel_time / 60)
+travel_time_matrix_car["speed"] = travel_time_matrix_car["uncongested_speed"] - 10
+travel_time_matrix_car.loc[travel_time_matrix_car["speed"] < 10, "speed"] = 10
+travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 1000) / travel_time_matrix_car["speed"]) * 60
+
+#Transport cost calibration
+gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors)
+#with open(path_data + "calib_trans_poly_i.pkl", "wb") as f:
+#    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
+#with open(path_data + "calib_trans_poly_i.pkl", "rb") as f:
+    #print(pickle.load(f))
+    #FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
+print("FIXED_COST_CAR: ", FIXED_COST_CAR)
+print("LAMBDA: ", LAMBDA)
+del Y
+del compute_transport_cost_logit, compute_cost_car_logit
+
+#Compute transport cost
+gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0, income_levels, wage_factors)
+print("Modal share of public transport (%):", round(100 * sum(np.nansum(gdf[f"transport_mode_{lvl}"] * gdf[f"pop_{lvl}"]) for lvl in income_levels) / sum(np.nansum(gdf[f"pop_{lvl}"]) for lvl in income_levels)))
+plot_transport_cost_i(gdf, "_HIGH")
+plot_transport_mode_i(gdf, "_HIGH")
+#plot_employment(gdf, employment_centers, var) var = employment_centers['employment'] * 0.001, employment_centers.merge(employed_results, left_on = "cluster", right_on = "to_id")["weighted_employed"] * 0.001,  # adjust scale_factor, ARRAY_WAGE* 0.5
+#gdf.merge(travel_matrix.loc[travel_matrix.to_id == 5,:], left_on = "ID", right_on = "from_id").plot("proba_center", legend = True)
+
+#Calibrate beta and amenities
+def compute_log_likelihood(x):
+    return calibration_utility_amenity(x, gdf, income_levels, SOFT_RENT, 0, 0)
+
+calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.45, 100, 500, 900], bounds=[(0.3,0.6), (0,None), (0,None), (0,None)])
+BETA = calib_beta.x[0]
+print("BETA:", BETA)
+amenities = calibration_utility_amenity(calib_beta.x, gdf, income_levels, SOFT_RENT, 1, 1)
+gdf = gdf.merge(amenities, on = "ID", how = "left")
+gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1
+
 # Solve the model
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
     return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function)
 
+#solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [calib_beta.x[1], calib_beta.x[2], calib_beta.x[3]], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800])
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [180, 420, 600], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800])
 
 if solving_model.fun < 1:
@@ -158,7 +163,6 @@ def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
     return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
-
 
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x)
 
@@ -262,6 +266,8 @@ save_qol[0], save_congestion[0], *proba_commuting_in_tax_zone_by_car = compute_q
 
 proba_commuting_in_tax_zone_by_car = {lvl: val for lvl, val in zip(income_levels, proba_commuting_in_tax_zone_by_car)}
 
+beta_cong = 10/save_congestion[0]
+
 year = year + 1
 #plot_distance_distrib_check(income_levels, travel_matrix, "HIGH")
 
@@ -272,31 +278,71 @@ while year < MAX_YEAR:
     print("YEAR", year)
 
     # Urban form with the tax, without inertia
-    gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors)
+    
+    #ADAPT SPEED
+    Q_here = save_congestion[year - 1]
+    Q = 0
+    index_q = 0
 
-    def compute_error_in_population_from_utility(u):
-        """ Compute error in population associated to utility u"""
+    while (np.abs(Q- Q_here) > 1):
+        print("Q,", Q, "Q_here", Q_here)
+        Q = Q_here.copy()
+        index_q = index_q + 1
+        print(index_q, "INDEX Q")
+        travel_time_matrix_car["speed"] = travel_time_matrix_car["uncongested_speed"] - beta_cong * Q
+        travel_time_matrix_car.loc[travel_time_matrix_car["speed"] < 10, "speed"] = 10
+        travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 1000) / travel_time_matrix_car["speed"]) * 60
 
-        return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
+        gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors)
 
-    solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x)
+        def compute_error_in_population_from_utility(u):
+            """ Compute error in population associated to utility u"""
 
-    if solving_model.fun < 1:
+            return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
 
-        R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
+        solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x)
 
-        R = R * np.exp(rent_residual)
-        q = q * np.exp(size_residual)
-        n_group = {lvl: n * w[lvl] * np.exp(density_residual[lvl]) for lvl in ["LOW", "MED", "HIGH"]}
-        n = np.nansum(list(n_group.values()), axis=0)
-        n[np.isnan(n)] = 0
+        if solving_model.fun < 1:
+
+            R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
+
+            R = R * np.exp(rent_residual)
+            q = q * np.exp(size_residual)
+            n_group = {lvl: n * w[lvl] * np.exp(density_residual[lvl]) for lvl in ["LOW", "MED", "HIGH"]}
+            n = np.nansum(list(n_group.values()), axis=0)
+            n[np.isnan(n)] = 0
+            for lvl in income_levels:
+                n_group[lvl][np.isnan(n_group[lvl])] = 0
+
+        else:
+            print("Minimization failed!")
+
+        housing_without_inertia = n * q
+
+        # AMB
+        has_moved = {}
+        indiv_loc_matrix_new = {}
+
         for lvl in income_levels:
-            n_group[lvl][np.isnan(n_group[lvl])] = 0
+            proba_from, proba_to = compute_proba_of_moving(
+                save_housing[lvl][:, year - 1],
+                (housing_without_inertia * SCALE_ABM * w[lvl]).to_numpy()
+                )
+    
+            indiv_loc_matrix_new[lvl] = deepcopy(indiv_loc_matrix[lvl])
+    
+            indiv_loc_matrix_new[lvl], has_moved[lvl] = make_people_move(
+                indiv_loc_matrix_new[lvl],
+                N[lvl],
+                len(gdf),
+                indiv_loc_matrix[lvl],
+                proba_from,
+                proba_to,
+                PROBA_MOVE
+                )
+        
+        _, Q_here, _, _, _ = compute_qol(*(np.nansum(indiv_loc_matrix[lvl], 0) for lvl in income_levels), gdf, travel_matrix, jobs_in_toll_area, houses_in_toll_area)
 
-    else:
-        print("Minimization failed!")
-
-    housing_without_inertia = n * q
 
     # AMB
     has_moved = {}
