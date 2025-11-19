@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from import_data import *
 
-def import_opinion_parameters(path_data):
+def import_opinion_parameters(path_data, option_congestion_in_support):
 
     
     def weighted_median(values, weights):
@@ -45,7 +45,12 @@ def import_opinion_parameters(path_data):
     df_reg.rename(columns={'P21_1': 'congestion'}, inplace=True)
     df_reg = df_reg.loc[~np.isnan(df_reg.congestion) & (df_reg.congestion < 80)]
 
-    X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life", 'congestion']]
+    if option_congestion_in_support == True:
+        X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life", 'congestion']]
+        
+    elif option_congestion_in_support == False:
+        X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life"]]
+        
     #X_raw = df_reg[["climate_change", "log_absolute_loss", 'congestion']]
     y_raw = df_reg["acceptability"].values.reshape(-1, 1)
 
@@ -71,7 +76,7 @@ def import_opinion_parameters(path_data):
 
     return np.array(model_statsmodel.params), weighted_median(y_scaled, df_reg["PESAIX"].values) #np.nanmedian(y_scaled)
 
-def import_price_parameters(path_data):
+def import_price_parameters(path_data, option_congestion_in_support):
 
     def weighted_median(values, weights):
         # Sort values and weights by values
@@ -113,7 +118,10 @@ def import_price_parameters(path_data):
     df_reg.rename(columns={'P21_1': 'congestion'}, inplace=True)
     df_reg = df_reg.loc[~np.isnan(df_reg.congestion) & (df_reg.congestion < 80)]
 
-    X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life", 'congestion']]
+    if option_congestion_in_support == True:
+        X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life", 'congestion']]
+    elif option_congestion_in_support == False:
+        X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life"]]
     #X_raw = df_reg[["climate_change", "log_absolute_loss", 'congestion']]
     y_raw = (df_reg["acceptable_price"].values.reshape(-1, 1))
 
@@ -138,12 +146,23 @@ def import_price_parameters(path_data):
 
     return np.array(model_statsmodel.params), weighted_median(df_reg["acceptable_price"].values, df_reg["PESAIX"].values) #np.nanmedian(y_scaled) #np.nanmedian(y_raw)
 
-def compute_political_opinion(score_welfare, score_quality_of_life, score_emissions, score_congestion, BETA_OPINION):
+def compute_political_opinion(score_welfare, score_quality_of_life, score_emissions, score_congestion, BETA_OPINION, option_congestion_in_support):
     """ Compute public support based on the regression on the survey data """
     
-    return BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life + BETA_OPINION[4] * score_congestion
+    if option_congestion_in_support == True:
+        outcome = BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life + BETA_OPINION[4] * score_congestion
+    elif option_congestion_in_support == False:
+        outcome = BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life
 
-def compute_price(score_welfare, score_quality_of_life, score_emissions, score_congestion, BETA_OPINION):
+    return outcome
+    
+
+def compute_price(score_welfare, score_quality_of_life, score_emissions, score_congestion, BETA_OPINION, option_congestion_in_support):
     """ Compute public support based on the regression on the survey data """
     
-    return BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life + BETA_OPINION[4] * score_congestion
+    if option_congestion_in_support == True:
+        outcome = BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life + BETA_OPINION[4] * score_congestion
+    elif option_congestion_in_support == False:
+        outcome = BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life
+
+    return outcome

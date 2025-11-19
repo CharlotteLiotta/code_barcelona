@@ -62,28 +62,7 @@ gdf["size"] = gdf["size_census"] #gdf["size_census"] #gdf["size_AMB"]
 gdf.loc[gdf["pop"] == 0, "pop"] = 1
 gdf.loc[gdf["rent_m2"] == 0, "rent_m2"] = np.nanmin(gdf.loc[gdf["rent_m2"]>0, "rent_m2"])
 gdf.loc[np.isnan(gdf["rent_m2"]), "rent_m2"] = np.nanmin(gdf.loc[gdf["rent_m2"]>0, "rent_m2"])
-#gdf.loc[gdf["rent_m2"] > 25, "rent_m2"] = np.nanmax(gdf.loc[gdf["rent_m2"]<25, "rent_m2"])
 gdf.loc[np.isnan(gdf["size"]), "size"] = np.nansum(gdf.loc[~np.isnan(gdf["size"]), "size"] * gdf.loc[~np.isnan(gdf["size"]), "pop"]) / np.nansum(gdf.loc[~np.isnan(gdf["size"]), "pop"])
-
-### POLICY SUPPORT
-
-BETA_OPINION, INITIAL_OPINION = import_opinion_parameters(path_data)
-BETA_PRICE, INITIAL_PRICE = import_price_parameters(path_data)
-
-tax = INITIAL_PRICE
-acceptable_price = {"LOW": INITIAL_PRICE, "MED": INITIAL_PRICE, "HIGH": INITIAL_PRICE}
-
-#Calibration of B and KAPPA
-gdf["land"] = gdf["urb_area"]
-
-mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
-        (gdf["pop"] > 484.0)&
-        (~np.isnan(gdf["size"]))
-        &(~np.isnan(gdf["pop"]))
-        &((gdf["pop"] > 0))
-        )
-
-B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
 
 #Import transport data
 #import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
@@ -97,13 +76,35 @@ travel_time_matrix_car["speed"] = travel_time_matrix_car["uncongested_speed"] - 
 travel_time_matrix_car.loc[travel_time_matrix_car["speed"] < 10, "speed"] = 10
 travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 1000) / travel_time_matrix_car["speed"]) * 60
 
+### CALIBRATION POLICY SUPPORT
+
+BETA_OPINION, INITIAL_OPINION = import_opinion_parameters(path_data, False)
+BETA_PRICE, INITIAL_PRICE = import_price_parameters(path_data, False)
+
+tax = INITIAL_PRICE
+acceptable_price = {"LOW": INITIAL_PRICE, "MED": INITIAL_PRICE, "HIGH": INITIAL_PRICE}
+support = {"LOW": INITIAL_OPINION, "MED": INITIAL_OPINION, "HIGH": INITIAL_OPINION}
+
+### CALIBRATION POLICY IMPACT MODEL
+
+#Calibration of B and KAPPA
+gdf["land"] = gdf["urb_area"]
+
+mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
+        (gdf["pop"] > 484.0)&
+        (~np.isnan(gdf["size"]))
+        &(~np.isnan(gdf["pop"]))
+        &((gdf["pop"] > 0))
+        )
+
+B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
+
 #Transport cost calibration
-gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors)
+#gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors)
 #with open(path_data + "calib_trans_poly_i.pkl", "wb") as f:
 #    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
-#with open(path_data + "calib_trans_poly_i.pkl", "rb") as f:
-    #print(pickle.load(f))
-    #FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
+with open(path_data + "calib_trans_poly_i.pkl", "rb") as f:
+    FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
 print("FIXED_COST_CAR: ", FIXED_COST_CAR)
 print("LAMBDA: ", LAMBDA)
 del Y
@@ -134,7 +135,6 @@ def compute_error_in_population_from_utility(u):
 
     return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function)
 
-#solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [calib_beta.x[1], calib_beta.x[2], calib_beta.x[3]], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800])
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [180, 420, 600], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800])
 
 if solving_model.fun < 1:
@@ -155,7 +155,6 @@ size_residual = np.log(gdf["size"] / q)
 
 # Plot the result of the calibration
 print_maps(gdf, n, q, R)
-#print_scatterplots(gdf, n, q, R)
 plot_line_charts(gdf, n, q, R)
 
 #initial state
@@ -215,7 +214,6 @@ housing_indiv = {
 }
 
 # Save outputs
-
 save_housing = {lvl: np.zeros((len(gdf), MAX_YEAR)) for lvl in income_levels}
 save_rent = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
 save_dwelling_size = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
@@ -236,37 +234,25 @@ save_tax = np.zeros(MAX_YEAR)
 save_tax[0] = 0
 save_qol = np.zeros((MAX_YEAR))
 save_congestion = np.zeros((MAX_YEAR))
-
-for lvl in income_levels:
-    travel_matrix[f"distance_emi_{lvl}"] = (
-        (travel_matrix["distance_car"] / 1000)
-        * travel_matrix[f"proba_center_{lvl}"]
-        * (1 - travel_matrix[f"transport_mode_{lvl}"])
-    )
-    distance_emi = travel_matrix.groupby("from_id", observed=True)[f"distance_emi_{lvl}"].sum()
-    gdf = gdf.merge(distance_emi, left_on="ID", right_index=True, how="left")
-
-emissions_init = np.nansum(sum(
-    np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"distance_emi_{lvl}"] for lvl in income_levels))
-
 save_emissions = np.zeros(MAX_YEAR)
-save_emissions[0] = emissions_init
-
+save_vkm = np.zeros(MAX_YEAR)
+save_car_trip_to_zone = np.zeros(MAX_YEAR)
+save_car_trip_in_zone = np.zeros(MAX_YEAR)
 save_score_welfare = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
 save_score_qol = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
 save_score_congestion = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
-
 save_score_emissions = np.zeros(MAX_YEAR)
 save_median_support = np.zeros(MAX_YEAR)
 
-save_qol[0], save_congestion[0], *proba_commuting_in_tax_zone_by_car = compute_qol(
-    *(np.nansum(indiv_loc_matrix[lvl], 0) for lvl in income_levels),
-    gdf, travel_matrix, jobs_in_toll_area, houses_in_toll_area
-)
+#VKM
+save_vkm[0] = compute_vkm(gdf, travel_matrix, indiv_loc_matrix, income_levels)
+save_emissions[0] = save_vkm[0]
 
-proba_commuting_in_tax_zone_by_car = {lvl: val for lvl, val in zip(income_levels, proba_commuting_in_tax_zone_by_car)}
+save_car_trip_to_zone[0], save_car_trip_in_zone[0] = compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area)
+save_qol[year] = save_car_trip_in_zone[0]
+save_congestion[year] = save_car_trip_to_zone[0]
 
-beta_cong = 10/save_congestion[0]
+BETA_CONG = 10/save_car_trip_to_zone[0]
 
 year = year + 1
 #plot_distance_distrib_check(income_levels, travel_matrix, "HIGH")
@@ -279,17 +265,16 @@ while year < MAX_YEAR:
 
     # Urban form with the tax, without inertia
     
-    #ADAPT SPEED
-    Q_here = save_congestion[year - 1]
-    Q = 0
+    TRIP_TO_ZONE_OUTPUT = save_congestion[year - 1]
+    TRIP_TO_ZONE_INPUT = 0
     index_q = 0
 
-    while (np.abs(Q- Q_here) > 1):
-        print("Q,", Q, "Q_here", Q_here)
-        Q = Q_here.copy()
+    while (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 1):
+        print("Q,", TRIP_TO_ZONE_INPUT, "Q_here", TRIP_TO_ZONE_OUTPUT)
+        TRIP_TO_ZONE_INPUT = TRIP_TO_ZONE_OUTPUT.copy()
         index_q = index_q + 1
         print(index_q, "INDEX Q")
-        travel_time_matrix_car["speed"] = travel_time_matrix_car["uncongested_speed"] - beta_cong * Q
+        travel_time_matrix_car["speed"] = travel_time_matrix_car["uncongested_speed"] - BETA_CONG * TRIP_TO_ZONE_INPUT
         travel_time_matrix_car.loc[travel_time_matrix_car["speed"] < 10, "speed"] = 10
         travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 1000) / travel_time_matrix_car["speed"]) * 60
 
@@ -341,7 +326,7 @@ while year < MAX_YEAR:
                 PROBA_MOVE
                 )
         
-        _, Q_here, _, _, _ = compute_qol(*(np.nansum(indiv_loc_matrix[lvl], 0) for lvl in income_levels), gdf, travel_matrix, jobs_in_toll_area, houses_in_toll_area)
+        _, TRIP_TO_ZONE_OUTPUT = compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area)
 
 
     # AMB
@@ -368,7 +353,6 @@ while year < MAX_YEAR:
     
     rent_indiv_new = {lvl: indiv_loc_matrix[lvl] @ R.to_numpy() for lvl in income_levels}
     dwelling_size_indiv_new = {lvl: indiv_loc_matrix[lvl] @ q_group[lvl] for lvl in income_levels}
-
 
     for lvl in income_levels:
         # Update rents and dwelling sizes for movers
@@ -402,24 +386,31 @@ while year < MAX_YEAR:
         save_utility[lvl][:, year] = deepcopy(utility[lvl])
 
     # Policy support
-    score_welfare = {lvl: compute_change_in_welfare(save_utility[lvl][:, 0], save_utility[lvl][:, year]) 
+    LOGISTIC_PARAM_WELFARE = -5
+    LOGISTIC_PARAM_QOL = 3
+
+    score_welfare = {lvl: compute_score(compute_change_in_welfare(save_utility[lvl][:, 0], save_utility[lvl][:, year]), LOGISTIC_PARAM_WELFARE)
                  for lvl in income_levels}
     
-    score_emissions, emissions = compute_change_in_emissions(gdf, travel_matrix, emissions_init, np.nansum(indiv_loc_matrix["LOW"], 0), np.nansum(indiv_loc_matrix["MED"], 0), np.nansum(indiv_loc_matrix["HIGH"], 0))
-    save_emissions[year] = emissions
-    save_score_emissions[year] = score_emissions
+
+
+    #score_emissions, emissions, avg_speed = compute_change_in_emissions(gdf, travel_matrix, emissions_init, np.nansum(indiv_loc_matrix["LOW"], 0), np.nansum(indiv_loc_matrix["MED"], 0), np.nansum(indiv_loc_matrix["HIGH"], 0))
+    save_vkm[year] = compute_vkm(gdf, travel_matrix, indiv_loc_matrix, income_levels)
+    save_emissions[year] = save_vkm[year]
+    save_score_emissions[year] = compute_score(compute_relative_change(save_emissions[0], save_emissions[year]), LOGISTIC_PARAM_QOL)
 
     #save outcomes
-    save_qol[year], save_congestion[year], proba_commuting_in_tax_zone_by_car["LOW"], proba_commuting_in_tax_zone_by_car["MED"], proba_commuting_in_tax_zone_by_car["HIGH"] = compute_qol(*(np.nansum(indiv_loc_matrix[lvl], 0) for lvl in income_levels), gdf, travel_matrix, jobs_in_toll_area, houses_in_toll_area)
+    save_car_trip_to_zone[year], save_car_trip_in_zone[year] = compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area)
+    save_qol[year] = save_car_trip_in_zone[year]
+    save_congestion[year] = save_car_trip_to_zone[year]
 
-    score_qol_zone = compute_change_in_qol(save_qol[0], save_qol[year])
-    score_congestion_zone = compute_change_in_qol(save_congestion[0], save_congestion[year])
+    score_qol_zone = compute_score(compute_relative_change(save_qol[0], save_qol[year]), LOGISTIC_PARAM_QOL)
+    #score_congestion_zone = compute_score(compute_relative_change(save_congestion[0], save_congestion[year]), LOGISTIC_PARAM_QOL)
 
     score_qol = {}
-    score_congestion = {}
+    #score_congestion = {}
     political_opinion = {}
     price_here = {}
-    support = {}
     acceptable_price_new = {}
 
     for lvl in income_levels:
@@ -429,22 +420,23 @@ while year < MAX_YEAR:
         score_qol[lvl][score_qol[lvl] == 0] = 0.5
 
         # Congestion score
-        proba_commuting = np.nan_to_num(proba_commuting_in_tax_zone_by_car[lvl])
-        score_congestion[lvl] = (indiv_loc_matrix[lvl] @ proba_commuting) * score_congestion_zone + \
-                                (indiv_loc_matrix[lvl] @ (1 - proba_commuting)) * 0.5
+        #proba_commuting = np.nan_to_num(proba_commuting_in_tax_zone_by_car[lvl])
+        #score_congestion[lvl] = (indiv_loc_matrix[lvl] @ proba_commuting) * score_congestion_zone + \
+        #                        (indiv_loc_matrix[lvl] @ (1 - proba_commuting)) * 0.5
 
         # Political opinion and price
         political_opinion[lvl] = compute_political_opinion(score_welfare[lvl], score_qol[lvl],
-                                                       score_emissions, score_congestion[lvl], BETA_OPINION)
+                                                       save_score_emissions[year], 0, BETA_OPINION, False)
         price_here[lvl] = compute_price(score_welfare[lvl], score_qol[lvl],
-                                        score_emissions, score_congestion[lvl], BETA_PRICE)
-        support[lvl] = political_opinion[lvl]
+                                        save_score_emissions[year], 0, BETA_PRICE, False)
+        
+        support[lvl] = (INERTIA_OPINION * support[lvl]) + ((1 - INERTIA_OPINION) * political_opinion[lvl])
         acceptable_price[lvl] = (INERTIA_OPINION * acceptable_price[lvl]) + ((1 - INERTIA_OPINION) * price_here[lvl])
 
         # Save scores
         save_score_welfare[lvl][:, year] = score_welfare[lvl]
         save_score_qol[lvl][:, year] = score_qol[lvl]
-        save_score_congestion[lvl][:, year] = score_congestion[lvl]
+        #save_score_congestion[lvl][:, year] = score_congestion[lvl]
 
     save_median_support[year] = np.nanmedian(np.concatenate([support[lvl] for lvl in income_levels]))
 
