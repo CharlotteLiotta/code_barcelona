@@ -31,6 +31,7 @@ WORKING_DAYS = 40 #20 days per month, with 2 trips per day
 PRICE_FUEL = 0.11 #euros/km
 center = "0801901025"
 SOFT_RENT = 50
+DIFF_SPEED_CONGESTION = 10
 
 #ABM
 SCALE_ABM = 1/100 #Nb of agents in the ABM
@@ -75,7 +76,7 @@ gdf = import_cost_transit(gdf)
 travel_time_matrix_transit = travel_time_matrix_transit.merge(gdf[['ID', 'monthly_cost_transit']].rename(columns={'ID': 'from_id'}), on='from_id', how='left')
 
 travel_time_matrix_car["uncongested_speed"] = (travel_time_matrix_car.distance_car / 1000) / (travel_time_matrix_car.travel_time / 60)
-travel_time_matrix_car["speed"] = travel_time_matrix_car["uncongested_speed"] - 10
+travel_time_matrix_car["speed"] = travel_time_matrix_car["uncongested_speed"] - DIFF_SPEED_CONGESTION
 travel_time_matrix_car.loc[travel_time_matrix_car["speed"] < 10, "speed"] = 10
 travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 1000) / travel_time_matrix_car["speed"]) * 60
 
@@ -250,7 +251,7 @@ total_vkm = np.zeros(MAX_YEAR)
 save_emissions[0], total_vkm[0] = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels)
 qol_in_zone[0], qol_out_zone[0], vkm_in_zone[0], vkm_out_zone[0] = compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels)
 
-BETA_CONG = 10/total_vkm[0]
+BETA_CONG = DIFF_SPEED_CONGESTION/total_vkm[0]
 
 year = year + 1
 #plot_distance_distrib_check(income_levels, travel_matrix, "HIGH")
@@ -326,8 +327,6 @@ while year < MAX_YEAR:
                 PROBA_MOVE
                 )
         
-        #TRIP_TO_ZONE_OUTPUT, _ = compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area)
-
         _, TRIP_TO_ZONE_OUTPUT = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels)
 
     # AMB
@@ -399,10 +398,7 @@ while year < MAX_YEAR:
     score_qol_zone = compute_score(compute_relative_change(qol_in_zone[0], qol_in_zone[year]), LOGISTIC_PARAM_QOL)
     score_qol_out = compute_score(compute_relative_change(qol_out_zone[0], qol_out_zone[year]), LOGISTIC_PARAM_QOL)
     
-    #score_congestion_zone = compute_score(compute_relative_change(save_congestion[0], save_congestion[year]), LOGISTIC_PARAM_QOL)
-
     score_qol = {}
-    #score_congestion = {}
     political_opinion = {}
     price_here = {}
     acceptable_price_new = {}
@@ -468,8 +464,6 @@ print(round(100 * sum(np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_l
 
 for lvl in income_levels:
     print(round(100 * np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)) / np.nansum(np.nansum(indiv_loc_matrix[lvl], 0))), f"% commute by public transport ({lvl})")
-
-
 
 plt.plot(np.nanmedian(compute_change_in_welfare(save_utility["LOW"][:, 0], save_utility["LOW"][:, year]), 0))
 
