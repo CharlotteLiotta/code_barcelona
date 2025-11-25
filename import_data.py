@@ -738,4 +738,4 @@ def import_tax_zone(gdf, employment_centers):
     zone_union = zone_tax.union_all()
     clusters_in_zone = employment_centers[employment_centers.within(zone_union)]["cluster"].unique().tolist()
     house_in_zone = gdf[gdf.centroid.within(zone_union)]["ID"].unique().tolist()
-    return clusters_in_zone, house_in_zone
+    return clusters_in_zone, house_in_zone, zone_union

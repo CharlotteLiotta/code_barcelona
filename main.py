@@ -17,6 +17,9 @@ from policy_support import *
 path_data = "../data_barcelona/"
 option_function = "Cobb-Douglas"
 
+LOGISTIC_PARAM_WELFARE = -0.5
+LOGISTIC_PARAM_QOL = 0.2
+
 #Time
 year = 0
 MAX_YEAR = 20
@@ -46,7 +49,7 @@ Y, Y_median, gdf = import_income(gdf, path_data)
 gdf = import_amenities(gdf, path_data, 0, 0)
 employment_centers = gpd.read_file(path_data + "cluster_employment.shp")
 employment_centers["cluster"] = employment_centers.index
-jobs_in_toll_area, houses_in_toll_area = import_tax_zone(gdf, employment_centers)
+jobs_in_toll_area, houses_in_toll_area, zone_tax = import_tax_zone(gdf, employment_centers)
 
 #Multiple income groups
 income_levels = ["LOW", "MED", "HIGH"]
@@ -67,7 +70,7 @@ gdf.loc[np.isnan(gdf["size"]), "size"] = np.nansum(gdf.loc[~np.isnan(gdf["size"]
 #Import transport data
 #import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
 travel_time_matrix_car, travel_time_matrix_transit = load_transport_times_poly(gdf, path_data, center)
-travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers)
+travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers, jobs_in_toll_area, houses_in_toll_area, zone_tax)
 gdf = import_cost_transit(gdf)
 travel_time_matrix_transit = travel_time_matrix_transit.merge(gdf[['ID', 'monthly_cost_transit']].rename(columns={'ID': 'from_id'}), on='from_id', how='left')
 
@@ -232,27 +235,22 @@ save_population[:, 0] = np.sum([np.nansum(indiv_loc_matrix[lvl], 0) for lvl in i
 
 save_tax = np.zeros(MAX_YEAR)
 save_tax[0] = 0
-save_qol = np.zeros((MAX_YEAR))
-save_congestion = np.zeros((MAX_YEAR))
 save_emissions = np.zeros(MAX_YEAR)
-save_vkm = np.zeros(MAX_YEAR)
-save_car_trip_to_zone = np.zeros(MAX_YEAR)
-save_car_trip_in_zone = np.zeros(MAX_YEAR)
 save_score_welfare = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
 save_score_qol = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
 save_score_congestion = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
 save_score_emissions = np.zeros(MAX_YEAR)
 save_median_support = np.zeros(MAX_YEAR)
+qol_in_zone = np.zeros(MAX_YEAR)
+qol_out_zone = np.zeros(MAX_YEAR)
+vkm_in_zone = np.zeros(MAX_YEAR)
+vkm_out_zone = np.zeros(MAX_YEAR)
+total_vkm = np.zeros(MAX_YEAR)
 
-#VKM
-save_vkm[0] = compute_vkm(gdf, travel_matrix, indiv_loc_matrix, income_levels)
-save_emissions[0] = save_vkm[0]
+save_emissions[0], total_vkm[0] = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels)
+qol_in_zone[0], qol_out_zone[0], vkm_in_zone[0], vkm_out_zone[0] = compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels)
 
-save_car_trip_to_zone[0], save_car_trip_in_zone[0] = compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area)
-save_qol[year] = save_car_trip_in_zone[0]
-save_congestion[year] = save_car_trip_to_zone[0]
-
-BETA_CONG = 10/save_car_trip_to_zone[0]
+BETA_CONG = 10/total_vkm[0]
 
 year = year + 1
 #plot_distance_distrib_check(income_levels, travel_matrix, "HIGH")
@@ -265,7 +263,7 @@ while year < MAX_YEAR:
 
     # Urban form with the tax, without inertia
     
-    TRIP_TO_ZONE_OUTPUT = save_congestion[year - 1]
+    TRIP_TO_ZONE_OUTPUT = total_vkm[year - 1]
     TRIP_TO_ZONE_INPUT = 0
     index_q = 0
 
@@ -275,6 +273,8 @@ while year < MAX_YEAR:
         index_q = index_q + 1
         print(index_q, "INDEX Q")
         travel_time_matrix_car["speed"] = travel_time_matrix_car["uncongested_speed"] - BETA_CONG * TRIP_TO_ZONE_INPUT
+        print(travel_time_matrix_car["speed"])
+        print("TRIP_TO_ZONE_INPUT", TRIP_TO_ZONE_INPUT)
         travel_time_matrix_car.loc[travel_time_matrix_car["speed"] < 10, "speed"] = 10
         travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 1000) / travel_time_matrix_car["speed"]) * 60
 
@@ -326,8 +326,9 @@ while year < MAX_YEAR:
                 PROBA_MOVE
                 )
         
-        _, TRIP_TO_ZONE_OUTPUT = compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area)
+        #TRIP_TO_ZONE_OUTPUT, _ = compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area)
 
+        _, TRIP_TO_ZONE_OUTPUT = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels)
 
     # AMB
     has_moved = {}
@@ -386,25 +387,18 @@ while year < MAX_YEAR:
         save_utility[lvl][:, year] = deepcopy(utility[lvl])
 
     # Policy support
-    LOGISTIC_PARAM_WELFARE = -5
-    LOGISTIC_PARAM_QOL = 3
-
     score_welfare = {lvl: compute_score(compute_change_in_welfare(save_utility[lvl][:, 0], save_utility[lvl][:, year]), LOGISTIC_PARAM_WELFARE)
                  for lvl in income_levels}
     
+    save_emissions[year], total_vkm[year] = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels)
+
+    qol_in_zone[year], qol_out_zone[year], vkm_in_zone[year], vkm_out_zone[year] = compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels)
 
 
-    #score_emissions, emissions, avg_speed = compute_change_in_emissions(gdf, travel_matrix, emissions_init, np.nansum(indiv_loc_matrix["LOW"], 0), np.nansum(indiv_loc_matrix["MED"], 0), np.nansum(indiv_loc_matrix["HIGH"], 0))
-    save_vkm[year] = compute_vkm(gdf, travel_matrix, indiv_loc_matrix, income_levels)
-    save_emissions[year] = save_vkm[year]
     save_score_emissions[year] = compute_score(compute_relative_change(save_emissions[0], save_emissions[year]), LOGISTIC_PARAM_QOL)
-
-    #save outcomes
-    save_car_trip_to_zone[year], save_car_trip_in_zone[year] = compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area)
-    save_qol[year] = save_car_trip_in_zone[year]
-    save_congestion[year] = save_car_trip_to_zone[year]
-
-    score_qol_zone = compute_score(compute_relative_change(save_qol[0], save_qol[year]), LOGISTIC_PARAM_QOL)
+    score_qol_zone = compute_score(compute_relative_change(qol_in_zone[0], qol_in_zone[year]), LOGISTIC_PARAM_QOL)
+    score_qol_out = compute_score(compute_relative_change(qol_out_zone[0], qol_out_zone[year]), LOGISTIC_PARAM_QOL)
+    
     #score_congestion_zone = compute_score(compute_relative_change(save_congestion[0], save_congestion[year]), LOGISTIC_PARAM_QOL)
 
     score_qol = {}
@@ -416,13 +410,8 @@ while year < MAX_YEAR:
     for lvl in income_levels:
         # QOL score
         mask_zone = gdf.ID.isin(houses_in_toll_area).to_numpy()
-        score_qol[lvl] = (indiv_loc_matrix[lvl] @ mask_zone) * score_qol_zone
-        score_qol[lvl][score_qol[lvl] == 0] = 0.5
-
-        # Congestion score
-        #proba_commuting = np.nan_to_num(proba_commuting_in_tax_zone_by_car[lvl])
-        #score_congestion[lvl] = (indiv_loc_matrix[lvl] @ proba_commuting) * score_congestion_zone + \
-        #                        (indiv_loc_matrix[lvl] @ (1 - proba_commuting)) * 0.5
+        mask_out = ~gdf.ID.isin(houses_in_toll_area).to_numpy()
+        score_qol[lvl] = (indiv_loc_matrix[lvl] @ mask_zone) * score_qol_zone + (indiv_loc_matrix[lvl] @ mask_out) * score_qol_out
 
         # Political opinion and price
         political_opinion[lvl] = compute_political_opinion(score_welfare[lvl], score_qol[lvl],
@@ -436,7 +425,6 @@ while year < MAX_YEAR:
         # Save scores
         save_score_welfare[lvl][:, year] = score_welfare[lvl]
         save_score_qol[lvl][:, year] = score_qol[lvl]
-        #save_score_congestion[lvl][:, year] = score_congestion[lvl]
 
     save_median_support[year] = np.nanmedian(np.concatenate([support[lvl] for lvl in income_levels]))
 
@@ -480,3 +468,9 @@ print(round(100 * sum(np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_l
 
 for lvl in income_levels:
     print(round(100 * np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)) / np.nansum(np.nansum(indiv_loc_matrix[lvl], 0))), f"% commute by public transport ({lvl})")
+
+
+
+plt.plot(np.nanmedian(compute_change_in_welfare(save_utility["LOW"][:, 0], save_utility["LOW"][:, year]), 0))
+
+plt.plot(np.nanmedian(save_score_welfare["LOW"][:,1:], 0))

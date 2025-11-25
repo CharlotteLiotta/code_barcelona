@@ -69,7 +69,7 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
         travel_time_car[f"COST_CAR_{level}"] = travel_time_car[f"COST_CAR_{level}"].fillna(600)
         travel_time_transit[f"COST_PT_{level}"] = travel_time_transit[f"COST_PT_{level}"].fillna(3500)
 
-    travel_matrix = travel_time_car.loc[:,['from_id', 'to_id', "COST_CAR_LOW", "COST_CAR_MED", "COST_CAR_HIGH", "distance_car", "speed"]].merge(travel_time_transit.loc[:,['from_id', 'to_id', "COST_PT_LOW", "COST_PT_MED", "COST_PT_HIGH"]], on = ['from_id', 'to_id'])
+    travel_matrix = travel_time_car.loc[:,['from_id', 'to_id', "COST_CAR_LOW", "COST_CAR_MED", "COST_CAR_HIGH", "distance_car", "distance_in_zone", "distance_out_zone", "speed"]].merge(travel_time_transit.loc[:,['from_id', 'to_id', "COST_PT_LOW", "COST_PT_MED", "COST_PT_HIGH"]], on = ['from_id', 'to_id'])
     
     for level in income_levels:
         travel_matrix[f"transport_mode_{level}"] = 1 / (1 + np.exp(

@@ -2,6 +2,8 @@ import numpy as np # type: ignore
 from r5py import TravelTimeMatrixComputer, TransportMode, TransportNetwork, DetailedItineraries # type: ignore
 import os
 from shapely.geometry import Point # type: ignore
+from shapely.geometry import LineString, MultiLineString
+import pandas as pd
 
 def import_transport_times_poly(gdf, date_here, center, path_data, employment_centers):
     """ Import transport times using GTFS data for transit, OSM data for private cars, and the r5py package """
@@ -219,11 +221,49 @@ def import_car_distance(gdf, date_here, center, path_data):
     compute_travel_distance("car")
 
 
-def load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers):
+def load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers, jobs_in_toll_area, houses_in_toll_area, zone_tax):
+    
     travel_time_matrix_car = travel_time_matrix_car.merge(gdf[['ID', 'geometry']].rename(columns={'ID': 'from_id', 'geometry': 'from_geom'}), on='from_id', how='left')
     travel_time_matrix_car = travel_time_matrix_car.merge(employment_centers[['cluster', 'geometry']].rename(columns={'cluster': 'to_id', 'geometry': 'to_geom'}), on='to_id', how='left')
+    
     travel_time_matrix_car['distance_car'] = travel_time_matrix_car.apply(
         lambda row: row['from_geom'].distance(row['to_geom']) if row['from_geom'] and row['to_geom'] else None,
         axis=1
     )
+
+    travel_time_matrix_car["distance_in_zone"] = ((travel_time_matrix_car.from_id.isin(houses_in_toll_area) * travel_time_matrix_car.to_id.isin(jobs_in_toll_area))) * travel_time_matrix_car['distance_car']
+    travel_time_matrix_car['distance_out_zone'] = ((~travel_time_matrix_car.from_id.isin(houses_in_toll_area) * ~travel_time_matrix_car.to_id.isin(jobs_in_toll_area))) * travel_time_matrix_car['distance_car']
+
+    
+
+    def split_distance(row, zone):
+        p1 = row['from_geom']
+        p2 = row['to_geom']
+
+        if p1 is None or p2 is None:
+            return pd.Series([None, None, None])
+
+        line = LineString([p1.centroid, p2.centroid])
+
+        inside = line.intersection(zone)
+        outside = line.difference(zone)
+
+        d_inside  = inside.length if not inside.is_empty else 0
+        d_outside = outside.length if not outside.is_empty else 0
+
+        return pd.Series([line.length, d_inside, d_outside])
+
+    
+    travel_time_matrix_car[['dist_total',
+                        'dist_inside',
+                        'dist_outside']] = (travel_time_matrix_car.apply(split_distance,
+                                 zone=zone_tax,
+                                 axis=1))
+    
+    mixed = ((travel_time_matrix_car.from_id.isin(houses_in_toll_area)) & (~travel_time_matrix_car.to_id.isin(jobs_in_toll_area))) | ((~travel_time_matrix_car.from_id.isin(houses_in_toll_area)) & (travel_time_matrix_car.to_id.isin(jobs_in_toll_area)))
+    travel_time_matrix_car.loc[mixed, "distance_in_zone"] = travel_time_matrix_car.loc[mixed, "dist_inside"]
+    travel_time_matrix_car.loc[mixed, "distance_out_zone"] = travel_time_matrix_car.loc[mixed, "dist_outside"]
+
+    travel_time_matrix_car = travel_time_matrix_car.drop(columns = ['dist_total','dist_inside','dist_outside'])
+
     return travel_time_matrix_car

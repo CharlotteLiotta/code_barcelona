@@ -202,10 +202,10 @@ def plot_scores(save_score_emissions, save_score_qol, save_score_congestion, sav
     plt.plot(np.nanmean(save_score_qol[:,1:], 0), #/np.nanmean(save_score_qol[:,1], 0),
          label="Local pollution", linewidth=2, color=colors[1])
 
-    plt.plot(np.nanmean(save_score_congestion[:,1:], 0), #/np.nanmean(save_score_congestion[:,1], 0),
-         label="Congestion", linewidth=2, color=colors[2])
+    #plt.plot(np.nanmean(save_score_congestion[:,1:], 0), #/np.nanmean(save_score_congestion[:,1], 0),
+    #     label="Congestion", linewidth=2, color=colors[2])
 
-    plt.plot(np.nanmean(save_score_welfare[:,1:], 0), #/np.nanmean(save_score_welfare[:,1], 0),
+    plt.plot(np.nanmedian(save_score_welfare[:,1:], 0), #/np.nanmean(save_score_welfare[:,1], 0),
          label="Utility", linewidth=2, color=colors[3])
 
     # Labels and title

@@ -42,7 +42,7 @@ def compute_change_in_welfare(utility_without_tax, utility_with_tax):
     """ Compute the impact of the change in utility on welfare"""
     
     relative_change_utility = np.empty(len(utility_with_tax))
-    relative_change_utility[utility_without_tax > 0] = ((utility_with_tax[utility_without_tax > 0] - utility_without_tax[utility_without_tax > 0]) / utility_without_tax[utility_without_tax > 0])
+    relative_change_utility[utility_without_tax > 0] = 100 * ((utility_with_tax[utility_without_tax > 0] - utility_without_tax[utility_without_tax > 0]) / utility_without_tax[utility_without_tax > 0])
     relative_change_utility[((utility_without_tax == 0) & (utility_with_tax > 0))] = 1
     relative_change_utility[((utility_without_tax == 0) & (utility_with_tax == 0))] = 0
 
@@ -55,11 +55,13 @@ def compute_score(relative_change, param):
 def compute_relative_change(outcome_without_tax, outcome_with_tax):
     """ Compute the impact of the change in utility on welfare"""
 
-    return (outcome_with_tax - outcome_without_tax) / outcome_without_tax
+    return 100 * (outcome_with_tax - outcome_without_tax) / outcome_without_tax
 
-def compute_vkm(gdf, travel_matrix, indiv_loc_matrix, income_levels):
+def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels):
     
     for lvl in income_levels:
+
+        #distance
         travel_matrix[f"distance_emi_{lvl}"] = (
         (travel_matrix["distance_car"] / 1000)
         * travel_matrix[f"proba_center_{lvl}"]
@@ -70,10 +72,33 @@ def compute_vkm(gdf, travel_matrix, indiv_loc_matrix, income_levels):
             gdf = gdf.drop(columns = f"distance_emi_{lvl}")
         gdf = gdf.merge(distance_emi, left_on="ID", right_index=True, how="left")
 
-    vkm = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"distance_emi_{lvl}"] for lvl in income_levels))
-    #avg_speed = np.nansum((((travel_matrix["distance_car"] /1000) * travel_matrix["proba_center_LOW"] * (1 - travel_matrix["transport_mode_LOW"])) * travel_matrix["speed"])) / np.nansum(((travel_matrix["distance_car"] /1000) * travel_matrix["proba_center_LOW"] * (1 - travel_matrix["transport_mode_LOW"])))
+        #speed
+        travel_matrix[f"avg_speed_{lvl}"] = (
+        (travel_matrix["speed"])
+        * travel_matrix[f"proba_center_{lvl}"]
+        * (1 - travel_matrix[f"transport_mode_{lvl}"])
+        )
+
+        travel_matrix[f"speed_weight_{lvl}"] = (
+        travel_matrix[f"proba_center_{lvl}"]
+        * (1 - travel_matrix[f"transport_mode_{lvl}"])
+        )
+
+        avg_speed = travel_matrix.groupby("from_id", observed=True)[f"avg_speed_{lvl}"].sum() / travel_matrix.groupby("from_id", observed=True)[f"speed_weight_{lvl}"].sum()
+        avg_speed = avg_speed.to_frame(name=f"avg_speed_{lvl}")
+        avg_speed.loc[avg_speed[f"avg_speed_{lvl}"] == 0, f"avg_speed_{lvl}"] = 20
+
+        if f"avg_speed_{lvl}" in gdf.columns:
+            gdf = gdf.drop(columns = f"avg_speed_{lvl}")
+        gdf = gdf.merge(avg_speed, left_on="ID", right_index=True, how="left")
+
+        gdf[f"emissions_{lvl}"] = (3400.373/gdf[f"avg_speed_{lvl}"] + 116.443) * gdf[f"distance_emi_{lvl}"] #source: https://doi.org/10.1016/j.trip.2025.101513, https://doi.org/10.1038/s41598-025-86119-3
+        
+    emissions = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"emissions_{lvl}"] for lvl in income_levels))
+    total_vkm = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"distance_emi_{lvl}"] for lvl in income_levels))
     
-    return vkm
+
+    return emissions, total_vkm
 
 def compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, clusters_in_zone, house_in_zone):
     
@@ -106,4 +131,63 @@ def compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, cluste
     ].sum(skipna=True)
     
     return car_users_working_in_zone, car_users_living_or_working_in_zone
+
+
+def compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels):
+    
+    for lvl in income_levels:
+
+        #vkm in zone
+        travel_matrix[f"distance_in_zone_{lvl}"] = (
+        (travel_matrix["distance_in_zone"] / 1000)
+        * travel_matrix[f"proba_center_{lvl}"]
+        * (1 - travel_matrix[f"transport_mode_{lvl}"])
+        )
+        distance_in_zone = travel_matrix.groupby("from_id", observed=True)[f"distance_in_zone_{lvl}"].sum()
+        if f"distance_in_zone_{lvl}" in gdf.columns:
+            gdf = gdf.drop(columns = f"distance_in_zone_{lvl}")
+        gdf = gdf.merge(distance_in_zone, left_on="ID", right_index=True, how="left")
+
+        #vkm out zone
+        travel_matrix[f"distance_out_zone_{lvl}"] = (
+        (travel_matrix["distance_out_zone"] / 1000)
+        * travel_matrix[f"proba_center_{lvl}"]
+        * (1 - travel_matrix[f"transport_mode_{lvl}"])
+        )
+        distance_out_zone = travel_matrix.groupby("from_id", observed=True)[f"distance_out_zone_{lvl}"].sum()
+        if f"distance_out_zone_{lvl}" in gdf.columns:
+            gdf = gdf.drop(columns = f"distance_out_zone_{lvl}")
+        gdf = gdf.merge(distance_out_zone, left_on="ID", right_index=True, how="left")
+
+        #speed
+        travel_matrix[f"avg_speed_{lvl}"] = (
+        (travel_matrix["speed"])
+        * travel_matrix[f"proba_center_{lvl}"]
+        * (1 - travel_matrix[f"transport_mode_{lvl}"])
+        )
+
+        travel_matrix[f"speed_weight_{lvl}"] = (
+        travel_matrix[f"proba_center_{lvl}"]
+        * (1 - travel_matrix[f"transport_mode_{lvl}"])
+        )
+
+        avg_speed = travel_matrix.groupby("from_id", observed=True)[f"avg_speed_{lvl}"].sum() / travel_matrix.groupby("from_id", observed=True)[f"speed_weight_{lvl}"].sum()
+        avg_speed = avg_speed.to_frame(name=f"avg_speed_{lvl}")
+        avg_speed.loc[avg_speed[f"avg_speed_{lvl}"] == 0, f"avg_speed_{lvl}"] = 20
+
+        if f"avg_speed_{lvl}" in gdf.columns:
+            gdf = gdf.drop(columns = f"avg_speed_{lvl}")
+        gdf = gdf.merge(avg_speed, left_on="ID", right_index=True, how="left")
+
+        gdf[f"qol_in_zone{lvl}"] = ((0.809827 + 0.0214 * gdf[f"avg_speed_{lvl}"] + 0.000268 * gdf[f"avg_speed_{lvl}"]**2 + 1.67e-7 * gdf[f"avg_speed_{lvl}"]**3 + 1.2e-9 * gdf[f"avg_speed_{lvl}"]**4)/gdf[f"avg_speed_{lvl}"]) * gdf[f"distance_in_zone_{lvl}"] #source: HBEFA Traffic Situations  Application guidelines
+        gdf[f"qol_out_zone{lvl}"] = ((0.809827 + 0.0214 * gdf[f"avg_speed_{lvl}"] + 0.000268 * gdf[f"avg_speed_{lvl}"]**2 + 1.67e-7 * gdf[f"avg_speed_{lvl}"]**3 + 1.2e-9 * gdf[f"avg_speed_{lvl}"]**4)/gdf[f"avg_speed_{lvl}"]) * gdf[f"distance_out_zone_{lvl}"] #HBEFA Traffic Situations  Application guidelines
+        
+        #gdf[f"emissions_{lvl}"] = (3400.373/gdf[f"avg_speed_{lvl}"] + 116.443) * gdf[f"distance_emi_{lvl}"] #source: https://doi.org/10.1016/j.trip.2025.101513, https://doi.org/10.1038/s41598-025-86119-3
+        
+    qol_in_zone = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"qol_in_zone{lvl}"] for lvl in income_levels))
+    qol_out_zone = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"qol_out_zone{lvl}"] for lvl in income_levels))
+    vkm_in_zone = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"distance_in_zone_{lvl}"] for lvl in income_levels))
+    vkm_out_zone = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"distance_out_zone_{lvl}"] for lvl in income_levels))
+
+    return qol_in_zone, qol_out_zone, vkm_in_zone, vkm_out_zone
 
