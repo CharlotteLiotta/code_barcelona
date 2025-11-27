@@ -12,13 +12,25 @@ from plotting_tools import * # type: ignore
 from import_transport import *
 from policy_support import *
 
+### SCENARIOS
+
+#scenario = "baseline"
+
+#scenario = "exemption_trips_inside_zone"    #DONE
+#scenario = "tax_question_P18"               #DONE
+#scenario = "increasing_knowledge"           #DONE
+#scenario = "instant_welfare_adjust"         #DONE
+#scenario = "discount_low_income"            #DONE
+#scenario = "discount_residents"             #DONE
+scenario = "improve_public_transports"
+
 ### IMPORT PARAMETERS
 
 path_data = "../data_barcelona/"
 option_function = "Cobb-Douglas"
 
-LOGISTIC_PARAM_WELFARE = -0.5
-LOGISTIC_PARAM_QOL = 0.2
+LOGISTIC_PARAM_WELFARE = -0.3
+LOGISTIC_PARAM_QOL = 0.3
 
 #Time
 year = 0
@@ -82,12 +94,19 @@ travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 100
 
 ### CALIBRATION POLICY SUPPORT
 
-BETA_OPINION, INITIAL_OPINION = import_opinion_parameters(path_data, False)
-BETA_PRICE, INITIAL_PRICE = import_price_parameters(path_data, False)
+BETA_OPINION, INITIAL_OPINION = import_opinion_parameters(path_data, scenario)
+BETA_PRICE, INITIAL_PRICE, INITIAL_CC, INITIAL_WELFARE, INITIAL_QOL, INITIAL_KNOWLEDGE = import_price_parameters(path_data, scenario)
 
 tax = INITIAL_PRICE
 acceptable_price = {"LOW": INITIAL_PRICE, "MED": INITIAL_PRICE, "HIGH": INITIAL_PRICE}
 support = {"LOW": INITIAL_OPINION, "MED": INITIAL_OPINION, "HIGH": INITIAL_OPINION}
+save_score_emissions = np.zeros(MAX_YEAR)
+save_score_emissions[0] = INITIAL_CC
+save_knowledge = np.zeros(MAX_YEAR)
+save_knowledge[0] = INITIAL_KNOWLEDGE
+score_qol = {"LOW": INITIAL_QOL, "MED": INITIAL_QOL, "HIGH": INITIAL_QOL}
+score_welfare = {"LOW": INITIAL_WELFARE, "MED": INITIAL_WELFARE, "HIGH": INITIAL_WELFARE}
+
 
 ### CALIBRATION POLICY IMPACT MODEL
 
@@ -104,7 +123,7 @@ mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
 B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
 
 #Transport cost calibration
-#gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors)
+#gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario)
 #with open(path_data + "calib_trans_poly_i.pkl", "wb") as f:
 #    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
 with open(path_data + "calib_trans_poly_i.pkl", "rb") as f:
@@ -115,7 +134,7 @@ del Y
 del compute_transport_cost_logit, compute_cost_car_logit
 
 #Compute transport cost
-gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0, income_levels, wage_factors)
+gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0, income_levels, wage_factors, scenario)
 print("Modal share of public transport (%):", round(100 * sum(np.nansum(gdf[f"transport_mode_{lvl}"] * gdf[f"pop_{lvl}"]) for lvl in income_levels) / sum(np.nansum(gdf[f"pop_{lvl}"]) for lvl in income_levels)))
 plot_transport_cost_i(gdf, "_HIGH")
 plot_transport_mode_i(gdf, "_HIGH")
@@ -240,15 +259,15 @@ save_emissions = np.zeros(MAX_YEAR)
 save_score_welfare = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
 save_score_qol = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
 save_score_congestion = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
-save_score_emissions = np.zeros(MAX_YEAR)
 save_median_support = np.zeros(MAX_YEAR)
 qol_in_zone = np.zeros(MAX_YEAR)
 qol_out_zone = np.zeros(MAX_YEAR)
 vkm_in_zone = np.zeros(MAX_YEAR)
 vkm_out_zone = np.zeros(MAX_YEAR)
 total_vkm = np.zeros(MAX_YEAR)
+tax_revenues = np.zeros(MAX_YEAR)
 
-save_emissions[0], total_vkm[0] = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels)
+save_emissions[0], total_vkm[0], tax_revenues[0] = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, 0)
 qol_in_zone[0], qol_out_zone[0], vkm_in_zone[0], vkm_out_zone[0] = compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels)
 
 BETA_CONG = DIFF_SPEED_CONGESTION/total_vkm[0]
@@ -261,6 +280,8 @@ year = year + 1
 while year < MAX_YEAR:
 
     print("YEAR", year)
+
+    save_knowledge[year] = save_knowledge[year-1] + 0.02
 
     # Urban form with the tax, without inertia
     
@@ -279,7 +300,7 @@ while year < MAX_YEAR:
         travel_time_matrix_car.loc[travel_time_matrix_car["speed"] < 10, "speed"] = 10
         travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 1000) / travel_time_matrix_car["speed"]) * 60
 
-        gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors)
+        gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors, scenario)
 
         def compute_error_in_population_from_utility(u):
             """ Compute error in population associated to utility u"""
@@ -327,7 +348,7 @@ while year < MAX_YEAR:
                 PROBA_MOVE
                 )
         
-        _, TRIP_TO_ZONE_OUTPUT = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels)
+        _, TRIP_TO_ZONE_OUTPUT, _ = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax)
 
     # AMB
     has_moved = {}
@@ -389,16 +410,20 @@ while year < MAX_YEAR:
     score_welfare = {lvl: compute_score(compute_change_in_welfare(save_utility[lvl][:, 0], save_utility[lvl][:, year]), LOGISTIC_PARAM_WELFARE)
                  for lvl in income_levels}
     
-    save_emissions[year], total_vkm[year] = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels)
+    save_emissions[year], total_vkm[year], tax_revenues[year]  = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax)
 
     qol_in_zone[year], qol_out_zone[year], vkm_in_zone[year], vkm_out_zone[year] = compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels)
 
-
-    save_score_emissions[year] = compute_score(compute_relative_change(save_emissions[0], save_emissions[year]), LOGISTIC_PARAM_QOL)
+    if scenario == "instant_welfare_adjust":
+        new_emissions = compute_score(compute_relative_change(save_emissions[0], save_emissions[year]), LOGISTIC_PARAM_QOL)
+        save_score_emissions[year] = (INERTIA_OPINION * save_score_emissions[year-1]) + ((1 - INERTIA_OPINION) * new_emissions) 
+    else:
+        save_score_emissions[year] = compute_score(compute_relative_change(save_emissions[0], save_emissions[year]), LOGISTIC_PARAM_QOL)
+    
     score_qol_zone = compute_score(compute_relative_change(qol_in_zone[0], qol_in_zone[year]), LOGISTIC_PARAM_QOL)
     score_qol_out = compute_score(compute_relative_change(qol_out_zone[0], qol_out_zone[year]), LOGISTIC_PARAM_QOL)
     
-    score_qol = {}
+    
     political_opinion = {}
     price_here = {}
     acceptable_price_new = {}
@@ -407,16 +432,26 @@ while year < MAX_YEAR:
         # QOL score
         mask_zone = gdf.ID.isin(houses_in_toll_area).to_numpy()
         mask_out = ~gdf.ID.isin(houses_in_toll_area).to_numpy()
-        score_qol[lvl] = (indiv_loc_matrix[lvl] @ mask_zone) * score_qol_zone + (indiv_loc_matrix[lvl] @ mask_out) * score_qol_out
+        
+        if scenario == "instant_welfare_adjust":
+            new_score_qol = (indiv_loc_matrix[lvl] @ mask_zone) * score_qol_zone + (indiv_loc_matrix[lvl] @ mask_out) * score_qol_out
+            score_qol[lvl] = (INERTIA_OPINION * score_qol[lvl]) + ((1 - INERTIA_OPINION) * new_score_qol) 
+        else:
+            score_qol[lvl] = (indiv_loc_matrix[lvl] @ mask_zone) * score_qol_zone + (indiv_loc_matrix[lvl] @ mask_out) * score_qol_out
 
         # Political opinion and price
         political_opinion[lvl] = compute_political_opinion(score_welfare[lvl], score_qol[lvl],
                                                        save_score_emissions[year], 0, BETA_OPINION, False)
-        price_here[lvl] = compute_price(score_welfare[lvl], score_qol[lvl],
-                                        save_score_emissions[year], 0, BETA_PRICE, False)
         
-        support[lvl] = (INERTIA_OPINION * support[lvl]) + ((1 - INERTIA_OPINION) * political_opinion[lvl])
-        acceptable_price[lvl] = (INERTIA_OPINION * acceptable_price[lvl]) + ((1 - INERTIA_OPINION) * price_here[lvl])
+        price_here[lvl] = compute_price(score_welfare[lvl], score_qol[lvl],
+                                        save_score_emissions[year], 0, BETA_PRICE, False, scenario, save_knowledge[year])
+        
+        if scenario == "instant_welfare_adjust":
+            support[lvl] = political_opinion[lvl]
+            acceptable_price[lvl] = price_here[lvl]
+        else:
+            support[lvl] = (INERTIA_OPINION * support[lvl]) + ((1 - INERTIA_OPINION) * political_opinion[lvl])
+            acceptable_price[lvl] = (INERTIA_OPINION * acceptable_price[lvl]) + ((1 - INERTIA_OPINION) * price_here[lvl])
 
         # Save scores
         save_score_welfare[lvl][:, year] = score_welfare[lvl]

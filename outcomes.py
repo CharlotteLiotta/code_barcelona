@@ -57,7 +57,7 @@ def compute_relative_change(outcome_without_tax, outcome_with_tax):
 
     return 100 * (outcome_with_tax - outcome_without_tax) / outcome_without_tax
 
-def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels):
+def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax):
     
     for lvl in income_levels:
 
@@ -71,6 +71,18 @@ def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels):
         if f"distance_emi_{lvl}" in gdf.columns:
             gdf = gdf.drop(columns = f"distance_emi_{lvl}")
         gdf = gdf.merge(distance_emi, left_on="ID", right_index=True, how="left")
+
+        #tax revenues
+        travel_matrix[f"tax_revenues_{lvl}"] = (
+        travel_matrix[f"proba_center_{lvl}"]
+        * (1 - travel_matrix[f"transport_mode_{lvl}"])
+        )
+        travel_matrix.loc[((~travel_matrix.from_id.isin(houses_in_toll_area)) & (~travel_matrix.to_id.isin(jobs_in_toll_area))), f"tax_revenues_{lvl}"] = 0
+        tax_revenues = travel_matrix.groupby("from_id", observed=True)[f"tax_revenues_{lvl}"].sum()
+        if f"tax_revenues_{lvl}" in gdf.columns:
+            gdf = gdf.drop(columns = f"tax_revenues_{lvl}")
+        gdf = gdf.merge(tax_revenues, left_on="ID", right_index=True, how="left")
+
 
         #speed
         travel_matrix[f"avg_speed_{lvl}"] = (
@@ -96,9 +108,9 @@ def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels):
         
     emissions = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"emissions_{lvl}"] for lvl in income_levels))
     total_vkm = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"distance_emi_{lvl}"] for lvl in income_levels))
-    
+    tax_revenues = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"tax_revenues_{lvl}"] for lvl in income_levels)) * tax
 
-    return emissions, total_vkm
+    return emissions, total_vkm, tax_revenues 
 
 def compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, clusters_in_zone, house_in_zone):
     

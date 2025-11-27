@@ -46,20 +46,33 @@ def compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CA
 
     return gdf
 
-def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors):
+def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors, scenario):
     """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
     
-    travel_time_car["zone_tax"] = 1 * (travel_time_car.from_id.isin(houses_in_toll_area) | travel_time_car.to_id.isin(jobs_in_toll_area))
+    if scenario == "exemption_trips_inside_zone":
+        travel_time_car["zone_tax"] = 1 * ((travel_time_car.from_id.isin(houses_in_toll_area) & (~travel_time_car.to_id.isin(jobs_in_toll_area))) | ((~travel_time_car.from_id.isin(houses_in_toll_area)) & travel_time_car.to_id.isin(jobs_in_toll_area)))
+    elif scenario == "discount_residents":
+        travel_time_car["zone_tax"] = 1 * ((~travel_time_car.from_id.isin(houses_in_toll_area)) & travel_time_car.to_id.isin(jobs_in_toll_area))
+    else:
+        travel_time_car["zone_tax"] = 1 * (travel_time_car.from_id.isin(houses_in_toll_area) | travel_time_car.to_id.isin(jobs_in_toll_area))
     
     # Compute car and transit costs
     for level in income_levels:
         factor = wage_factors[level]
-        travel_time_car.loc[:,f"COST_CAR_{level}"] = (
+        if ((level == "LOW") & (scenario == "discount_low_income")):
+            travel_time_car.loc[:,f"COST_CAR_{level}"] = (
             (travel_time_car["travel_time"] / 60) * PRICE_TIME * factor * WORKING_DAYS
             + (travel_time_car["distance_car"] / 1000) * PRICE_FUEL * WORKING_DAYS
             + FIXED_COST_CAR
-            + tax * WORKING_DAYS * travel_time_car["zone_tax"]
+            #+ tax * WORKING_DAYS * travel_time_car["zone_tax"]
         )
+        else:
+            travel_time_car.loc[:,f"COST_CAR_{level}"] = (
+                (travel_time_car["travel_time"] / 60) * PRICE_TIME * factor * WORKING_DAYS
+                + (travel_time_car["distance_car"] / 1000) * PRICE_FUEL * WORKING_DAYS
+                + FIXED_COST_CAR
+                + tax * WORKING_DAYS * travel_time_car["zone_tax"]
+            )
         travel_time_transit.loc[:,f"COST_PT_{level}"] = (
             (travel_time_transit["travel_time"] / 60) * PRICE_TIME * factor * WORKING_DAYS
             + travel_time_transit["monthly_cost_transit"]
