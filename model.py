@@ -46,7 +46,7 @@ def compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CA
 
     return gdf
 
-def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors, scenario):
+def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors, scenario, discount = 0, time_discount = 0):
     """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
     
     if scenario == "exemption_trips_inside_zone":
@@ -74,8 +74,8 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
                 + tax * WORKING_DAYS * travel_time_car["zone_tax"]
             )
         travel_time_transit.loc[:,f"COST_PT_{level}"] = (
-            (travel_time_transit["travel_time"] / 60) * PRICE_TIME * factor * WORKING_DAYS
-            + travel_time_transit["monthly_cost_transit"]
+            ((travel_time_transit["travel_time"]+time_discount) / 60) * PRICE_TIME * factor * WORKING_DAYS
+            + (travel_time_transit["monthly_cost_transit"] - discount)
         )
 
         # Fill missing costs

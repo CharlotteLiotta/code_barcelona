@@ -14,7 +14,7 @@ from policy_support import *
 
 ### SCENARIOS
 
-#scenario = "baseline"
+scenario = "baseline"
 
 #scenario = "exemption_trips_inside_zone"    #DONE
 #scenario = "tax_question_P18"               #DONE
@@ -22,7 +22,10 @@ from policy_support import *
 #scenario = "instant_welfare_adjust"         #DONE
 #scenario = "discount_low_income"            #DONE
 #scenario = "discount_residents"             #DONE
-scenario = "improve_public_transports"
+
+#scenario = "less_expensive_transport"       #DONE
+#scenario = "improve_rodalies"               #DONE
+#scenario = "reduce_transport_time"          #DONE
 
 ### IMPORT PARAMETERS
 
@@ -151,6 +154,7 @@ print("BETA:", BETA)
 amenities = calibration_utility_amenity(calib_beta.x, gdf, income_levels, SOFT_RENT, 1, 1)
 gdf = gdf.merge(amenities, on = "ID", how = "left")
 gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1
+gdf.loc[np.isnan(gdf["amenities_improved_rodalies"]), "amenities_improved_rodalies"] = 1
 
 # Solve the model
 def compute_error_in_population_from_utility(u):
@@ -267,7 +271,7 @@ vkm_out_zone = np.zeros(MAX_YEAR)
 total_vkm = np.zeros(MAX_YEAR)
 tax_revenues = np.zeros(MAX_YEAR)
 
-save_emissions[0], total_vkm[0], tax_revenues[0] = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, 0)
+save_emissions[0], total_vkm[0], tax_revenues[0], _, _ = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, 0, WORKING_DAYS, 0, SCALE_ABM)
 qol_in_zone[0], qol_out_zone[0], vkm_in_zone[0], vkm_out_zone[0] = compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels)
 
 BETA_CONG = DIFF_SPEED_CONGESTION/total_vkm[0]
@@ -275,11 +279,20 @@ BETA_CONG = DIFF_SPEED_CONGESTION/total_vkm[0]
 year = year + 1
 #plot_distance_distrib_check(income_levels, travel_matrix, "HIGH")
 
+tax_revenue_here = 137000000
+subvention_here = 137000000
+efficiency = 0
+discount = 12.79346
+time_discount = 0
+
 ### MODELING THE PSC
 
 while year < MAX_YEAR:
 
     print("YEAR", year)
+
+    if ((scenario == "improved_rodalies") & (year == 6)):
+        gdf = gdf.drop(columns = "amenities")
 
     save_knowledge[year] = save_knowledge[year-1] + 0.02
 
@@ -289,23 +302,39 @@ while year < MAX_YEAR:
     TRIP_TO_ZONE_INPUT = 0
     index_q = 0
 
-    while (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 1):
-        print("Q,", TRIP_TO_ZONE_INPUT, "Q_here", TRIP_TO_ZONE_OUTPUT)
+    condition = True
+
+    while condition == True:
+
+        #print("DIFF SUBVENTION TAX REVENUE", subvention_here-tax_revenue_here)
+        print("DIFF EFFICIENCY", efficiency-73)
+
+        if scenario == "less_expensive_transport":
+            discount = discount - np.abs(subvention_here-tax_revenue_here)/100000
+            time_discount = 0
+        elif scenario == "reduce_transport_time":
+            time_discount = time_discount + ((efficiency - 73) / 5000)
+            discount = 0
+        else:
+            discount = 0
+            time_discount = 0
+        
         TRIP_TO_ZONE_INPUT = TRIP_TO_ZONE_OUTPUT.copy()
         index_q = index_q + 1
-        print(index_q, "INDEX Q")
         travel_time_matrix_car["speed"] = travel_time_matrix_car["uncongested_speed"] - BETA_CONG * TRIP_TO_ZONE_INPUT
-        print(travel_time_matrix_car["speed"])
-        print("TRIP_TO_ZONE_INPUT", TRIP_TO_ZONE_INPUT)
         travel_time_matrix_car.loc[travel_time_matrix_car["speed"] < 10, "speed"] = 10
         travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 1000) / travel_time_matrix_car["speed"]) * 60
 
-        gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors, scenario)
+        gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors, scenario, discount, time_discount)
 
         def compute_error_in_population_from_utility(u):
             """ Compute error in population associated to utility u"""
 
-            return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
+            if ((scenario == "improved_rodalies") & (year > 5)):
+                error_population = compute_error_in_population(u, gdf["amenities_improved_rodalies"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
+            else:
+                error_population = compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
+            return error_population
 
         solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x)
 
@@ -348,7 +377,17 @@ while year < MAX_YEAR:
                 PROBA_MOVE
                 )
         
-        _, TRIP_TO_ZONE_OUTPUT, _ = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax)
+        _, TRIP_TO_ZONE_OUTPUT, tax_revenue_here, subvention_here, commuters_transit = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax, WORKING_DAYS, discount, SCALE_ABM)
+
+        efficiency = - time_discount * commuters_transit / (tax_revenue_here / 1000000)
+
+        if scenario == "less_expensive_transport":
+            condition = (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 1) | (np.abs(subvention_here - tax_revenue_here)> 1)
+        elif scenario == "reduce_transport_time":
+            condition = (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 1) | (np.abs(efficiency - 73)> 0.1)
+        else:
+            condition = (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 1)
+    
 
     # AMB
     has_moved = {}
@@ -410,7 +449,7 @@ while year < MAX_YEAR:
     score_welfare = {lvl: compute_score(compute_change_in_welfare(save_utility[lvl][:, 0], save_utility[lvl][:, year]), LOGISTIC_PARAM_WELFARE)
                  for lvl in income_levels}
     
-    save_emissions[year], total_vkm[year], tax_revenues[year]  = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax)
+    save_emissions[year], total_vkm[year], tax_revenues[year], _, _ = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax, WORKING_DAYS, discount, SCALE_ABM)
 
     qol_in_zone[year], qol_out_zone[year], vkm_in_zone[year], vkm_out_zone[year] = compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels)
 

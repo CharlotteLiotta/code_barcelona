@@ -79,9 +79,12 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
     # --- 7. Export amenities if requested ---
     if export_amenities:
         amenities = np.exp(np.nansum(X.iloc[:,1:] * model.params.iloc[1:], 1))
+        params_improved_rodalies = model.params.iloc[1:]
+        params_improved_rodalies.loc["rodalies_500m"] = params_improved_rodalies.loc["fgc_500m"]
         gdf_here = gdf_here.copy()
         gdf_here["amenities"] = amenities
-        return gdf_here[["ID", "amenities"]]
+        gdf_here["amenities_improved_rodalies"] = np.exp(np.nansum(X.iloc[:,1:] * params_improved_rodalies, 1))
+        return gdf_here[["ID", "amenities", "amenities_improved_rodalies"]]
     
     else:
         # Final log-likelihood (maximize sum of log-likelihoods and sorting)

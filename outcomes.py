@@ -57,7 +57,7 @@ def compute_relative_change(outcome_without_tax, outcome_with_tax):
 
     return 100 * (outcome_with_tax - outcome_without_tax) / outcome_without_tax
 
-def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax):
+def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax, WORKING_DAYS, discount, SCALE_ABM):
     
     for lvl in income_levels:
 
@@ -82,6 +82,29 @@ def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_
         if f"tax_revenues_{lvl}" in gdf.columns:
             gdf = gdf.drop(columns = f"tax_revenues_{lvl}")
         gdf = gdf.merge(tax_revenues, left_on="ID", right_index=True, how="left")
+
+        #subventions
+        travel_matrix[f"subvention_{lvl}"] = (
+        travel_matrix[f"proba_center_{lvl}"]
+        * (travel_matrix[f"transport_mode_{lvl}"])
+        )
+        #travel_matrix.loc[((~travel_matrix.from_id.isin(houses_in_toll_area)) & (~travel_matrix.to_id.isin(jobs_in_toll_area))), f"tax_revenues_{lvl}"] = 0
+        subvention = travel_matrix.groupby("from_id", observed=True)[f"subvention_{lvl}"].sum()
+        if f"subvention_{lvl}" in gdf.columns:
+            gdf = gdf.drop(columns = f"subvention_{lvl}")
+        gdf = gdf.merge(subvention, left_on="ID", right_index=True, how="left")
+
+
+        #transit users
+        travel_matrix[f"transit_{lvl}"] = (
+        travel_matrix[f"proba_center_{lvl}"]
+        * (travel_matrix[f"transport_mode_{lvl}"])
+        )
+        #travel_matrix.loc[((~travel_matrix.from_id.isin(houses_in_toll_area)) & (~travel_matrix.to_id.isin(jobs_in_toll_area))), f"tax_revenues_{lvl}"] = 0
+        transit_users = travel_matrix.groupby("from_id", observed=True)[f"transit_{lvl}"].sum()
+        if f"transit_{lvl}" in gdf.columns:
+            gdf = gdf.drop(columns = f"transit_{lvl}")
+        gdf = gdf.merge(transit_users, left_on="ID", right_index=True, how="left")
 
 
         #speed
@@ -108,9 +131,11 @@ def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_
         
     emissions = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"emissions_{lvl}"] for lvl in income_levels))
     total_vkm = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"distance_emi_{lvl}"] for lvl in income_levels))
-    tax_revenues = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"tax_revenues_{lvl}"] for lvl in income_levels)) * tax
+    tax_revenues = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"tax_revenues_{lvl}"] for lvl in income_levels)) * tax * WORKING_DAYS * 12 * (1/SCALE_ABM)
+    subvention = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"subvention_{lvl}"] for lvl in income_levels)) * discount * 12 * (1/SCALE_ABM)
+    transit_users = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"transit_{lvl}"] for lvl in income_levels)) * (1/SCALE_ABM)
 
-    return emissions, total_vkm, tax_revenues 
+    return emissions, total_vkm, tax_revenues, subvention, transit_users
 
 def compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, clusters_in_zone, house_in_zone):
     
