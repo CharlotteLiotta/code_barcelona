@@ -6,6 +6,11 @@ import matplotlib.patches as mpatches
 import seaborn as sns
 import pandas as pd
 from statsmodels.nonparametric.smoothers_lowess import lowess
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.colors import BoundaryNorm
+from matplotlib.colors import TwoSlopeNorm
 
 from matplotlib.colors import TwoSlopeNorm
 
@@ -141,18 +146,18 @@ def compare_rent_or_size(gdf, var_data, var_simul, weighting):
         agg["simul"] = agg["simul"] / agg["pop"]
 
     # Plot
-    plt.figure(figsize=(8, 5))
+    plt.figure(figsize=(8, 8))
 
     # Individual points (optional, can be noisy)
-    plt.scatter(gdf["distance_center"], gdf[var_data], s=1, alpha=0.3, label="Data", color='red')
-    plt.scatter(gdf["distance_center"], gdf["simul"], s=1, alpha=0.3, label="Calib", color='blue')
+    #plt.scatter(gdf["distance_center"], gdf[var_data], s=1, alpha=0.3, label="Data", color='red')
+    #plt.scatter(gdf["distance_center"], gdf["simul"], s=1, alpha=0.3, label="Simulation", color='blue')
 
     # Aggregated lines
     plt.plot(agg["distance_bin"], agg["data"], color='red', linewidth=2, label="Data")
-    plt.plot(agg["distance_bin"], agg["simul"], color='blue', linewidth=2, label="Calib")
+    plt.plot(agg["distance_bin"], agg["simul"], color='blue', linewidth=2, label="Simulation")
 
-    plt.xlabel("Distance au centre-ville (km)")
-    #plt.ylabel("Rents per sqm")
+    plt.xlabel("Distance to city center (km)")
+    plt.ylabel("Rents per sqm")
     plt.legend()
     plt.tight_layout()
     plt.show()
@@ -284,70 +289,114 @@ def plot_change_pop_line(gdf, save_population):
     plt.xlabel("Distance to city center (km)")
     plt.title("Population by distance bins")
     plt.show()
-    
-def plot_change_population(gdf, save_population):
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.colors import BoundaryNorm
+from matplotlib.colors import TwoSlopeNorm
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import pandas as pd
+from matplotlib.colors import BoundaryNorm, TwoSlopeNorm
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.colors import TwoSlopeNorm
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.colors import TwoSlopeNorm, ListedColormap
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.colors as mcolors
+
+def plot_change_population_custom(gdf, save_population,
+                                  bins=[-100, -50, -25, 0, 25, 50, 75, 700],
+                                  cmap_name="RdBu_r", alpha=0.6):
+    """
+    Plot population change on a map with:
+    - user-defined bins
+    - colors sampled from a colormap (BlRd_r)
+    - NaN/Inf in grey
+    - transparency (alpha)
+    - discrete legend with %
+    """
 
     # --- prepare data ---
-    gdf_proj = gdf.to_crs(epsg=32632).copy()  # keep projection if needed
-    gdf_proj["value"] = (save_population[:,19] - save_population[:,0]) #.astype(int)  # discrete
+    gdf_proj = gdf.to_crs(epsg=32632).copy()
+    gdf_proj["value"] = 100 * (save_population[:, 19] - save_population[:, 0]) / save_population[:, 0]
 
-    print(sum(gdf_proj["value"]))
-    print(sum(np.abs(gdf_proj["value"]))/2)
-
-    # Dissolve by municipality to get one polygon per municipality
+    # Dissolve by municipality
     muni_gdf = gdf_proj.dissolve(by='NMUN', as_index=False)
     muni_gdf['centroid'] = muni_gdf.geometry.centroid
     muni_gdf['x'] = muni_gdf.centroid.x
     muni_gdf['y'] = muni_gdf.centroid.y
 
+    # Separate valid and invalid values
+    valid = gdf_proj[np.isfinite(gdf_proj["value"])]
+    invalid = gdf_proj[~np.isfinite(gdf_proj["value"])]
+
+    # --- discrete colormap from user-defined cmap ---
+    n_bins = len(bins) - 1
+    cmap = plt.get_cmap(cmap_name)
+    # sample colors evenly across the colormap
+    colors = [cmap(i/(n_bins-1)) for i in range(n_bins)]
+    discrete_cmap = mcolors.ListedColormap(colors)
+    norm = mcolors.BoundaryNorm(bins, discrete_cmap.N)
 
     # --- figure ---
     fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
 
-    # --- discrete diverging colormap ---
-    cmap_name = "RdBu_r"
+    # Plot invalid polygons first (grey)
+    if len(invalid) > 0:
+        p_invalid = invalid.plot(color="lightgrey", edgecolor="white", linewidth=0.5, ax=ax)
+        for coll in p_invalid.collections:
+            coll.set_alpha(alpha)
+            coll.set_antialiased(False)
 
-    vmin = gdf_proj["value"].min()
-    vmax = gdf_proj["value"].max()
-    absmax = max(abs(vmin), abs(vmax))
-
-    # symmetric normalization around 0
-    norm = TwoSlopeNorm(vmin=-absmax, vcenter=0, vmax=absmax)
-    #bounds = np.arange(-5, 4, 1)               # edges for discrete categories -3..3
-    # plot
-    gdf_proj.plot(column="value",
-                  cmap=cmap_name,
-                  linewidth=0.01,
-                  edgecolor="grey",
-                  ax=ax, legend = True, norm = norm)
-
-    # remove axes
-    ax.set_axis_off()
-
-    cbar = ax.get_figure().axes[-1]
-    cbar.tick_params(labelsize=14)
-
-    # improve rendering for vector output
-    for coll in ax.collections:
+    # Plot valid polygons with discrete colors
+    p_valid = valid.plot(column="value", cmap=discrete_cmap, norm=norm,
+                         linewidth=0.01, alpha = 0.6, edgecolor="grey", ax=ax)
+    for coll in p_valid.collections:
+        coll.set_alpha(alpha)
         coll.set_antialiased(False)
 
-    for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(["Badalona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]),:].iterrows():
-        ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold', ha='center', va='center', color='black')
-    
-    
+    ax.set_axis_off()
+
+    # --- municipality labels ---
+    for _, row in muni_gdf.loc[
+        muni_gdf["NMUN"].isin(["Badalona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"])
+    ].iterrows():
+        ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold',
+                ha='center', va='center', color='black')
+
+    # --- overlay city borders ---
     city_border = muni_gdf[muni_gdf.ID.str[:5].isin(["08019", "08101", "08194"])]
+    city_border.boundary.plot(ax=ax, color='black', linewidth=2)
 
-    # Overlay the border on top of your map
-    city_border.boundary.plot(ax=ax, color='black', linewidth=2, label = "Toll area")
-    # Add legend entry for city border
-    #city_patch = mpatches.Patch(color='red', label='Toll area')
-    ax.legend()
-    # --- title ---
-    ax.set_title("Changes in population (Year 19 - Year 0)", fontsize=14)
+    # --- discrete legend with % ---
+    patches = [mpatches.Patch(facecolor=colors[i],
+                              edgecolor='grey',
+                              label=f"{bins[i]:.1f}% to {bins[i+1]:.1f}%")
+               for i in range(n_bins)]
 
+    if len(invalid) > 0:
+        patches.append(mpatches.Patch(facecolor='lightgrey', edgecolor='white', label='Missing / invalid'))
+
+    patches.append(mpatches.Patch(facecolor='none', edgecolor='black', linewidth=2, label='Toll area'))
+
+    ax.legend(handles=patches,
+          loc='center left',       # reference point of the legend
+          bbox_to_anchor=(0.8, 0.2),  # (x, y) relative to axes
+          fontsize=11)
+          
     plt.tight_layout()
-
     plt.show()
+
 
 def plot_transport_cost_i(gdf, group):
 
@@ -365,11 +414,12 @@ def plot_transport_cost_i(gdf, group):
     ax.set_axis_off()
 
     # Title
-    ax.set_title("Calibrated transport costs", fontsize=14)
+    #ax.set_title("Calibrated transport costs", fontsize=14)
 
     # Adjust legend font size
     cbar = ax.get_figure().axes[-1]   # legend axis is added at the end
     cbar.tick_params(labelsize=14)
+    cbar.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f'{int(y)}€'))
     plt.show
 
 def plot_transport_mode_i(gdf, group):
@@ -387,7 +437,7 @@ def plot_transport_mode_i(gdf, group):
     ax.set_axis_off()
 
     # Title
-    ax.set_title("Calibrated share of public transport users \n Average: 53%", fontsize=14)
+    #ax.set_title("Calibrated share of public transport users", fontsize=14)
 
     # Adjust legend font size
     cbar = ax.get_figure().axes[-1]  # colorbar axis
@@ -443,8 +493,13 @@ def plot_calib_housing(gdf_here, fitted):
     loess_fit = lowess(df['dens_fit'], df['distance_center'], frac=0.3)
 
     # --- Plot ---
-    plt.figure(figsize=(6,8))
-
+    plt.figure(figsize=(8,8))
+    plt.rcParams.update({
+    'axes.labelsize': 14,
+    'xtick.labelsize': 12,
+    'ytick.labelsize': 12,
+    'legend.fontsize': 12
+    })
     # Scatter points
     plt.scatter(df['distance_center'], df['dens_obs'], s=2, alpha=0.3, color='steelblue', label='Observed')
     plt.scatter(df['distance_center'], df['dens_fit'], s=2, alpha=0.3, color='darkorange', label='Fitted')
@@ -458,13 +513,12 @@ def plot_calib_housing(gdf_here, fitted):
                         color='darkorange', alpha=0.2, label='Interquartile range (fitted)')
 
     # Central smooth trends
-    plt.plot(loess_obs[:,0], loess_obs[:,1], color='steelblue', lw=2)
-    plt.plot(loess_fit[:,0], loess_fit[:,1], color='darkorange', lw=2)
+    plt.plot(loess_obs[:,0], loess_obs[:,1], color='steelblue', lw=2, label='Central trend (observed)')
+    plt.plot(loess_fit[:,0], loess_fit[:,1], color='darkorange', lw=2, label='Central trend (fitted)')
 
     # Labels
     plt.xlabel("Distance to city center (km)")
     plt.ylabel("Housing density")
-    plt.title("Observed vs fitted housing density")
     plt.legend()
     plt.show()
 
@@ -486,10 +540,10 @@ def plot_line_charts(gdf, n, q, R):
     agg = compare_rent_or_size(gdf, "rent_m2", R, 1)
     agg = compare_var(gdf, n)
 
-    plt.plot(agg["distance_bin"], agg["mean_density_pop"], color='red', linewidth=2, label="Densité moyenne (pop)")
-    plt.plot(agg["distance_bin"], agg["mean_density_n"], color='blue', linewidth=2, label="Densité moyenne (n)")
-    plt.xlabel("Distance au centre-ville (km)")
-    plt.ylabel("Densité de population (hab/km²)")
+    plt.plot(agg["distance_bin"], agg["mean_density_pop"], color='red', linewidth=2, label="Data")
+    plt.plot(agg["distance_bin"], agg["mean_density_n"], color='blue', linewidth=2, label="Simulation")
+    plt.xlabel("Distance to city center (km)")
+    plt.ylabel("Population density (hab/km²)")
     plt.legend()
     plt.tight_layout()
     plt.show()

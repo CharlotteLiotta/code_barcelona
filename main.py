@@ -17,7 +17,7 @@ from policy_support import *
 scenario = "baseline"
 
 #scenario = "exemption_trips_inside_zone"    #DONE
-#scenario = "tax_question_P18"               #DONE
+#scenario = "tax_question_P17"               #DONE
 #scenario = "increasing_knowledge"           #DONE
 #scenario = "instant_welfare_adjust"         #DONE
 #scenario = "discount_low_income"            #DONE
@@ -139,6 +139,9 @@ del compute_transport_cost_logit, compute_cost_car_logit
 #Compute transport cost
 gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0, income_levels, wage_factors, scenario)
 print("Modal share of public transport (%):", round(100 * sum(np.nansum(gdf[f"transport_mode_{lvl}"] * gdf[f"pop_{lvl}"]) for lvl in income_levels) / sum(np.nansum(gdf[f"pop_{lvl}"]) for lvl in income_levels)))
+print("Modal share of public transport (%):", round(100 * (np.nansum(gdf["transport_mode_HIGH"] * gdf["pop_HIGH"])) / (np.nansum(gdf["pop_HIGH"]))))
+print("Modal share of public transport (%):", round(100 * (np.nansum(gdf[f"transport_mode_MED"] * gdf[f"pop_MED"])) / (np.nansum(gdf[f"pop_MED"]))))
+print("Modal share of public transport (%):", round(100 * (np.nansum(gdf[f"transport_mode_LOW"] * gdf[f"pop_LOW"])) / (np.nansum(gdf[f"pop_LOW"]))))
 plot_transport_cost_i(gdf, "_HIGH")
 plot_transport_mode_i(gdf, "_HIGH")
 #plot_employment(gdf, employment_centers, var) var = employment_centers['employment'] * 0.001, employment_centers.merge(employed_results, left_on = "cluster", right_on = "to_id")["weighted_employed"] * 0.001,  # adjust scale_factor, ARRAY_WAGE* 0.5
@@ -306,11 +309,11 @@ while year < MAX_YEAR:
 
     while condition == True:
 
-        #print("DIFF SUBVENTION TAX REVENUE", subvention_here-tax_revenue_here)
-        print("DIFF EFFICIENCY", efficiency-73)
+        print("DISCOUNT", discount)
+        print("DIFF SUBVENTION TAX REVENUE", subvention_here-tax_revenue_here)
 
         if scenario == "less_expensive_transport":
-            discount = discount - np.abs(subvention_here-tax_revenue_here)/100000
+            discount = discount - (subvention_here-tax_revenue_here)/10000000
             time_discount = 0
         elif scenario == "reduce_transport_time":
             time_discount = time_discount + ((efficiency - 73) / 5000)
@@ -509,6 +512,7 @@ while year < MAX_YEAR:
 
 #Evolution of tax, public support and scores
 plot_tax_suppport(save_tax, save_median_support)
+
 for lvl in income_levels:
     plot_scores(
         save_score_emissions,
@@ -517,8 +521,164 @@ for lvl in income_levels:
         save_score_welfare[lvl]
     )
 
+
+
+emission_change = np.empty(20)
+for i in range(20):
+    emission_change[i] = np.nanmedian(compute_relative_change(save_emissions[0], save_emissions[i]))
+
+change_qol_in_zone = np.empty(20)
+for i in range(20):
+    change_qol_in_zone[i] = np.nanmean(compute_relative_change(qol_in_zone[0], qol_in_zone[i]))
+
+change_qol_out_zone = np.empty(20)
+for i in range(20):
+    change_qol_out_zone[i] = np.nanmean(compute_relative_change(qol_out_zone[0], qol_out_zone[i]))
+
+
+utility_change_low = np.empty(20)
+for i in range(20):
+    utility_change_low[i] = np.nanmedian(compute_change_in_welfare(save_utility["LOW"][:, 0], save_utility["LOW"][:, i]))
+
+utility_change_med = np.empty(20)
+for i in range(20):
+    utility_change_med[i] = np.nanmedian(compute_change_in_welfare(save_utility["MED"][:, 0], save_utility["MED"][:, i]))
+
+utility_change_high = np.empty(20)
+for i in range(20):
+    utility_change_high[i] = np.nanmedian(compute_change_in_welfare(save_utility["HIGH"][:, 0], save_utility["HIGH"][:, i]))
+
+
+
+
+import pandas as pd
+import numpy as np
+from openpyxl import load_workbook
+import os
+
+def append_scenario_to_excel(filename, scenario_name,
+                             tax_level, emission_change,
+                             change_qol_in_zone, change_qol_out_zone,
+                             utility_change_low, utility_change_med, utility_change_high):
+
+    # Put variables into a dict
+    data = {
+        "tax_level": tax_level,
+        "emission_change": emission_change,
+        "change_qol_in_zone": change_qol_in_zone,
+        "change_qol_out_zone": change_qol_out_zone,
+        "utility_change_low": utility_change_low,
+        "utility_change_med": utility_change_med,
+        "utility_change_high": utility_change_high,
+    }
+
+    # Convert to DataFrame (7 rows, 20 columns)
+    df = pd.DataFrame(data).T
+    df.columns = [f"t{t}" for t in range(1, len(tax_level)+1)]
+    df.insert(0, "scenario", scenario_name)
+
+    # Append blank row after each scenario
+    df_blank = pd.DataFrame([[""] + [""]*len(tax_level)], columns=df.columns)
+
+    # Write or append
+    if not os.path.exists(filename):
+        # First write
+        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
+            df.to_excel(writer, index=True)
+            df_blank.to_excel(writer, index=False, header=False, startrow=len(df)+1)
+    else:
+        # Append
+        wb = load_workbook(filename)
+        ws = wb.active
+        startrow = ws.max_row + 1
+
+        with pd.ExcelWriter(filename, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+            df.to_excel(writer, index=True, header=False, startrow=startrow)
+            df_blank.to_excel(writer, index=False, header=False, startrow=startrow + len(df))
+
+    print(f"Scenario '{scenario_name}' appended to {filename}.")
+
+
+
+append_scenario_to_excel(
+    filename="simulation_results.xlsx",
+    scenario_name="discount_public_transport",
+    tax_level=save_tax,
+    emission_change=emission_change,
+    change_qol_in_zone=change_qol_in_zone,
+    change_qol_out_zone=change_qol_out_zone,
+    utility_change_low=utility_change_low,
+    utility_change_med=utility_change_med,
+    utility_change_high=utility_change_high
+)
+
+
+
+
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+
+# --- Global formatting for academic figures ---
+mpl.rcParams['font.size'] = 10
+mpl.rcParams['axes.labelsize'] = 10
+mpl.rcParams['xtick.labelsize'] = 9
+mpl.rcParams['ytick.labelsize'] = 9
+mpl.rcParams['legend.fontsize'] = 9
+
+
+# Colorblind-safe palette (Wong 2011)
+colors = {
+    "blue":  "#0072B2",
+    "orange":"#E69F00",
+    "green": "#009E73",
+    "red":   "#D55E00",
+    "purple":"#CC79A7",
+    "cyan":  "#56B4E9"
+}
+
+fig, axes = plt.subplots(3, 1, figsize=(8, 7), sharex=True, constrained_layout=True)
+years = range(len(save_tax))
+
+# --- Panel 1 ---
+axes[0].plot(years, 2 * save_tax, color="black", linewidth=1.5)
+axes[0].set_ylabel('Toll per day (€)')
+
+# --- Panel 2 ---
+axes[1].plot(years, utility_change_low,  label="Low-income",    color="orange", linewidth=1.5)
+axes[1].plot(years, utility_change_med,  label="Middle-income", color="orangered",  linewidth=1.5)
+axes[1].plot(years, utility_change_high, label="High-income",   color="maroon",    linewidth=1.5)
+axes[1].set_ylabel("Median utility variation (%)")
+axes[1].legend(frameon=False, loc="upper right", fontsize=9)
+
+# --- Panel 3 ---
+axes[2].plot(years, emission_change,        label="Transport emissions", color="green", linewidth=1.5)
+axes[2].plot(years, change_qol_in_zone,     label="Pollution inside the tax zone",         color="navy",   linewidth=1.5)
+axes[2].plot(years, change_qol_out_zone,    label="Pollution outside of the tax zone",    color="cyan", linewidth=1.5)
+axes[2].set_ylabel("Mean variation (%)")
+axes[2].legend(frameon=False, loc="upper right", fontsize=9)
+axes[-1].set_xlabel("Year")
+axes[-1].set_xticks(list(years)[::2])   # every 2 years
+
+#fig.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #Spatial analysis: weighted opinion and population
-plot_change_population(gdf, save_population)
+
+plot_change_population_custom(gdf, save_population)
 plot_change_pop_line(gdf, save_population)
 moving = 0
 for i in range(19):
@@ -526,12 +686,128 @@ for i in range(19):
     moving = moving + np.nansum(np.abs(save_population[:, i+1] - save_population[:, i]))/2
 
 weighted_values = {
-    lvl: compute_weighted_mean_opinions(support[lvl], indiv_loc_matrix[lvl], N[lvl]) * 100
+    lvl: compute_weighted_mean_opinions(acceptable_price[lvl], indiv_loc_matrix[lvl], N[lvl]) * 2
     for lvl in income_levels
 }
 
 for lvl in income_levels:
     plot_spatial_opinions(gdf, weighted_values[lvl])
+
+for lvl in income_levels:
+    plot_spatial_price(gdf, weighted_values[lvl])
+
+
+
+
+gdf_proj = gdf.to_crs(epsg=32632).copy()  
+# Dissolve by municipality to get one polygon per municipality
+muni_gdf = gdf_proj.dissolve(by='NMUN', as_index=False)
+muni_gdf['centroid'] = muni_gdf.geometry.centroid
+muni_gdf['x'] = muni_gdf.centroid.x
+muni_gdf['y'] = muni_gdf.centroid.y
+import matplotlib.patches as mpatches
+import matplotlib.lines as mlines
+
+from shapely.affinity import rotate
+gdf_proj["geometry"] = gdf_proj["geometry"].apply(lambda geom: rotate(geom, 25, origin='centroid'))
+#muni_gdf["geometry"] = muni_gdf["geometry"].apply(lambda geom: rotate(geom, 25, origin='centroid'))
+
+fig, ax = plt.subplots(figsize=(8, 8))
+
+# Census tracts
+gdf_proj.plot(
+    ax=ax, facecolor="white", edgecolor="grey", linewidth=0.6, label="Census tracts"
+)
+
+# Municipal boundaries
+muni_gdf.boundary.plot(
+    ax=ax, edgecolor="black", linewidth=0.8, label="Municipal boundaries"
+)
+
+# Congestion-pricing zone
+city_border = muni_gdf[muni_gdf.ID.str[:5].isin(["08019", "08101", "08194"])]
+city_border.dissolve().plot(
+    ax=ax, facecolor="none", edgecolor="red", linewidth=2.2, label="Toll area"
+)
+
+# Municipality labels
+sel = ["Badalona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]
+for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(["Badalona", "Barcelona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]),:].iterrows(): ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold', ha='center', va='center', color='black')
+
+# ----- Legend -----
+# Handles for each layer
+tracts_handle = mpatches.Patch(facecolor="white", edgecolor="grey", label="Census tracts")
+muni_handle   = mlines.Line2D([], [], color="black", linewidth=0.8, label="Municipal boundaries")
+toll_handle   = mlines.Line2D([], [], color="red", linewidth=1.2, label="Toll area")
+
+ax.legend(handles=[tracts_handle, muni_handle, toll_handle], loc="lower right")
+
+# Aesthetics
+ax.set_axis_off()
+plt.tight_layout()
+plt.show()
+
+
+def plot_spatial_price(gdf, values):
+    # --- prepare values ---
+    gdf_proj = gdf.to_crs(epsg=32632).copy()   # keep projection if needed
+    gdf_proj["value"] = values
+
+    # Dissolve by municipality to get one polygon per municipality
+    muni_gdf = gdf_proj.dissolve(by='NMUN', as_index=False)
+    muni_gdf['centroid'] = muni_gdf.geometry.centroid
+    muni_gdf['x'] = muni_gdf.centroid.x
+    muni_gdf['y'] = muni_gdf.centroid.y
+
+    # plotting
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
+
+    cmap_name = "RdYlGn"
+    vmin, vmax = gdf_proj["value"].min(), gdf_proj["value"].max()
+
+    missing = gdf_proj[gdf_proj["value"].isna()]
+    present = gdf_proj[gdf_proj["value"].notna()]
+
+    # First: plot missing polygons in grey
+    missing.plot(color="lightgrey", edgecolor="white",
+             linewidth=0.2, ax=ax, label="Missing data")
+    present.plot(column="value",
+                  cmap=cmap_name,
+                  vmin=vmin, vmax=vmax,
+                  linewidth=0, edgecolor="grey",
+                  ax=ax)
+
+    ax.set_axis_off()
+
+    # improve rendering
+    for coll in ax.collections:
+        coll.set_antialiased(False)
+        coll.set_alpha(0.7)
+
+    for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(["Badalona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]),:].iterrows():
+        ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold', ha='center', va='center', color='black')
+    
+    
+    city_border = muni_gdf[muni_gdf.ID.str[:5].isin(["08019", "08101", "08194"])]
+    city_border.boundary.plot(ax=ax, color='black', linewidth=2, label = "Toll area")
+    
+
+    # continuous colorbar (no title)
+    sm = plt.cm.ScalarMappable(cmap=cmap_name, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02)
+    ticks = np.linspace(vmin, vmax, 5)
+    cbar.set_ticks(ticks)
+    cbar.ax.set_yticklabels([f"{t:.1f}" for t in ticks], fontsize=14)  # show 1 decimal + %
+    import matplotlib.patches as mpatches
+
+    missing_patch = mpatches.Patch(facecolor="lightgrey", edgecolor="white", label="Income group not represented")
+    toll_patch = mpatches.Patch(facecolor="none", edgecolor="black", linewidth=2, label="Toll area")
+
+    ax.legend(handles=[missing_patch, toll_patch], loc="lower right")
+
+    # title
+    #ax.set_title("Average opinions (year 20)", fontsize=14)
 
 
 print(round(100 * sum(np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)) for lvl in income_levels) / sum(np.nansum(np.nansum(indiv_loc_matrix[lvl], 0)) for lvl in income_levels)), "% commute by public transport (all levels)")

@@ -299,11 +299,28 @@ allocation_plot["total"] = allocation_plot["share_total"] * total_jobs
 allocation_plot = gpd.GeoDataFrame(allocation_plot, geometry=allocation_plot["geometry"], crs=gdf.crs)
 allocation_plot["geometry"] = allocation_plot["geometry"].centroid
 
+# Reset center_id to start at 1
+allocation_plot = allocation_plot.reset_index(drop=True)
+allocation_plot['center_id'] = allocation_plot.index + 1  # IDs start at 1
+
+# Plot map with bold, black, larger numbers
 fig, ax = plt.subplots(figsize=(12, 12))
 gdf.plot(ax=ax, color='lightgrey', edgecolor='white', linewidth=0.1)
 allocation_plot.plot(ax=ax, markersize=allocation_plot['total']/200, color='red', label='Cluster Centroids')
+
+# Annotate each subcenter
+for idx, row in allocation_plot.iterrows():
+    ax.annotate(
+        str(row['center_id']),
+        xy=(row.geometry.x, row.geometry.y),
+        xytext=(3, 3),  # offset
+        textcoords="offset points",
+        fontsize=16, 
+        color='black',
+        fontweight='bold'
+    )
+
 plt.axis("off")
-plt.title("Employment subcenters sized by job count")
 plt.show()
 
 
@@ -356,4 +373,5 @@ allocation_plot.loc[:,["geometry", "employment_cluster"]].to_file(path_data + "c
 
 
 
+gdf.plot(gdf.employment / gdf.area)
 

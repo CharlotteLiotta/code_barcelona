@@ -24,7 +24,7 @@ from plotting_tools import * # type: ignore
 from import_transport import *
 from policy_support import *
 
-path_data = "../data_barcelona/"
+path_data = "../../data_barcelona/"
 
 #gdf = gpd.read_file(path_data + "experienced_impact.geojson")
 
@@ -130,6 +130,45 @@ plt.grid(axis='y', linestyle='--', alpha=0.6)
 plt.tight_layout()
 
 plt.show()
+
+
+
+
+df_reg = df_reg.loc[~np.isnan(df_reg.P20_7) & (df_reg.P20_7 < 97)]
+
+plt.figure(figsize=(8, 5))
+
+# Define bins for discrete values 0–10 (11 bins)
+bins = np.arange(-0.5, 11.5, 1)  
+
+plt.hist(
+    df_reg['P20_7'],
+    weights=(df_reg["PESAIX"] / df_reg["PESAIX"].sum()) * 100,
+    bins=bins,
+    color='#1f77b4',
+    alpha=0.85,
+    edgecolor='black'  # clearer bar separation
+)
+
+# Axis labels and style
+#plt.xlabel('Acceptability (0-10 scale)', fontsize=14)
+plt.ylabel('Respondents (%)', fontsize=14)
+
+# Ensure ticks line up with integer values
+plt.xticks(range(0, 11), fontsize=12)
+plt.yticks(fontsize=12)
+
+# Gridlines only on y-axis for readability
+plt.grid(axis='y', linestyle='--', alpha=0.6)
+
+# Tight layout for clean spacing
+plt.tight_layout()
+
+plt.show()
+
+
+
+
 
 df_reg.rename(columns={'P17': 'acceptable_price'}, inplace=True)
 df_reg = df_reg.loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 10.1)]
@@ -310,7 +349,7 @@ plt.hist(
     alpha=0.85,
     edgecolor='black'  # clearer bar separation
 )
-plt.xlabel('Perceived benefits on climate change', fontsize=14)
+plt.xlabel('Perceived benefits on GHG emissions', fontsize=14)
 plt.ylabel('Respondents (%)', fontsize=14)
 # Ensure ticks line up with integer values
 plt.xticks(range(0, 11), fontsize=12)
@@ -390,7 +429,7 @@ plt.hist(
     alpha=0.85,
     edgecolor='black'  # clearer bar separation
 )
-plt.xlabel('Perceived benefits on quality of life', fontsize=14)
+plt.xlabel('Perceived benefits on air and noise pollution and safety', fontsize=14)
 plt.ylabel('Respondents (%)', fontsize=14)
 # Ensure ticks line up with integer values
 plt.xticks(range(0, 11), fontsize=12)
