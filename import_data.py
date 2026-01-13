@@ -99,13 +99,22 @@ def import_income(gdf, path_data):
     #https://www.ine.es/dynt3/inebase/en/index.htm?padre=12385&capsel=12384
     
     #Import income data
-    income = pd.read_csv(path_data + '30896.csv', sep = ";", encoding="latin1")
-    income = income.loc[(income.Periodo == 2022) & (income['Mean and median income indicators'] == 'Average household net income'),["Sections", "Total"]]
+    income = pd.read_csv(path_data + '30824.csv', sep = ";", encoding="latin1")
+    income = income.loc[(income.Periodo == 2023) & (income['Average income indicators'] == 'Median income by unit of consumption'),["Sections", "Total"]]
     income = income.dropna(subset=["Sections"])
     income["ID"] = income["Sections"].str[:10]
-    income.columns = ['Sections', 'net_income', 'ID']
-    income.net_income = pd.to_numeric(income.net_income, errors= "coerce")
-    income.net_income = income.net_income * 1000
+    income.columns = ['Sections', 'net_income_median', 'ID']
+    income.net_income_median = pd.to_numeric(income.net_income_median, errors= "coerce")
+    income.net_income_median = income.net_income_median * 1000
+
+    income_mean = pd.read_csv(path_data + '30824.csv', sep = ";", encoding="latin1")
+    income_mean = income_mean.loc[(income_mean.Periodo == 2023) & (income_mean['Average income indicators'] == 'Average income by unit of consumption'),["Sections", "Total"]]
+    income_mean = income_mean.dropna(subset=["Sections"])
+    income_mean["ID"] = income_mean["Sections"].str[:10]
+    income_mean.columns = ['Sections', 'net_income_mean', 'ID']
+    income_mean.net_income_mean = pd.to_numeric(income_mean.net_income_mean, errors= "coerce")
+    income_mean.net_income_mean = income_mean.net_income_mean * 1000
+
 
     income_ineq = pd.read_csv(path_data + '30901.csv', sep = ";", encoding="latin1")
     income_low = income_ineq.loc[(income_ineq.Periodo == 2023) & (income_ineq['Distribución de la renta por unidad de consumo'] == 'Población con ingresos por unidad de consumo por debajo 60% de la mediana'),["Secciones", "Total"]]
@@ -126,13 +135,15 @@ def import_income(gdf, path_data):
 
 
     #Merge with gdf
-    gdf = gdf.merge(income.loc[:,['net_income', 'ID']], on = "ID", how = "left")
+    gdf = gdf.merge(income.loc[:,['net_income_median', 'ID']], on = "ID", how = "left")
+    gdf = gdf.merge(income_mean.loc[:,['net_income_mean', 'ID']], on = "ID", how = "left")
     gdf = gdf.merge(income_low.loc[:,['share_low_income', 'ID']], on = "ID", how = "left")
     gdf = gdf.merge(income_high.loc[:,['share_high_income', 'ID']], on = "ID", how = "left")
 
-    gdf["net_income"] = (gdf["net_income"] / gdf["active_per_hh"]) / 12
+    gdf["net_income_median"] = (gdf["net_income_median"]) / 12 #/ gdf["active_per_hh"]
+    gdf["net_income_mean"] = (gdf["net_income_mean"]) / 12 #/ gdf["active_per_hh"]
     #Compute average income
-    Y = (np.nansum(gdf.net_income * gdf["pop"]) / np.nansum(gdf["pop"]))
+    #Y = (np.nansum(gdf.net_income * gdf["pop"]) / np.nansum(gdf["pop"]))
     def weighted_median(values, weights):
         mask = ~pd.isna(values) & ~pd.isna(weights)
         values = np.asarray(values[mask])
@@ -149,12 +160,12 @@ def import_income(gdf, path_data):
 
         # Weighted median
         return values_sorted[np.searchsorted(cum_weights, cutoff)]
-    Y_median = weighted_median(gdf["net_income"], gdf["pop"])
+    Y_median = weighted_median(gdf["net_income_median"], gdf["pop"])
 
     gdf["pop_LOW"] = gdf["pop"] * gdf["share_low_income"] / 100
     gdf["pop_HIGH"] = gdf["pop"] * gdf["share_high_income"] / 100
     gdf["pop_MED"] = gdf["pop"] - gdf["pop_HIGH"] - gdf["pop_LOW"]
-    return Y, Y_median, gdf
+    return Y_median, gdf
 
 def import_land_use(gdf, path_data):
     """ Import data on land use - pretreated in import_land_use """

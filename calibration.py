@@ -26,7 +26,10 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
         estimated_A[lvl] = np.clip(U[lvl] / (factor * (wage_minus_tc[lvl] / gdf["rent_m2"])), 1e-12, None)
 
     gdf["log_A"] = np.log(sum(w[lvl] * estimated_A[lvl] for lvl in income_levels))
-
+    #A_bar = sum(w[lvl] * estimated_A[lvl] for lvl in income_levels)
+    #A_bar = np.maximum(A_bar, 1e-12)
+    #gdf["log_A"] = np.log(A_bar)
+    
     # --- 3. Estimate amenities regression ---
     gdf_here = gdf.loc[~np.isnan(gdf["log_A"]) & ~np.isinf(gdf["log_A"]), :]
     y = gdf_here["log_A"]
@@ -62,7 +65,9 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
     exp_R = {lvl: np.exp(alpha * (R_n[lvl] - R_max)) for lvl in income_levels}
     denom = sum(exp_R.values())
     w_est = {lvl: exp_R[lvl] / denom for lvl in income_levels}
+    #w_est = {lvl: np.clip(w_est[lvl], 1e-12, 1) for lvl in income_levels}
     
+
     log_sorting = sum(np.nansum(np.log(w_est[lvl]) * gdf[f"pop_{lvl}"]) for lvl in income_levels)
 
     # --- 5. Compute city sizes ---
@@ -88,7 +93,7 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
     
     else:
         # Final log-likelihood (maximize sum of log-likelihoods and sorting)
-        return - (log_L_A + log_sorting + log_L_size)
+        return - (log_L_A + log_L_size + log_sorting) #log_sorting
 
 def compute_cost_car(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, path_data):
     """ Calibrate the fixed cost of private car to match the transport modes data """
@@ -175,7 +180,7 @@ def compute_cost_car_logit(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, 
 #    ARRAY_WAGE = solving_transport.x[2:]
 #    return gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE
 
-def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario):
+def compute_cost_car_poly_i(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, MEDIAN_WAGE_SPAIN, scenario):
     """ Calibrate the fixed cost of private car to match the transport modes data """
 
     trans_mode = import_trans_mode(path_data)
@@ -199,7 +204,7 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
         print(f"error_mode_by_tract = {error_mode_by_tract}")
 
         gdf_valid = gdf_here.dropna(subset=["share_car"])
-        error_mode_AMB = np.abs(np.nansum(np.sum((1 - gdf_valid[f"transport_mode_{lvl}"]) * gdf_valid[f"pop_{lvl}"] for lvl in income_levels) - gdf_valid["share_car"] * gdf_valid["pop"]))
+        error_mode_AMB = np.abs(np.nansum(np.sum((1 - gdf_valid[f"transport_mode_{lvl}"]) * gdf_valid[f"pop_{lvl}"] for lvl in income_levels)) - np.nansum(gdf_valid["share_car"] * gdf_valid["pop"]))
         print(f"error_mode_AMB = {error_mode_AMB}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
         
         employed_results = employed_results.merge(employment_centers, left_index = True, right_on = "cluster")
@@ -210,18 +215,19 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
         for lvl in income_levels:
             estimated_wage = np.nansum(gdf_here[f"pop_{lvl}"] * gdf_here[f"wage_{lvl}"]) / np.nansum(gdf_here[f"pop_{lvl}"])
             print(f"estimated_wage_{lvl}", estimated_wage)
-            error_wage += np.abs(Y_median * wage_factors[lvl] - estimated_wage) * np.nansum(gdf_here[f"pop_{lvl}"])
+            error_wage += np.abs(MEDIAN_WAGE_SPAIN * wage_factors[lvl] - estimated_wage) * np.nansum(gdf_here[f"pop_{lvl}"])
         error_wage /= np.nansum([gdf_here[f"pop_{lvl}"] for lvl in income_levels])
         print(f"error_wage = {error_wage}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
         
         estimated_wage_spatial = sum(gdf_here[f"pop_{lvl}"] * gdf_here[f"wage_{lvl}"] for lvl in income_levels) / \
                                  sum([gdf_here[f"pop_{lvl}"] for lvl in income_levels])
-        error_spatial_wage = np.nansum(gdf["pop"] * np.abs(estimated_wage_spatial - gdf["net_income"])) / np.nansum(gdf["pop"])
+        error_spatial_wage = np.nansum(gdf["pop"] * np.abs(estimated_wage_spatial - gdf["net_income_median"])) / np.nansum(gdf["pop"])
         print(f"error_spatial_wage = {error_spatial_wage}")
         
-        return (error_mode_by_tract + error_mode_AMB + error_employment + error_wage + error_spatial_wage)
+        return (error_mode_by_tract + error_mode_AMB + error_employment + error_wage + error_spatial_wage) #+ error_wage
 
-    init_wage = np.array([3126, 2905, 3040, 2976, 2903, 2979, 2869, 3005])
+    #init_wage = np.array([3126, 2905, 3040, 2976, 2903, 2979, 2869, 3005])
+    init_wage = np.array([1900, 1900, 1900, 1900, 1900, 1900, 1900, 1900])
     x0 = [200, 250] + (init_wage * 0.6).tolist() + (init_wage).tolist() + (init_wage * 1.4).tolist()
     bounds = [(0, 300), (0, 400)] + [(0, 10000)] * 3 * len(np.unique(employment_centers.cluster))
     solving_transport = scipy.optimize.minimize(compute_error_transport_poly, x0=x0, method='L-BFGS-B', bounds=bounds)

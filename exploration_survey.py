@@ -16,7 +16,7 @@ import warnings
 import pickle
 from stargazer.stargazer import Stargazer
 
-from functions import *
+#from functions import *
 from import_data import * # type: ignore
 from calibration import * # type: ignore
 from model import * # type: ignore
@@ -24,7 +24,7 @@ from plotting_tools import * # type: ignore
 from import_transport import *
 from policy_support import *
 
-path_data = "../../data_barcelona/"
+path_data = "../data_barcelona/"
 
 #gdf = gpd.read_file(path_data + "experienced_impact.geojson")
 
@@ -47,6 +47,10 @@ plot_with_missing(gdf, gdf["avg_acceptability"])
 
 # CREATE DATASET FOR THE REGRESSIONS
 df_reg = gpd.sjoin(df, gdf, predicate="within")
+
+#add income
+income_var = pd.read_excel(path_data + "MOBCLIMA_amb_renda_codipaisINE.xlsx")
+df_reg = df_reg.merge(income_var.loc[:,["NUME", "categoria_quintils", "ingressos_estimats"]], on = "NUME")
 
 # 0- ACCEPTABILITY
 df_reg.rename(columns={'P15': 'acceptability_new'}, inplace=True)
@@ -602,7 +606,9 @@ plt.hist(df_reg.income_loss_relative)
 
 #v0 - Without impacts
 
-X_raw = df_reg[["climate_change", "congestion", "quality_of_life", "political_ideology", "institutional_trust", "knowledge", "peer_effect", "ecoanxiety", "ecological_paradigm", "age", "man", "education", "children3"]]
+df_reg = df_reg.loc[~np.isnan(df_reg.ingressos_estimats),:]
+
+X_raw = df_reg[["climate_change", "congestion", "quality_of_life", "political_ideology", "institutional_trust", "knowledge", "peer_effect", "ecoanxiety", "ecological_paradigm", "age", "man", "education", "children3", "ingressos_estimats"]]
 y_raw = df_reg["acceptability"].values.reshape(-1, 1)
 
 scaler_X = MinMaxScaler()
@@ -625,7 +631,7 @@ print(model_statsmodel.summary())
 
 #v1 - With perceived impacts
 
-X_raw = df_reg[["declared_impacts", "climate_change", "congestion", "quality_of_life", "political_ideology", "institutional_trust", "knowledge", "ecoanxiety", "ecological_paradigm", "age", "man", "education", "children"]]
+X_raw = df_reg[["declared_impacts", "climate_change", "congestion", "quality_of_life", "political_ideology", "institutional_trust", "knowledge", "ecoanxiety", "ecological_paradigm", "age", "man", "education", "children", "ingressos_estimats"]]
 #X_raw = df_reg[["declared_impacts"]]
 #X_raw = df_reg[["declared_impacts", "climate_change", "congestion", "quality_of_life"]]
 #X_raw = df_reg[["declared_impacts", "climate_change", "congestion", "quality_of_life", "institutional_trust", "ecoanxiety"]]

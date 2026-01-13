@@ -202,7 +202,7 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
         pop_MED_model = np.nansum(w_MED * n)
         pop_HIGH_model = np.nansum(w_HIGH * n)
 
-    #print(f"u={u}, LOW={pop_LOW_model:.2f}, MED={pop_MED_model:.2f}, HIGH={pop_HIGH_model:.2f}")
+    print(f"u={u}, LOW={pop_LOW_model:.2f}, MED={pop_MED_model:.2f}, HIGH={pop_HIGH_model:.2f}")
 
     # --- Squared errors ---
     error_population_LOW = (N[0] - pop_LOW_model) ** 2

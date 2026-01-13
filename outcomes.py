@@ -43,8 +43,10 @@ def compute_change_in_welfare(utility_without_tax, utility_with_tax):
     
     relative_change_utility = np.empty(len(utility_with_tax))
     relative_change_utility[utility_without_tax > 0] = 100 * ((utility_with_tax[utility_without_tax > 0] - utility_without_tax[utility_without_tax > 0]) / utility_without_tax[utility_without_tax > 0])
-    relative_change_utility[((utility_without_tax == 0) & (utility_with_tax > 0))] = 1
-    relative_change_utility[((utility_without_tax == 0) & (utility_with_tax == 0))] = 0
+    relative_change_utility[((utility_without_tax == 0) & (utility_with_tax > 0))] = np.nan #1
+    relative_change_utility[((utility_without_tax == 0) & (utility_with_tax == 0))] = np.nan
+    relative_change_utility[((utility_without_tax > 0) & (utility_with_tax == 0))] = np.nan
+
 
     #print("relative_change_utility", 100 * relative_change_utility, "%")
     return relative_change_utility

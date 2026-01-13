@@ -22,7 +22,9 @@ def import_opinion_parameters(path_data, scenario):
         return values[cum_weights >= 0.5][0]
 
     df_reg, meta = pyreadstat.read_sav(path_data + '040023 En moviment pel clima 2025_V01 - còpia.sav')
-    
+    income_var = pd.read_excel(path_data + "MOBCLIMA_amb_renda_codipaisINE.xlsx")
+    df_reg = df_reg.merge(income_var.loc[:,["NUME", "categoria_quintils", "ingressos_estimats"]], on = "NUME")
+
     df_reg = gpd.GeoDataFrame(df_reg, geometry = gpd.points_from_xy(df_reg.GEO_X, df_reg.GEO_Y), crs="EPSG:4326")
     gdf = gpd.read_file(path_data + "income_loss.geojson")
     df_reg = df_reg.to_crs(gdf.crs)
@@ -50,7 +52,38 @@ def import_opinion_parameters(path_data, scenario):
     df_reg.rename(columns={'P21_1': 'congestion'}, inplace=True)
     df_reg = df_reg.loc[~np.isnan(df_reg.congestion) & (df_reg.congestion < 80)]
 
-    X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life"]]
+    df_reg = df_reg.loc[~np.isnan(df_reg.ingressos_estimats)]
+    df_reg["log_income"] = np.log(df_reg.ingressos_estimats)
+
+    df_reg["log_absolute_loss_ingressos_estimats"] = df_reg["log_absolute_loss"] * df_reg["ingressos_estimats"]
+    df_reg["log_absolute_loss_log_income"] = df_reg["log_absolute_loss"] * df_reg["log_income"]
+
+    df_reg["Q1"] = (df_reg.categoria_quintils == "Q1")
+    df_reg["Q2"] = (df_reg.categoria_quintils == "Q2")
+    df_reg["Q3"] = (df_reg.categoria_quintils == "Q3")
+    df_reg["Q4"] = (df_reg.categoria_quintils == "Q4")
+    df_reg["log_absolute_loss_Q1"] = df_reg["log_absolute_loss"] * df_reg["Q1"]
+
+    df_reg["log_absolute_loss_Q2"] = df_reg["log_absolute_loss"] * df_reg["Q2"]
+
+    df_reg["log_absolute_loss_Q3"] = df_reg["log_absolute_loss"] * df_reg["Q3"]
+
+    df_reg["LOW"] = (df_reg.ingressos_estimats  < 11550)
+    df_reg["HIGH"] = (df_reg.ingressos_estimats > 26950)
+
+    df_reg["log_absolute_loss_LOW"] = df_reg["log_absolute_loss"] * df_reg["LOW"]
+    df_reg["log_absolute_loss_HIGH"] = df_reg["log_absolute_loss"] * df_reg["HIGH"]
+
+    df_reg["climate_change_LOW"] = df_reg["climate_change"] * df_reg["LOW"]
+    df_reg["climate_change_HIGH"] = df_reg["climate_change"] * df_reg["HIGH"]
+
+    df_reg["quality_of_life_LOW"] = df_reg["quality_of_life"] * df_reg["LOW"]
+    df_reg["quality_of_life_HIGH"] = df_reg["quality_of_life"] * df_reg["HIGH"]
+
+    #X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life"]]
+    #X_raw = df_reg[["climate_change", "quality_of_life", "log_absolute_loss", "log_income"]]
+    X_raw = df_reg[["climate_change", "quality_of_life", "log_absolute_loss", "LOW", "HIGH", "log_absolute_loss_LOW", "log_absolute_loss_HIGH", "climate_change_LOW", "climate_change_HIGH", "quality_of_life_LOW", "quality_of_life_HIGH"]]
+    
         
     y_raw = df_reg["acceptability"].values.reshape(-1, 1)
 
@@ -100,6 +133,10 @@ def import_price_parameters(path_data, scenario):
     df_reg = df_reg.to_crs(gdf.crs)
     df_reg = gpd.sjoin(df_reg, gdf, predicate="within")
 
+    income_var = pd.read_excel(path_data + "MOBCLIMA_amb_renda_codipaisINE.xlsx")
+    df_reg = df_reg.merge(income_var.loc[:,["NUME", "categoria_quintils", "ingressos_estimats"]], on = "NUME")
+
+
     if scenario == "tax_question_P17":
         df_reg.rename(columns={'P17': 'acceptable_price'}, inplace=True)
     else:
@@ -127,11 +164,50 @@ def import_price_parameters(path_data, scenario):
     df_reg.rename(columns={'P24': 'knowledge'}, inplace=True)
     df_reg = df_reg.loc[~np.isnan(df_reg.knowledge) & (df_reg.knowledge < 80)]
 
+    df_reg = df_reg.loc[~np.isnan(df_reg.ingressos_estimats)]
+    df_reg["log_income"] = np.log(df_reg.ingressos_estimats)
+
+    df_reg["log_absolute_loss_ingressos_estimats"] = df_reg["log_absolute_loss"] * df_reg["ingressos_estimats"]
+    df_reg["log_absolute_loss_log_income"] = df_reg["log_absolute_loss"] * df_reg["log_income"]
+
+    df_reg["Q1"] = (df_reg.categoria_quintils == "Q1")
+    df_reg["Q2"] = (df_reg.categoria_quintils == "Q2")
+    df_reg["Q3"] = (df_reg.categoria_quintils == "Q3")
+    df_reg["Q4"] = (df_reg.categoria_quintils == "Q4")
+    df_reg["log_absolute_loss_Q1"] = df_reg["log_absolute_loss"] * df_reg["Q1"]
+
+    df_reg["log_absolute_loss_Q2"] = df_reg["log_absolute_loss"] * df_reg["Q2"]
+
+    df_reg["log_absolute_loss_Q3"] = df_reg["log_absolute_loss"] * df_reg["Q3"]
+    df_reg["log_absolute_loss_Q4"] = df_reg["log_absolute_loss"] * df_reg["Q4"]
+
+    df_reg["log_absolute_loss_ingressos_estimats"] = df_reg["log_absolute_loss"] * df_reg["ingressos_estimats"]
+    df_reg["climate_change_ingressos_estimats"] = df_reg["ingressos_estimats"] * df_reg["climate_change"]
+    df_reg["quality_of_life_ingressos_estimats"] = df_reg["ingressos_estimats"] * df_reg["quality_of_life"]
+
+    df_reg["LOW"] = (df_reg.ingressos_estimats  < 11550)
+    df_reg["HIGH"] = (df_reg.ingressos_estimats > 26950)
+
+    df_reg["log_absolute_loss_LOW"] = df_reg["log_absolute_loss"] * df_reg["LOW"]
+    df_reg["log_absolute_loss_HIGH"] = df_reg["log_absolute_loss"] * df_reg["HIGH"]
+
+    df_reg["climate_change_LOW"] = df_reg["climate_change"] * df_reg["LOW"]
+    df_reg["climate_change_HIGH"] = df_reg["climate_change"] * df_reg["HIGH"]
+
+    df_reg["quality_of_life_LOW"] = df_reg["quality_of_life"] * df_reg["LOW"]
+    df_reg["quality_of_life_HIGH"] = df_reg["quality_of_life"] * df_reg["HIGH"]
+
+
+
     if scenario == "increasing_knowledge":
         X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life", "knowledge"]]
     else:
         X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life"]]
     
+    X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life"]]
+    
+    X_raw = df_reg[["climate_change", "quality_of_life", "log_absolute_loss", "LOW", "HIGH"]]
+    #, "climate_change_LOW", "climate_change_HIGH", "quality_of_life_LOW", "quality_of_life_HIGH", "log_absolute_loss_LOW", "log_absolute_loss_HIGH"
     y_raw = (df_reg["acceptable_price"].values.reshape(-1, 1))
 
     
