@@ -7,7 +7,7 @@ from shapely.geometry import shape, LineString, MultiLineString # type: ignore
 import os 
 import matplotlib.pyplot as plt
 import warnings
-
+from pyproj import Transformer
 from import_data import * # type: ignore
 
 def import_data(path_data, center, option):
@@ -66,6 +66,10 @@ def import_data(path_data, center, option):
         gdf = gdf.loc[:,["nom_districte", "geometry", "area", "Població", "distance_center"]]
 
     gdf.columns = ["ID", "geometry", "area", "pop", "distance_center", "NMUN"]
+    lon, lat = 2.170047, 41.387016 #placa catalunya
+    transformer = Transformer.from_crs("EPSG:4326", "EPSG:25830", always_xy=True)
+    CBD = Point(transformer.transform(lon, lat))
+    gdf["distance_center"] = gdf.centroid.distance(CBD)
     gdf["area"] = gdf["area"] / 1000000
     gdf["density"] = gdf["pop"] / gdf["area"]
     gdf.ID = gdf.ID.astype(str)
@@ -497,7 +501,7 @@ def import_parcs(gdf, path_data):
 
     return gdf.loc[:,["ID", 'min_distance_parc_combined', "parc_500m", "parc_500m_1km", "parc_1km_2km", "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b"]]
 
-def import_stations(gdf, option = "sants_only"):
+def import_stations(gdf, option = ""):
     """ Import the locations of the main train stations of Barcelona """
     
     stations = [
@@ -519,12 +523,12 @@ def import_stations(gdf, option = "sants_only"):
 
     stations = stations.to_crs(gdf.crs)
 
-    if option == "sants_only":
-        station_geom = stations.geometry.iloc[0]
-    else:
-        station_geom = stations.geometry
+    #if option == "sants_only":
+    #    station_geom = stations.geometry.iloc[0]
+    #else:
+    station_geom = stations.geometry
 
-    gdf['min_distance_stations'] = gdf.centroid.distance(station_geom)
+    gdf["min_distance_stations"] = gdf.geometry.apply(lambda geom: stations.distance(geom).min())
 
     gdf["station_500m"] = (gdf['min_distance_stations'] < 500) * 1
     gdf["station_500m_1km"] = ((gdf['min_distance_stations'] < 1000) & (gdf['min_distance_stations'] > 500)) * 1
@@ -564,7 +568,7 @@ def import_touristic_areas(gdf, path_data):
     gdf["high_tourism"] = (gdf['index_tourism'] > 50) * 1
     gdf["medium_tourism"] = ((gdf['index_tourism'] < 50) & (gdf['index_tourism'] > 30)) * 1
 
-    return gdf.loc[:,["ID", "high_tourism", "medium_tourism"]]
+    return gdf.loc[:,["ID", "high_tourism", "medium_tourism", "index_tourism"]]
 
 def import_activity(gdf, path_data):
     """ Import data about activity from Barcelona """
@@ -705,7 +709,7 @@ def import_amenities(gdf, path_data, option_load, option_save):
 
         data_amenity = import_beach(gdf, path_data)
         data_amenity = data_amenity.merge(import_parcs(gdf, path_data), on = "ID", how = "left")
-        data_amenity = data_amenity.merge(import_stations(gdf, option = "sants_only"), on = "ID", how = "left")
+        data_amenity = data_amenity.merge(import_stations(gdf), on = "ID", how = "left")
         data_amenity = data_amenity.merge(import_airport(gdf), on = "ID", how = "left")
         data_amenity = data_amenity.merge(import_touristic_areas(gdf, path_data), on = "ID", how = "left")
         data_amenity = data_amenity.merge(import_activity(gdf, path_data), on = "ID", how = "left")
@@ -721,10 +725,17 @@ def import_amenities(gdf, path_data, option_load, option_save):
     elif option_load == 0:
 
         data_amenity = pd.read_excel(path_data + "data_amenity.xlsx", index_col = 0)
+        data_amenity = data_amenity.drop(columns = ["station_500m", "station_500m_1km", "station_1km_2km", "high_tourism", "medium_tourism"])
         data_amenity['ID'] = '0' + data_amenity['ID'].astype(str)
+        data_amenity = data_amenity.merge(import_stations(gdf), on = "ID", how = "left")
+
+        data_amenity = data_amenity.merge(import_touristic_areas(gdf, path_data), on = "ID", how = "left")
+
+
+
 
     gdf["ID"] = gdf["ID"].astype(str)
-    return gdf.merge(data_amenity, on = "ID", how = "left")
+    return gdf.drop(columns = ["station_500m", "station_500m_1km", "station_1km_2km", "high_tourism", "medium_tourism", "index_tourism"]).merge(data_amenity, on = "ID", how = "left")
 
 def import_rent_idealista(gdf, path_data):
     rent_idea = gpd.read_file(path_data + "barcelona_rent_idealista.gpkg", layer="points")

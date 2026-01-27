@@ -1,17 +1,14 @@
 import numpy as np # type: ignore
-import matplotlib.pyplot as plt # type: ignore
-from numba import njit, prange # type: ignore
+import pandas as pd
+from openpyxl import load_workbook
+import os
 
-def compute_utility_manually(Y, T, q, R, BETA, OPTION_HEALTH = 0, N = 0, vkm = 0, marginal_cost_pollution = 0):
+def compute_utility_manually(Y_net, R, q, BETA, amenities):
     """ Compute agents' utility """
     
-    if OPTION_HEALTH == 0:
-        composite_good = Y - T - q * R
-        composite_good[composite_good < 0] = 0
-        u = (composite_good) ** (1 - BETA) * q ** BETA
-    elif OPTION_HEALTH == 1:
-        health = vkm * marginal_cost_pollution / N
-        u = (Y - T - q * R - health) ** (1 - BETA) * q ** BETA
+    composite_good = Y_net - q * R
+    composite_good[composite_good < 0] = 0
+    u = (composite_good) ** (1 - BETA) * q ** BETA * amenities
     return u
 
 def gini(array):
@@ -42,14 +39,76 @@ def compute_change_in_welfare(utility_without_tax, utility_with_tax):
     """ Compute the impact of the change in utility on welfare"""
     
     relative_change_utility = np.empty(len(utility_with_tax))
-    relative_change_utility[utility_without_tax > 0] = 100 * ((utility_with_tax[utility_without_tax > 0] - utility_without_tax[utility_without_tax > 0]) / utility_without_tax[utility_without_tax > 0])
-    relative_change_utility[((utility_without_tax == 0) & (utility_with_tax > 0))] = np.nan #1
-    relative_change_utility[((utility_without_tax == 0) & (utility_with_tax == 0))] = np.nan
-    relative_change_utility[((utility_without_tax > 0) & (utility_with_tax == 0))] = np.nan
+    relative_change_utility = 100 * ((utility_with_tax - utility_without_tax) / utility_without_tax)
+    #relative_change_utility[((utility_without_tax == 0) & (utility_with_tax > 0))] = np.nan #1
+    #relative_change_utility[((utility_without_tax == 0) & (utility_with_tax == 0))] = np.nan
+    #relative_change_utility[((utility_without_tax > 0) & (utility_with_tax == 0))] = np.nan
 
 
     #print("relative_change_utility", 100 * relative_change_utility, "%")
     return relative_change_utility
+
+def relative_change_outputs(save_emissions, qol_in_zone, qol_out_zone, save_utility, compute_relative_change, compute_change_in_welfare, MAX_YEAR):
+    
+    emission_change = np.empty(MAX_YEAR)
+    change_qol_in_zone = np.empty(MAX_YEAR)
+    change_qol_out_zone = np.empty(MAX_YEAR)
+    utility_change_low = np.empty(MAX_YEAR)
+    utility_change_med = np.empty(MAX_YEAR)
+    utility_change_high = np.empty(MAX_YEAR)
+
+    for i in range(MAX_YEAR):
+        emission_change[i] = np.nanmedian(compute_relative_change(save_emissions[0], save_emissions[i]))
+        change_qol_in_zone[i] = np.nanmean(compute_relative_change(qol_in_zone[0], qol_in_zone[i]))
+        change_qol_out_zone[i] = np.nanmean(compute_relative_change(qol_out_zone[0], qol_out_zone[i]))
+        utility_change_low[i] = np.nanmedian(compute_change_in_welfare(save_utility["LOW"][:, 0], save_utility["LOW"][:, i]))
+        utility_change_med[i] = np.nanmedian(compute_change_in_welfare(save_utility["MED"][:, 0], save_utility["MED"][:, i]))
+        utility_change_high[i] = np.nanmedian(compute_change_in_welfare(save_utility["HIGH"][:, 0], save_utility["HIGH"][:, i]))
+
+    return emission_change, change_qol_in_zone, change_qol_out_zone, utility_change_low, utility_change_med, utility_change_high
+
+def append_scenario_to_excel(filename, scenario_name,
+                             tax_level, emission_change,
+                             change_qol_in_zone, change_qol_out_zone,
+                             utility_change_low, utility_change_med, utility_change_high):
+
+    # Put variables into a dict
+    data = {
+        "tax_level": tax_level,
+        "emission_change": emission_change,
+        "change_qol_in_zone": change_qol_in_zone,
+        "change_qol_out_zone": change_qol_out_zone,
+        "utility_change_low": utility_change_low,
+        "utility_change_med": utility_change_med,
+        "utility_change_high": utility_change_high,
+    }
+
+    # Convert to DataFrame (7 rows, 20 columns)
+    df = pd.DataFrame(data).T
+    df.columns = [f"t{t}" for t in range(1, len(tax_level)+1)]
+    df.insert(0, "scenario", scenario_name)
+
+    # Append blank row after each scenario
+    df_blank = pd.DataFrame([[""] + [""]*len(tax_level)], columns=df.columns)
+
+    # Write or append
+    if not os.path.exists(filename):
+        # First write
+        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
+            df.to_excel(writer, index=True)
+            df_blank.to_excel(writer, index=False, header=False, startrow=len(df)+1)
+    else:
+        # Append
+        wb = load_workbook(filename)
+        ws = wb.active
+        startrow = ws.max_row + 1
+
+        with pd.ExcelWriter(filename, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+            df.to_excel(writer, index=True, header=False, startrow=startrow)
+            df_blank.to_excel(writer, index=False, header=False, startrow=startrow + len(df))
+
+    print(f"Scenario '{scenario_name}' appended to {filename}.")
+
 
 def compute_score(relative_change, param):
     return (1 / (1 + np.exp(param * relative_change)))

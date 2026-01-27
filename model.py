@@ -51,7 +51,7 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
     
     if scenario == "exemption_trips_inside_zone":
         travel_time_car["zone_tax"] = 1 * ((travel_time_car.from_id.isin(houses_in_toll_area) & (~travel_time_car.to_id.isin(jobs_in_toll_area))) | ((~travel_time_car.from_id.isin(houses_in_toll_area)) & travel_time_car.to_id.isin(jobs_in_toll_area)))
-    elif scenario == "discount_residents":
+    elif scenario == "exemption_residents":
         travel_time_car["zone_tax"] = 1 * ((~travel_time_car.from_id.isin(houses_in_toll_area)) & travel_time_car.to_id.isin(jobs_in_toll_area))
     else:
         travel_time_car["zone_tax"] = 1 * (travel_time_car.from_id.isin(houses_in_toll_area) | travel_time_car.to_id.isin(jobs_in_toll_area))
@@ -59,7 +59,7 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
     # Compute car and transit costs
     for level in income_levels:
         factor = wage_factors[level]
-        if ((level == "LOW") & (scenario == "discount_low_income")):
+        if ((level == "LOW") & (scenario == "exemption_low_income")):
             travel_time_car.loc[:,f"COST_CAR_{level}"] = (
             (travel_time_car["travel_time"] / 60) * PRICE_TIME * factor * WORKING_DAYS
             + (travel_time_car["distance_car"] / 1000) * PRICE_FUEL * WORKING_DAYS
@@ -92,7 +92,7 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
             travel_matrix[f"transport_mode_{level}"] * travel_matrix[f"COST_PT_{level}"]
             + (1 - travel_matrix[f"transport_mode_{level}"]) * travel_matrix[f"COST_CAR_{level}"]
         )
-
+    
     wages = {
         "LOW": pd.DataFrame(ARRAY_WAGE_LOW, index=np.sort(np.unique(travel_matrix.to_id)), columns=["income_LOW"]),
         "MED": pd.DataFrame(ARRAY_WAGE_MED, index=np.sort(np.unique(travel_matrix.to_id)), columns=["income_MED"]),
@@ -184,9 +184,9 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
     #avg_t_cost = w_LOW * transport_cost_LOW + w_MED * transport_cost_MED + w_HIGH * transport_cost_HIGH
 
     # --- Compute dwelling size and population ---
-    q_LOW = compute_dwelling_size(BETA, Y_LOW, transport_cost_LOW, R)
-    q_MED = compute_dwelling_size(BETA, Y_MED, transport_cost_MED, R)
-    q_HIGH = compute_dwelling_size(BETA, Y_HIGH, transport_cost_HIGH, R)
+    q_LOW = compute_dwelling_size(BETA, Y_LOW, transport_cost_LOW, R_LOW)
+    q_MED = compute_dwelling_size(BETA, Y_MED, transport_cost_MED, R_MED)
+    q_HIGH = compute_dwelling_size(BETA, Y_HIGH, transport_cost_HIGH, R_HIGH)
     
     n = compute_population(B, KAPPA, SIGMA, R, RHO, L, w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, option_function=option_function)
     
@@ -202,7 +202,7 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
         pop_MED_model = np.nansum(w_MED * n)
         pop_HIGH_model = np.nansum(w_HIGH * n)
 
-    print(f"u={u}, LOW={pop_LOW_model:.2f}, MED={pop_MED_model:.2f}, HIGH={pop_HIGH_model:.2f}")
+    #print(f"u={u}, LOW={pop_LOW_model:.2f}, MED={pop_MED_model:.2f}, HIGH={pop_HIGH_model:.2f}")
 
     # --- Squared errors ---
     error_population_LOW = (N[0] - pop_LOW_model) ** 2
@@ -301,7 +301,7 @@ def compute_outcomes(utility, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, alpha, 
     
     # --- Compute dwelling sizes ---
     q_group = {
-        lvl: compute_dwelling_size(BETA, gdf[f"wage_{lvl}"], gdf[f"transport_cost_{lvl}"], R)
+        lvl: compute_dwelling_size(BETA, gdf[f"wage_{lvl}"], gdf[f"transport_cost_{lvl}"], R_group[lvl])
         for lvl in income_levels
         }
 

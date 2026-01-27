@@ -1,4 +1,5 @@
 import numpy as np # type: ignore
+import matplotlib as mpl
 import matplotlib.pyplot as plt # type: ignore
 import matplotlib.colors as mcolors
 from matplotlib.ticker import FuncFormatter
@@ -11,11 +12,75 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import BoundaryNorm
 from matplotlib.colors import TwoSlopeNorm
+import matplotlib.lines as mlines
+
 
 from matplotlib.colors import TwoSlopeNorm
 
+def plot_spatial_price(gdf, values):
+    # --- prepare values ---
+    gdf_proj = gdf.to_crs(epsg=32632).copy()   # keep projection if needed
+    gdf_proj["value"] = values
+
+    # Dissolve by municipality to get one polygon per municipality
+    muni_gdf = gdf_proj.dissolve(by='NMUN', as_index=False)
+    muni_gdf['centroid'] = muni_gdf.geometry.centroid
+    muni_gdf['x'] = muni_gdf.centroid.x
+    muni_gdf['y'] = muni_gdf.centroid.y
+
+    # plotting
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
+
+    cmap_name = "RdYlGn"
+    vmin, vmax = gdf_proj["value"].min(), gdf_proj["value"].max()
+
+    missing = gdf_proj[gdf_proj["value"].isna()]
+    present = gdf_proj[gdf_proj["value"].notna()]
+
+    # First: plot missing polygons in grey
+    missing.plot(color="lightgrey", edgecolor="white",
+             linewidth=0.2, ax=ax, label="Missing data")
+    present.plot(column="value",
+                  cmap=cmap_name,
+                  vmin=vmin, vmax=vmax,
+                  linewidth=0, edgecolor="grey",
+                  ax=ax)
+
+    ax.set_axis_off()
+
+    # improve rendering
+    for coll in ax.collections:
+        coll.set_antialiased(False)
+        coll.set_alpha(0.7)
+
+    for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(["Badalona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]),:].iterrows():
+        ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold', ha='center', va='center', color='black')
+    
+    
+    city_border = muni_gdf[muni_gdf.ID.str[:5].isin(["08019", "08101", "08194"])]
+    city_border.boundary.plot(ax=ax, color='black', linewidth=2, label = "Toll area")
+    
+
+    # continuous colorbar (no title)
+    sm = plt.cm.ScalarMappable(cmap=cmap_name, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02)
+    ticks = np.linspace(vmin, vmax, 5)
+    cbar.set_ticks(ticks)
+    cbar.ax.set_yticklabels([f"{t:.1f}" for t in ticks], fontsize=14)  # show 1 decimal + %
+    import matplotlib.patches as mpatches
+
+    missing_patch = mpatches.Patch(facecolor="lightgrey", edgecolor="white", label="Income group not represented")
+    toll_patch = mpatches.Patch(facecolor="none", edgecolor="black", linewidth=2, label="Toll area")
+
+    ax.legend(handles=[missing_patch, toll_patch], loc="lower right")
+
+    # title
+    #ax.set_title("Average opinions (year 20)", fontsize=14)
+
+
 def plot_employment(gdf, employment_centers, var):
-    base = gdf.plot(color='lightgrey', edgecolor='white', figsize=(10, 10))
+    base = gdf.plot(color='lightgrey', edgecolor='white', linewidth=0.3, figsize=(10, 10))
 
     # Overlay: points with size proportional to a column (e.g., 'population')
     employment_centers.plot(
@@ -26,6 +91,20 @@ def plot_employment(gdf, employment_centers, var):
         #markersize= ARRAY_WAGE* 0.5,  # adjust scale_factor
         color='red',
         alpha=0.6)
+    
+    # Annotate each subcenter
+    for idx, row in employment_centers.iterrows():
+        base.annotate(
+            str(row['cluster']+1),
+            xy=(row.geometry.x, row.geometry.y),
+            xytext=(3, 3),  # offset
+            textcoords="offset points",
+            fontsize=16, 
+            color='black',
+            fontweight='bold'
+    )
+    
+    plt.axis("off")
 
     plt.show()
 
@@ -118,7 +197,7 @@ def compare_var(gdf, n):
 
     return agg
 
-def compare_rent_or_size(gdf, var_data, var_simul, weighting):
+def compare_rent_or_size(gdf, var_data, var_simul, weighting, yaxis):
     gdf["simul"] = var_simul
 
     # Bin by distance
@@ -149,20 +228,65 @@ def compare_rent_or_size(gdf, var_data, var_simul, weighting):
     plt.figure(figsize=(8, 8))
 
     # Individual points (optional, can be noisy)
-    #plt.scatter(gdf["distance_center"], gdf[var_data], s=1, alpha=0.3, label="Data", color='red')
-    #plt.scatter(gdf["distance_center"], gdf["simul"], s=1, alpha=0.3, label="Simulation", color='blue')
+    plt.scatter(gdf["distance_center"], gdf[var_data], s=1, alpha=0.3, label="Data", color='red')
+    plt.scatter(gdf["distance_center"], gdf["simul"], s=1, alpha=0.3, label="Simulation", color='blue')
 
     # Aggregated lines
     plt.plot(agg["distance_bin"], agg["data"], color='red', linewidth=2, label="Data")
     plt.plot(agg["distance_bin"], agg["simul"], color='blue', linewidth=2, label="Simulation")
 
     plt.xlabel("Distance to city center (km)")
-    plt.ylabel("Rents per sqm")
+    plt.ylabel(yaxis)
     plt.legend()
     plt.tight_layout()
     plt.show()
 
     return agg
+
+def main_plot(save_tax, emission_change, change_qol_in_zone, change_qol_out_zone, utility_change_low, utility_change_med, utility_change_high):
+    
+    # --- Global formatting for academic figures ---
+    mpl.rcParams['font.size'] = 10
+    mpl.rcParams['axes.labelsize'] = 10
+    mpl.rcParams['xtick.labelsize'] = 9
+    mpl.rcParams['ytick.labelsize'] = 9
+    mpl.rcParams['legend.fontsize'] = 9
+
+    # Colorblind-safe palette (Wong 2011)
+    colors = {
+        "blue":  "#0072B2",
+        "orange":"#E69F00",
+        "green": "#009E73",
+        "red":   "#D55E00",
+        "purple":"#CC79A7",
+        "cyan":  "#56B4E9"
+    }
+
+    fig, axes = plt.subplots(3, 1, figsize=(8, 7), sharex=True, constrained_layout=True)
+    years = range(len(save_tax))
+
+    # --- Panel 1 ---
+    axes[0].plot(years, 2 * save_tax, color="black", linewidth=1.5)
+    axes[0].set_ylabel('Toll per day (€)')
+
+    # --- Panel 2 ---
+    axes[1].plot(years, utility_change_low,  label="Low-income",    color="orange", linewidth=1.5)
+    axes[1].plot(years, utility_change_med,  label="Middle-income", color="orangered",  linewidth=1.5)
+    axes[1].plot(years, utility_change_high, label="High-income",   color="maroon",    linewidth=1.5)
+    axes[1].set_ylabel("Median utility variation (%)")
+    axes[1].legend(frameon=False, loc="upper right", fontsize=9)
+
+    # --- Panel 3 ---
+    axes[2].plot(years, emission_change,        label="Transport emissions", color="green", linewidth=1.5)
+    axes[2].plot(years, change_qol_in_zone,     label="Pollution inside the tax zone",         color="navy",   linewidth=1.5)
+    axes[2].plot(years, change_qol_out_zone,    label="Pollution outside of the tax zone",    color="cyan", linewidth=1.5)
+    axes[2].set_ylabel("Mean variation (%)")
+    axes[2].legend(frameon=False, loc="upper right", fontsize=9)
+    axes[-1].set_xlabel("Year")
+    axes[-1].set_xticks(list(years)[::2])   # every 2 years
+
+    #fig.tight_layout()
+    plt.show()
 
 def compute_weighted_mean_opinions(var, opinion_distance_matrix, N):
     weighted_mean_opinion = np.zeros(opinion_distance_matrix.shape[1])
@@ -328,9 +452,27 @@ def plot_change_population_custom(gdf, save_population,
 
     # --- prepare data ---
     gdf_proj = gdf.to_crs(epsg=32632).copy()
-    gdf_proj["value"] = 100 * (save_population[:, 19] - save_population[:, 0]) / save_population[:, 0]
+    gdf_proj["value"] = np.nan
+    gdf_proj.loc[save_population[:, 0]>0, "value"] = 100 * (save_population[save_population[:, 0]>0, 19] - save_population[save_population[:, 0]>0, 0]) / save_population[save_population[:, 0]>0, 0]
+    
+    print("min", np.nanmin(gdf_proj["value"]))
+    print("max", np.nanmax(gdf_proj["value"]))
 
     # Dissolve by municipality
+    gdf_proj["Year 0"]= save_population[:, 0]
+    gdf_proj["Year 19"]= save_population[:, 19]
+    muni_bar = gdf_proj.loc[:,["NMUN", "Year 0", "Year 19"]].groupby("NMUN").sum()
+    muni_bar = muni_bar.sort_values('Year 0', ascending=False)
+    muni_bar[['Year 0', 'Year 19']].plot(
+        kind='bar',
+        figsize=(10, 6))
+
+    plt.xlabel('')
+    plt.ylabel('Nb of workers')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
     muni_gdf = gdf_proj.dissolve(by='NMUN', as_index=False)
     muni_gdf['centroid'] = muni_gdf.geometry.centroid
     muni_gdf['x'] = muni_gdf.centroid.x
@@ -394,6 +536,51 @@ def plot_change_population_custom(gdf, save_population,
           bbox_to_anchor=(0.8, 0.2),  # (x, y) relative to axes
           fontsize=11)
           
+    plt.tight_layout()
+    plt.show()
+
+def plot_base_map(gdf):
+    
+    gdf_proj = gdf.to_crs(epsg=32632).copy()  
+    # Dissolve by municipality to get one polygon per municipality
+    muni_gdf = gdf_proj.dissolve(by='NMUN', as_index=False)
+    muni_gdf['centroid'] = muni_gdf.geometry.centroid
+    muni_gdf['x'] = muni_gdf.centroid.x
+    muni_gdf['y'] = muni_gdf.centroid.y
+
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    # Census tracts
+    gdf_proj.plot(
+        ax=ax, facecolor="white", edgecolor="grey", linewidth=0.6, label="Census tracts"
+    )
+
+    # Municipal boundaries
+    muni_gdf.boundary.plot(
+        ax=ax, edgecolor="black", linewidth=0.8, label="Municipal boundaries"
+    )
+
+    # Congestion-pricing zone
+    city_border = muni_gdf[muni_gdf.ID.str[:5].isin(["08019", "08101", "08194"])]
+    city_border.dissolve().plot(
+        ax=ax, facecolor="none", edgecolor="red", linewidth=2.2, label="Toll area"
+    )
+
+    # Municipality labels
+    sel = ["Badalona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]
+    for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(["Badalona", "Barcelona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]),:].iterrows(): ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold', ha='center', va='center', color='black')
+
+    # ----- Legend -----
+    # Handles for each layer
+    tracts_handle = mpatches.Patch(facecolor="white", edgecolor="grey", label="Census tracts")
+    muni_handle   = mlines.Line2D([], [], color="black", linewidth=0.8, label="Municipal boundaries")
+    toll_handle   = mlines.Line2D([], [], color="red", linewidth=1.2, label="Toll area")
+
+    ax.legend(handles=[tracts_handle, muni_handle, toll_handle], loc="lower right")
+
+    # Aesthetics
+    ax.set_axis_off()
     plt.tight_layout()
     plt.show()
 
@@ -536,8 +723,8 @@ def print_scatterplots(gdf, n, q, R):
     scatter_calibration(gdf, 1000000 * n / gdf["urb_area"], 1000000 * gdf["pop"] / gdf["urb_area"], "Population density")
 
 def plot_line_charts(gdf, n, q, R):
-    agg = compare_rent_or_size(gdf, "size", q, 1)
-    agg = compare_rent_or_size(gdf, "rent_m2", R, 1)
+    agg = compare_rent_or_size(gdf, "size", q, 1, "Avg dwelling size")
+    agg = compare_rent_or_size(gdf, "rent_m2", R, 1, "Rents per sqm")
     agg = compare_var(gdf, n)
 
     plt.plot(agg["distance_bin"], agg["mean_density_pop"], color='red', linewidth=2, label="Data")
