@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import spearmanr
 
 from import_data import *
+from plotting_tools import *
 
 def import_opinion_parameters(path_data, scenario, expected_welfare_loss):
     
@@ -81,6 +82,8 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss):
     df_reg.loc[df_reg["vehicle_ownership_license"] == 0, "score_welfare_vehicle_ownership_license"] = 0.5
 
     #Export plots
+    plot_mobility_loss("score_welfare_vehicle_ownership_license","acceptability", df_reg)
+     
     def plot_hist_survey(df_reg, var, xlabel):
 
         plt.figure(figsize=(8, 5))
@@ -111,6 +114,7 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss):
     plot_hist_survey(df_reg.loc[~np.isnan(df_reg.P20_1) & (df_reg.P20_1 < 97)], 'P20_1', '')
     plot_hist_survey(df_reg.loc[~np.isnan(df_reg.P20_4) & (df_reg.P20_4 < 97)], 'P20_4', '')
     plot_hist_survey(df_reg.loc[~np.isnan(df_reg.P20_7) & (df_reg.P20_7 < 97)], 'P20_7', '')
+
 
     #regression model
 

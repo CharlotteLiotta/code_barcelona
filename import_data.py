@@ -69,7 +69,7 @@ def import_data(path_data, center, option):
     lon, lat = 2.170047, 41.387016 #placa catalunya
     transformer = Transformer.from_crs("EPSG:4326", "EPSG:25830", always_xy=True)
     CBD = Point(transformer.transform(lon, lat))
-    gdf["distance_center"] = gdf.centroid.distance(CBD)
+    gdf["distance_center"] = gdf.centroid.distance(CBD) / 1000
     gdf["area"] = gdf["area"] / 1000000
     gdf["density"] = gdf["pop"] / gdf["area"]
     gdf.ID = gdf.ID.astype(str)

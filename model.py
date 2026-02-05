@@ -141,7 +141,7 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
 def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
                                 transport_cost_LOW, transport_cost_MED, transport_cost_HIGH,
                                 B, KAPPA, SIGMA, RHO, L, alpha, option_resid,
-                                option_function="CES", resid_rent=0, resid_density=0, resid_size=0):
+                                option_function="CES", resid_rent=0, resid_density=0, resid_size=0, option_given_population = False, given_population = 0):
     """
     Compute smooth squared error between model-estimated and observed populations
     given a trial utility vector u = [u_low, base_rent, u_high].
@@ -188,7 +188,10 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
     q_MED = compute_dwelling_size(BETA, Y_MED, transport_cost_MED, R_MED)
     q_HIGH = compute_dwelling_size(BETA, Y_HIGH, transport_cost_HIGH, R_HIGH)
     
-    n = compute_population(B, KAPPA, SIGMA, R, RHO, L, w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, option_function=option_function)
+    if option_given_population == True:
+        n = given_population
+    else:
+        n = compute_population(B, KAPPA, SIGMA, R, RHO, L, w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, option_function=option_function)
     
     #n = n * np.exp(resid_density)
 
@@ -205,9 +208,9 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
     #print(f"u={u}, LOW={pop_LOW_model:.2f}, MED={pop_MED_model:.2f}, HIGH={pop_HIGH_model:.2f}")
 
     # --- Squared errors ---
-    error_population_LOW = (N[0] - pop_LOW_model) ** 2
-    error_population_MED = (N[1] - pop_MED_model) ** 2
-    error_population_HIGH = (N[2] - pop_HIGH_model) ** 2
+    error_population_LOW = np.abs(N[0] - pop_LOW_model) 
+    error_population_MED = np.abs(N[1] - pop_MED_model) 
+    error_population_HIGH = np.abs(N[2] - pop_HIGH_model) 
 
     return error_population_LOW + error_population_MED + error_population_HIGH
 

@@ -438,6 +438,59 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.colors as mcolors
 
+def plot_mobility_loss(x,y, df_reg):
+    label_x = x
+    label_y = y
+    x = df_reg[x]
+    y = df_reg[y]
+    w = df_reg.PESAIX   # survey weights
+
+    # Define bins
+    bins = np.linspace(x.min(), x.max(), 10)
+    df_reg['bin'] = pd.cut(x, bins)
+
+    # Weighted mean function
+    def weighted_mean(series, weights):
+        return np.average(series, weights=weights)
+
+    # Group by bin and calculate weighted stats
+    grouped = (
+        df_reg.groupby('bin').apply(lambda g: pd.Series({
+            "mean": weighted_mean(g[y.name], g[w.name]),
+            "share": g[w.name].sum() / w.sum() * 100  # % of total respondents
+            })))
+
+    # Drop bins with too few weighted respondents (optional, e.g. <1% share)
+    grouped = grouped[grouped['share'] >= 1]
+
+    # Get bin centers for plotting
+    bin_centers = [interval.mid for interval in grouped.index]
+
+        # --- Plot ---
+    fig, ax1 = plt.subplots()
+
+    # Line plot: weighted mean acceptable toll
+    ax1.plot(bin_centers, grouped['mean'], marker='o', color='blue')
+    ax1.set_xlabel(label_x, fontsize=14)
+    ax1.set_ylabel(label_y, fontsize=14, color='blue')
+    ax1.tick_params(axis='x', labelsize=12)
+    ax1.tick_params(axis='y', labelsize=12, colors='blue')
+
+    # Bar plot: share of respondents (%)
+    ax2 = ax1.twinx()
+    ax2.bar(
+        bin_centers,
+        grouped['share'],
+        width=(bins[1]-bins[0]),  # a bit narrower than bin width
+        alpha=0.3,
+        color='gray',
+        edgecolor='black',
+        align="center")
+    ax2.set_ylabel('Share of respondents (%)', color='black', fontsize=14)
+    ax2.tick_params(axis='y', labelsize=12, colors='black')
+
+    plt.show()
+
 def plot_change_population_custom(gdf, save_population,
                                   bins=[-100, -50, -25, 0, 25, 50, 75, 700],
                                   cmap_name="RdBu_r", alpha=0.6):
@@ -580,6 +633,109 @@ def plot_base_map(gdf):
     ax.legend(handles=[tracts_handle, muni_handle, toll_handle], loc="lower right")
 
     # Aesthetics
+    ax.set_axis_off()
+    plt.tight_layout()
+    plt.show()
+def plot_base_map_with_land_cover(gdf, land_cover_plot, color_dict):
+    # Ensure same CRS
+    gdf_proj = gdf.to_crs(epsg=32632).copy()
+    land_cover_proj = land_cover_plot.to_crs(gdf_proj.crs)
+
+    # Dissolve by municipality
+    muni_gdf = gdf_proj.dissolve(by='NMUN', as_index=False)
+    muni_gdf['centroid'] = muni_gdf.geometry.centroid
+    muni_gdf['x'] = muni_gdf.centroid.x
+    muni_gdf['y'] = muni_gdf.centroid.y
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    # --- Land cover first, with some transparency ---
+    land_cover_proj.plot(
+        ax=ax,
+        column="recat",
+        categorical=True,
+        color=land_cover_proj["recat"].map(color_dict),
+        legend=True,
+        #alpha=0.6,   # makes boundaries visible through polygons
+        linewidth=0
+    )
+
+    # Census tracts - slightly darker and thinner lines
+    gdf_proj.boundary.plot(
+        ax=ax,
+        edgecolor="black",
+        linewidth=0.1,
+        label="Census tracts"
+    )
+
+    # Municipal boundaries
+    muni_gdf.boundary.plot(
+        ax=ax, edgecolor="black", linewidth=0.8, label="Municipal boundaries"
+    )
+
+    # Toll area - use a distinct color to avoid clashing with land cover
+    city_border = muni_gdf[muni_gdf.ID.str[:5].isin(["08019", "08101", "08194"])]
+    city_border.dissolve().plot(
+        ax=ax,
+        facecolor="none",
+        edgecolor="red",  # different from red in land-cover
+        linewidth=3.0,
+        label="Toll area"
+    )
+
+    # Municipality labels
+    #for _, row in muni_gdf.iterrows():#.loc[muni_gdf["NMUN"].isin(
+    #    #["Badalona", "Barcelona", "Castelldefels", "Sant Cugat del Vallès"]), :].iterrows():
+    #    ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold',
+    #            ha='center', va='center', color='black')
+        
+    # Municipality labels
+    for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(
+        ["Barcelona"]), :].iterrows():
+        ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold',
+                ha='center', va='center', color='black')
+        
+    for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(
+        ["Begues"]), :].iterrows():
+        ax.text(row.x, row.y, "Garraf massif", fontsize=9, fontweight='bold',
+                ha='center', va='center', color='black')
+        
+    #for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(
+    #    ["Sant Cugat del Vallès"]), :].iterrows():
+    #    ax.text(row.x - 5500, row.y - 2000, "Llobregat River", fontsize=9, fontweight='bold',
+    #            ha='center', va='center', color='black')
+        
+    for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(
+        ["Sant Cugat del Vallès"]), :].iterrows():
+        ax.text(row.x + 2000, row.y - 1500, "Collserola massif", fontsize=9, fontweight='bold',
+                ha='center', va='center', color='black')
+        
+    
+
+    # --- Legend: combine land-cover legend with manual handles ---
+    # First get land-cover handles
+    import matplotlib.patches as mpatches
+    # --- Land-cover handles ---
+    land_cover_handles = [
+        mpatches.Patch(color=color_dict[cat], label=cat) for cat in color_dict
+]
+
+    # --- Boundary handles ---
+    tracts_handle = mlines.Line2D([], [], color="black", linewidth=0.4, label="Census tracts")
+    muni_handle   = mlines.Line2D([], [], color="black", linewidth=0.8, label="Municipal boundaries")
+    toll_handle   = mlines.Line2D([], [], color="red", linewidth=3.0, label="Toll area")
+    boundary_handles = [tracts_handle, muni_handle, toll_handle]
+
+    # --- Create sublegends ---
+    legend1 = ax.legend(handles=land_cover_handles, title="Land cover", loc="upper left")
+    legend2 = ax.legend(handles=boundary_handles, title="Admin boundaries", loc="upper right")
+
+    # Make the first legend title bold
+    legend1.get_title().set_fontweight('bold')
+    legend2.get_title().set_fontweight('bold')
+
+    # Add first legend back to the axes
+    ax.add_artist(legend1)
     ax.set_axis_off()
     plt.tight_layout()
     plt.show()

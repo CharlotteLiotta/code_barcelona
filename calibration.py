@@ -39,14 +39,19 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
     #                     "station_500m", "station_500m_1km", "station_1km_2km",
     #                     "airport_500m", "high_tourism", 'mean_activity',
     #                     'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
+    
+    X = gdf_here.loc[:, ["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km",
+                         "station_500m", "station_500m_1km", "station_1km_2km",
+                         "airport_500m", "high_tourism", 'mean_activity',
+                         'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
     #X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
     #                     "station_500m", "station_500m_1km",
     #                     "airport_500m", "index_tourism", 'mean_activity',
     #                     'log_combined_density', "slope_20", 'rodalies_500m', 'rodalies_500m_1km', "fgc_500m", "fgc_500m_1km"]]
-    X = gdf_here.loc[:, ["beach_500m", "parc_500m",
-                         "station_500m",
-                         "index_tourism", 'mean_activity',
-                         'rodalies_500m', "fgc_500m"]]
+    #X = gdf_here.loc[:, ["beach_500m",
+    #                     "station_500m",
+    #                     "index_tourism", 'mean_activity',
+    #                     'rodalies_500m', "fgc_500m"]]
     #"beach_500m", "parc_500m",
     #                     "station_500m",
     #                     "index_tourism", 'mean_activity',
@@ -134,8 +139,8 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
     
     else:
         # Final log-likelihood (maximize sum of log-likelihoods and sorting)
-        #print("scoreDwellingSize:", scoreDwellingSize)
-        #print("scoreAmenities:", scoreAmenities)
+        print("scoreDwellingSize:", scoreDwellingSize)
+        print("scoreAmenities:", scoreAmenities)
         #print("log_sorting:", log_sorting)
 
         return -(scoreAmenities + scoreDwellingSize) #log_sorting scoreAmenities + 
@@ -172,14 +177,14 @@ def calibration_utility_amenity2(x, gdf, income_levels, alpha, print_summary=0, 
     #                     "station_500m", "station_500m_1km", "station_1km_2km",
     #                     "airport_500m", "high_tourism", 'mean_activity',
     #                     'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
-    #X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
-    #                     "station_500m", "station_500m_1km",
-    #                     "airport_500m", "index_tourism", 'mean_activity',
-    #                     'log_combined_density', "slope_20", 'rodalies_500m', 'rodalies_500m_1km', "fgc_500m", "fgc_500m_1km"]]
-    X = gdf_here.loc[:, ["beach_500m", "parc_500m",
-                         "station_500m",
-                         "index_tourism", 'mean_activity',
-                         'rodalies_500m', "fgc_500m"]]
+    X = gdf_here.loc[:, ["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km", "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b",
+                         "station_500m", "station_500m_1km", "station_1km_2km",
+                         "airport_500m", "high_tourism", 'mean_activity',
+                         'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
+    #X = gdf_here.loc[:, ["beach_500m", "parc_500m",
+    #                     "station_500m",
+    #                     "index_tourism", 'mean_activity',
+    #                     'rodalies_500m', "fgc_500m"]]
     #"beach_500m", "parc_500m",
     #                     "station_500m",
     #                     "index_tourism", 'mean_activity',
@@ -416,6 +421,8 @@ def compute_cost_car_poly_i(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PR
     def compute_error_transport_poly_here(x):
         return compute_error_transport_poly(x, import_trans_mode, path_data, gdf, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, MEDIAN_WAGE_SPAIN, scenario)
     
+    print(len(x0))
+    print(len(bounds))
     solving_transport = scipy.optimize.minimize(compute_error_transport_poly_here, x0=x0, method='L-BFGS-B', bounds=bounds)
     FIXED_COST_CAR = solving_transport.x[0]
     LAMBDA = solving_transport.x[1]
