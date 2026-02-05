@@ -141,7 +141,7 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
 def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
                                 transport_cost_LOW, transport_cost_MED, transport_cost_HIGH,
                                 B, KAPPA, SIGMA, RHO, L, alpha, option_resid,
-                                option_function="CES", resid_rent=0, resid_density=0, resid_size=0, option_given_population = False, given_population = 0):
+                                option_function="CES", resid_rent=0, resid_density=0, resid_size=0, option_housing = False, housing_here = 0):
     """
     Compute smooth squared error between model-estimated and observed populations
     given a trial utility vector u = [u_low, base_rent, u_high].
@@ -188,8 +188,8 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
     q_MED = compute_dwelling_size(BETA, Y_MED, transport_cost_MED, R_MED)
     q_HIGH = compute_dwelling_size(BETA, Y_HIGH, transport_cost_HIGH, R_HIGH)
     
-    if option_given_population == True:
-        n = given_population
+    if option_housing == True:
+        n = housing_here / (w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH)
     else:
         n = compute_population(B, KAPPA, SIGMA, R, RHO, L, w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, option_function=option_function)
     
