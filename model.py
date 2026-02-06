@@ -280,7 +280,7 @@ def compute_population(b, kappa, sigma, R, rho, L, q, option_function = "CES"):
 def CES_func(x, kappa, a, sigma):
     return kappa * (a ** (-sigma / (1 - sigma))) * ((1 - ((1 - a) ** sigma) * ((kappa * x) ** (sigma - 1))) ** (sigma / (1 - sigma)))
 
-def compute_outcomes(utility, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, alpha, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function = "CES"):
+def compute_outcomes(utility, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, alpha, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function = "CES", option_housing = False, housing_here = 0):
 
 
     R_group = {
@@ -310,6 +310,9 @@ def compute_outcomes(utility, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, alpha, 
 
     # --- Compute total population ---
     q = sum(w[lvl] * q_group[lvl] for lvl in income_levels)
-    n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function=option_function)
-
+    if option_housing == True:
+        n = housing_here / q
+    else:
+        n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function=option_function)
+        
     return R, q, n, w, R_group, q_group
