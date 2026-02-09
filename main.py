@@ -149,9 +149,10 @@ plot_transport_mode_i(gdf, "_HIGH")
 
 #Calibrate beta and amenities
 def compute_log_likelihood(x):
-    return calibration_utility_amenity(x, gdf, income_levels, SOFT_RENT, 0, 0)
+    print(x)
+    return calibration_utility_amenity2(x, gdf, income_levels, SOFT_RENT, 0, 0)
 
-calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.45, 100, 500, 900], bounds=[(0.3,0.6), (0,None), (0,None), (0,None)])
+calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.45, 224, 386, 553], bounds=[(0.1,0.9), (0,None), (0,None), (0,None)]) #[0.45, 100, 500, 900]
 BETA = calib_beta.x[0]
 print("BETA:", BETA)
 amenities = calibration_utility_amenity(calib_beta.x, gdf, income_levels, SOFT_RENT, 1, 1)
