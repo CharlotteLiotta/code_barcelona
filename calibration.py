@@ -368,7 +368,7 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
         
         estimated_wage_spatial = sum(gdf_here[f"pop_{lvl}"] * gdf_here[f"wage_{lvl}"] for lvl in income_levels) / \
                                  sum([gdf_here[f"pop_{lvl}"] for lvl in income_levels])
-        error_spatial_wage = np.nansum(gdf["pop"] * np.abs(estimated_wage_spatial - gdf["net_income"])) / np.nansum(gdf["pop"])
+        error_spatial_wage = np.nansum(gdf["pop"] * np.abs(estimated_wage_spatial - gdf["net_income_median"])) / np.nansum(gdf["pop"])
         print(f"error_spatial_wage = {error_spatial_wage}")
         
         return (error_mode_by_tract + error_mode_AMB + error_employment + error_wage + error_spatial_wage)

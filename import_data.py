@@ -93,6 +93,80 @@ def import_jobs(gdf, path_data):
 
     return gdf
 
+def import_income_new(gdf, path_data):
+    """ Import data on the spatial distribution of incomes"""
+
+    #https://www.ine.es/dynt3/inebase/en/index.htm?padre=12385&capsel=12384
+    
+    #Import income data
+    income = pd.read_csv(path_data + '30824.csv', sep = ";", encoding="latin1")
+    income = income.loc[(income.Periodo == 2023) & (income['Average income indicators'] == 'Median income by unit of consumption'),["Sections", "Total"]]
+    income = income.dropna(subset=["Sections"])
+    income["ID"] = income["Sections"].str[:10]
+    income.columns = ['Sections', 'net_income_median', 'ID']
+    income.net_income_median = pd.to_numeric(income.net_income_median, errors= "coerce")
+    income.net_income_median = income.net_income_median * 1000
+
+    income_mean = pd.read_csv(path_data + '30824.csv', sep = ";", encoding="latin1")
+    income_mean = income_mean.loc[(income_mean.Periodo == 2023) & (income_mean['Average income indicators'] == 'Average income by unit of consumption'),["Sections", "Total"]]
+    income_mean = income_mean.dropna(subset=["Sections"])
+    income_mean["ID"] = income_mean["Sections"].str[:10]
+    income_mean.columns = ['Sections', 'net_income_mean', 'ID']
+    income_mean.net_income_mean = pd.to_numeric(income_mean.net_income_mean, errors= "coerce")
+    income_mean.net_income_mean = income_mean.net_income_mean * 1000
+
+
+    income_ineq = pd.read_csv(path_data + '30901.csv', sep = ";", encoding="latin1")
+    income_low = income_ineq.loc[(income_ineq.Periodo == 2023) & (income_ineq['Distribución de la renta por unidad de consumo'] == 'Población con ingresos por unidad de consumo por debajo 60% de la mediana'),["Secciones", "Total"]]
+    income_low = income_low.dropna(subset=["Secciones"])
+    income_low["ID"] = income_low["Secciones"].str[:10]
+    income_low.columns = ['Secciones', 'share_low_income', 'ID']
+    income_low['share_low_income'] = income_low['share_low_income'].str.replace(',', '.', regex=False)
+    income_low.share_low_income = pd.to_numeric(income_low.share_low_income, errors= "coerce")
+
+    income_high = income_ineq.loc[(income_ineq.Periodo == 2023) & (income_ineq['Distribución de la renta por unidad de consumo'] == 'Población con ingresos por unidad de consumo por encima 140% de la mediana'),["Secciones", "Total"]]
+    income_high = income_high.dropna(subset=["Secciones"])
+    income_high["ID"] = income_high["Secciones"].str[:10]
+    income_high.columns = ['Secciones', 'share_high_income', 'ID']
+    income_high['share_high_income'] = income_high['share_high_income'].str.replace(',', '.', regex=False)
+    income_high.share_high_income = pd.to_numeric(income_high.share_high_income, errors= "coerce")
+
+
+
+
+    #Merge with gdf
+    gdf = gdf.merge(income.loc[:,['net_income_median', 'ID']], on = "ID", how = "left")
+    gdf = gdf.merge(income_mean.loc[:,['net_income_mean', 'ID']], on = "ID", how = "left")
+    gdf = gdf.merge(income_low.loc[:,['share_low_income', 'ID']], on = "ID", how = "left")
+    gdf = gdf.merge(income_high.loc[:,['share_high_income', 'ID']], on = "ID", how = "left")
+
+    gdf["net_income_median"] = (gdf["net_income_median"]) / 12 #/ gdf["active_per_hh"]
+    gdf["net_income_mean"] = (gdf["net_income_mean"]) / 12 #/ gdf["active_per_hh"]
+    #Compute average income
+    #Y = (np.nansum(gdf.net_income * gdf["pop"]) / np.nansum(gdf["pop"]))
+    def weighted_median(values, weights):
+        mask = ~pd.isna(values) & ~pd.isna(weights)
+        values = np.asarray(values[mask])
+        weights = np.asarray(weights[mask])
+
+        # Sort by value
+        sorted_idx = np.argsort(values)
+        values_sorted = values[sorted_idx]
+        weights_sorted = weights[sorted_idx]
+
+        # Cumulative weights
+        cum_weights = np.cumsum(weights_sorted)
+        cutoff = 0.5 * np.sum(weights_sorted)
+
+        # Weighted median
+        return values_sorted[np.searchsorted(cum_weights, cutoff)]
+    Y_median = weighted_median(gdf["net_income_median"], gdf["pop"])
+
+    gdf["pop_LOW"] = gdf["pop"] * gdf["share_low_income"] / 100
+    gdf["pop_HIGH"] = gdf["pop"] * gdf["share_high_income"] / 100
+    gdf["pop_MED"] = gdf["pop"] - gdf["pop_HIGH"] - gdf["pop_LOW"]
+    return Y_median, gdf
+
 def import_income(gdf, path_data):
     """ Import data on the spatial distribution of incomes"""
 

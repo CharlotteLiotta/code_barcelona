@@ -61,7 +61,7 @@ gdf = import_jobs(gdf, path_data)
 gdf = import_land_use(gdf, path_data)
 gdf = import_ppl_per_hh(gdf, path_data)
 gdf = import_rent_and_size(gdf, path_data)
-Y, Y_median, gdf = import_income(gdf, path_data)
+Y_median, gdf = import_income_new(gdf, path_data)
 gdf = import_amenities(gdf, path_data, 0, 0)
 employment_centers = gpd.read_file(path_data + "cluster_employment_UEA.shp")
 employment_centers["cluster"] = employment_centers.index
@@ -127,13 +127,12 @@ B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, o
 
 #Transport cost calibration
 gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario)
-with open(path_data + "calib_trans_poly_i_UEA.pkl", "wb") as f:
-    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
-with open(path_data + "calib_trans_poly_i_UEA.pkl", "rb") as f:
-    FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
+#with open(path_data + "calib_trans_poly_i_UEA.pkl", "wb") as f:
+#    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
+#with open(path_data + "calib_trans_poly_i_UEA.pkl", "rb") as f:
+#    FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
 print("FIXED_COST_CAR: ", FIXED_COST_CAR)
 print("LAMBDA: ", LAMBDA)
-del Y
 del compute_transport_cost_logit, compute_cost_car_logit
 
 #Compute transport cost
@@ -166,7 +165,7 @@ def compute_error_in_population_from_utility(u):
 
     return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function)
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [180, 420, 600], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800])
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [100, 180, 300], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800]) #[180, 420, 600]
 
 if solving_model.fun < 1:
     R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
