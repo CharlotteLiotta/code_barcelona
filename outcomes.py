@@ -2,16 +2,12 @@ import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 from numba import njit, prange # type: ignore
 
-def compute_utility_manually(Y, T, q, R, BETA, OPTION_HEALTH = 0, N = 0, vkm = 0, marginal_cost_pollution = 0):
+def compute_utility_manually(Y, T, q, R, BETA, amenities):
     """ Compute agents' utility """
     
-    if OPTION_HEALTH == 0:
-        composite_good = Y - T - q * R
-        composite_good[composite_good < 0] = 0
-        u = (composite_good) ** (1 - BETA) * q ** BETA
-    elif OPTION_HEALTH == 1:
-        health = vkm * marginal_cost_pollution / N
-        u = (Y - T - q * R - health) ** (1 - BETA) * q ** BETA
+    composite_good = Y - T - q * R
+    composite_good[composite_good < 0] = 0
+    u = (composite_good) ** (1 - BETA) * q ** BETA * amenities
     return u
 
 def gini(array):

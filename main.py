@@ -63,7 +63,7 @@ gdf = import_ppl_per_hh(gdf, path_data)
 gdf = import_rent_and_size(gdf, path_data)
 Y, Y_median, gdf = import_income(gdf, path_data)
 gdf = import_amenities(gdf, path_data, 0, 0)
-employment_centers = gpd.read_file(path_data + "cluster_employment.shp")
+employment_centers = gpd.read_file(path_data + "cluster_employment_UEA.shp")
 employment_centers["cluster"] = employment_centers.index
 jobs_in_toll_area, houses_in_toll_area, zone_tax = import_tax_zone(gdf, employment_centers)
 
@@ -127,9 +127,9 @@ B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, o
 
 #Transport cost calibration
 #gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario)
-#with open(path_data + "calib_trans_poly_i.pkl", "wb") as f:
+#with open(path_data + "calib_trans_poly_i_UEA.pkl", "wb") as f:
 #    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
-with open(path_data + "calib_trans_poly_i.pkl", "rb") as f:
+with open(path_data + "calib_trans_poly_i_UEA.pkl", "rb") as f:
     FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
 print("FIXED_COST_CAR: ", FIXED_COST_CAR)
 print("LAMBDA: ", LAMBDA)
@@ -216,13 +216,13 @@ plot_line_charts(gdf, n, q, R)
 N = {lvl: round(pop[lvl] * SCALE_ABM) for lvl in income_levels}
 support = {lvl: INITIAL_OPINION * np.ones(N[lvl]) for lvl in income_levels}
 indiv_loc_matrix = {
-    lvl: compute_indiv_loc_matrix(
+    lvl: compute_indiv_loc_matrix2(
         N[lvl], len(gdf), (n_group[lvl] * SCALE_ABM).to_numpy()
     )
     for lvl in income_levels
 }
 
-rent_indiv = {lvl: indiv_loc_matrix[lvl] @ R.to_numpy() for lvl in income_levels}
+rent_indiv = {lvl: indiv_loc_matrix[lvl] @ R_group[lvl].to_numpy() for lvl in income_levels}
 dwelling_size_indiv = {lvl: indiv_loc_matrix[lvl] @ q_group[lvl] for lvl in income_levels}
 
 utility = {}
@@ -233,7 +233,7 @@ for lvl in income_levels:
         indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
         dwelling_size_indiv[lvl],
         rent_indiv[lvl],
-        BETA,
+        BETA, indiv_loc_matrix[lvl] @ gdf["amenities"]
     )
     u[np.isnan(u)] = 0
     utility[lvl] = u
@@ -287,6 +287,7 @@ subvention_here = 137000000
 efficiency = 0
 discount = 12.79346
 time_discount = 0
+
 
 ### MODELING THE PSC
 
@@ -363,9 +364,14 @@ while year < MAX_YEAR:
         indiv_loc_matrix_new = {}
 
         for lvl in income_levels:
+            #proba_from, proba_to = compute_proba_of_moving(
+            #    save_housing[lvl][:, year - 1],
+            #    (housing_without_inertia * SCALE_ABM * w[lvl]).to_numpy()
+            #    )
+
             proba_from, proba_to = compute_proba_of_moving(
-                save_housing[lvl][:, year - 1],
-                (housing_without_inertia * SCALE_ABM * w[lvl]).to_numpy()
+                np.nansum(indiv_loc_matrix[lvl], 0), #save_housing[lvl][:, year - 1],
+                (n_group[lvl] * SCALE_ABM).to_numpy() #(n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
                 )
     
             indiv_loc_matrix_new[lvl] = deepcopy(indiv_loc_matrix[lvl])
@@ -397,9 +403,14 @@ while year < MAX_YEAR:
     indiv_loc_matrix_new = {}
 
     for lvl in income_levels:
+        #proba_from, proba_to = compute_proba_of_moving(
+        #    save_housing[lvl][:, year - 1],
+        #    (housing_without_inertia * SCALE_ABM * w[lvl]).to_numpy()
+        #    )
+        
         proba_from, proba_to = compute_proba_of_moving(
-            save_housing[lvl][:, year - 1],
-            (housing_without_inertia * SCALE_ABM * w[lvl]).to_numpy()
+            np.nansum(indiv_loc_matrix[lvl], 0), #save_housing[lvl][:, year - 1],
+            (n_group[lvl] * SCALE_ABM).to_numpy() #(n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
             )
     
         indiv_loc_matrix_new[lvl] = deepcopy(indiv_loc_matrix[lvl])
@@ -414,7 +425,7 @@ while year < MAX_YEAR:
             PROBA_MOVE
             )
     
-    rent_indiv_new = {lvl: indiv_loc_matrix[lvl] @ R.to_numpy() for lvl in income_levels}
+    rent_indiv_new = {lvl: indiv_loc_matrix[lvl] @ R_group[lvl].to_numpy() for lvl in income_levels}
     dwelling_size_indiv_new = {lvl: indiv_loc_matrix[lvl] @ q_group[lvl] for lvl in income_levels}
 
     for lvl in income_levels:
@@ -429,7 +440,7 @@ while year < MAX_YEAR:
             indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
             dwelling_size_indiv[lvl],
             rent_indiv[lvl],
-            BETA
+            BETA, indiv_loc_matrix[lvl] @ gdf["amenities"]
         )
     
         utility[lvl][np.isnan(utility[lvl])] = 0
@@ -486,7 +497,7 @@ while year < MAX_YEAR:
                                                        save_score_emissions[year], 0, BETA_OPINION, False)
         
         price_here[lvl] = compute_price(score_welfare[lvl], score_qol[lvl],
-                                        save_score_emissions[year], 0, BETA_PRICE, False, scenario, save_knowledge[year])
+                                        save_score_emissions[year], 0, BETA_PRICE, False, scenario, save_knowledge[year], lvl)
         
         if scenario == "instant_welfare_adjust":
             support[lvl] = political_opinion[lvl]
@@ -523,29 +534,29 @@ for lvl in income_levels:
 
 
 
-emission_change = np.empty(20)
-for i in range(20):
+emission_change = np.empty(MAX_YEAR)
+for i in range(MAX_YEAR):
     emission_change[i] = np.nanmedian(compute_relative_change(save_emissions[0], save_emissions[i]))
 
-change_qol_in_zone = np.empty(20)
-for i in range(20):
+change_qol_in_zone = np.empty(MAX_YEAR)
+for i in range(MAX_YEAR):
     change_qol_in_zone[i] = np.nanmean(compute_relative_change(qol_in_zone[0], qol_in_zone[i]))
 
-change_qol_out_zone = np.empty(20)
-for i in range(20):
+change_qol_out_zone = np.empty(MAX_YEAR)
+for i in range(MAX_YEAR):
     change_qol_out_zone[i] = np.nanmean(compute_relative_change(qol_out_zone[0], qol_out_zone[i]))
 
 
-utility_change_low = np.empty(20)
-for i in range(20):
+utility_change_low = np.empty(MAX_YEAR)
+for i in range(MAX_YEAR):
     utility_change_low[i] = np.nanmedian(compute_change_in_welfare(save_utility["LOW"][:, 0], save_utility["LOW"][:, i]))
 
-utility_change_med = np.empty(20)
-for i in range(20):
+utility_change_med = np.empty(MAX_YEAR)
+for i in range(MAX_YEAR):
     utility_change_med[i] = np.nanmedian(compute_change_in_welfare(save_utility["MED"][:, 0], save_utility["MED"][:, i]))
 
-utility_change_high = np.empty(20)
-for i in range(20):
+utility_change_high = np.empty(MAX_YEAR)
+for i in range(MAX_YEAR):
     utility_change_high[i] = np.nanmedian(compute_change_in_welfare(save_utility["HIGH"][:, 0], save_utility["HIGH"][:, i]))
 
 

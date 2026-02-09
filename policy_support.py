@@ -23,6 +23,10 @@ def import_opinion_parameters(path_data, scenario):
 
     df_reg, meta = pyreadstat.read_sav(path_data + '040023 En moviment pel clima 2025_V01 - còpia.sav')
     
+    #add income variable (Joan)
+    income_var = pd.read_excel(path_data + "MOBCLIMA_amb_renda_codipaisINE.xlsx")
+    df_reg = df_reg.merge(income_var.loc[:,["NUME", "categoria_quintils", "ingressos_estimats"]], on = "NUME")
+
     df_reg = gpd.GeoDataFrame(df_reg, geometry = gpd.points_from_xy(df_reg.GEO_X, df_reg.GEO_Y), crs="EPSG:4326")
     gdf = gpd.read_file(path_data + "income_loss.geojson")
     df_reg = df_reg.to_crs(gdf.crs)
@@ -50,7 +54,10 @@ def import_opinion_parameters(path_data, scenario):
     df_reg.rename(columns={'P21_1': 'congestion'}, inplace=True)
     df_reg = df_reg.loc[~np.isnan(df_reg.congestion) & (df_reg.congestion < 80)]
 
-    X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life"]]
+    df_reg["LOW"] = (df_reg.ingressos_estimats  < 11550) * 1
+    df_reg["HIGH"] = (df_reg.ingressos_estimats > 26950) * 1
+
+    X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life", "LOW", "HIGH"]]
         
     y_raw = df_reg["acceptability"].values.reshape(-1, 1)
 
@@ -95,6 +102,10 @@ def import_price_parameters(path_data, scenario):
 
     df_reg, meta = pyreadstat.read_sav(path_data + '040023 En moviment pel clima 2025_V01 - còpia.sav')
     
+    #add income variable (Joan)
+    income_var = pd.read_excel(path_data + "MOBCLIMA_amb_renda_codipaisINE.xlsx")
+    df_reg = df_reg.merge(income_var.loc[:,["NUME", "categoria_quintils", "ingressos_estimats"]], on = "NUME")
+
     df_reg = gpd.GeoDataFrame(df_reg, geometry = gpd.points_from_xy(df_reg.GEO_X, df_reg.GEO_Y), crs="EPSG:4326")
     gdf = gpd.read_file(path_data + "income_loss.geojson")
     df_reg = df_reg.to_crs(gdf.crs)
@@ -127,10 +138,13 @@ def import_price_parameters(path_data, scenario):
     df_reg.rename(columns={'P24': 'knowledge'}, inplace=True)
     df_reg = df_reg.loc[~np.isnan(df_reg.knowledge) & (df_reg.knowledge < 80)]
 
+    df_reg["LOW"] = (df_reg.ingressos_estimats  < 11550) * 1
+    df_reg["HIGH"] = (df_reg.ingressos_estimats > 26950) * 1
+    
     if scenario == "increasing_knowledge":
-        X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life", "knowledge"]]
+        X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life", "LOW", "HIGH", "knowledge"]]
     else:
-        X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life"]]
+        X_raw = df_reg[["climate_change", "log_absolute_loss", "quality_of_life", "LOW", "HIGH"]]
     
     y_raw = (df_reg["acceptable_price"].values.reshape(-1, 1))
 
@@ -171,12 +185,15 @@ def compute_political_opinion(score_welfare, score_quality_of_life, score_emissi
     return outcome
     
 
-def compute_price(score_welfare, score_quality_of_life, score_emissions, score_congestion, BETA_OPINION, option_congestion_in_support, scenario, score_knowledge):
+def compute_price(score_welfare, score_quality_of_life, score_emissions, score_congestion, BETA_OPINION, option_congestion_in_support, scenario, score_knowledge, lvl):
     """ Compute public support based on the regression on the survey data """
     
+    dummy_low = (lvl == "LOW")
+    dummy_high = (lvl == "HIGH")
+
     if scenario == "increasing_knowledge":
-        outcome = BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life + BETA_OPINION[4] * score_knowledge
+        outcome = np.nan #BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life + BETA_OPINION[4] * score_knowledge
     elif option_congestion_in_support == False:
-        outcome = BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life
+        outcome = BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_welfare + BETA_OPINION[3] * score_quality_of_life + BETA_OPINION[4] * dummy_low + BETA_OPINION[5] * dummy_high
 
     return outcome
