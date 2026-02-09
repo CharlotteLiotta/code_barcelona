@@ -351,7 +351,7 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
         print(f"error_mode_by_tract = {error_mode_by_tract}")
 
         gdf_valid = gdf_here.dropna(subset=["share_car"])
-        error_mode_AMB = np.abs(np.nansum(np.sum((1 - gdf_valid[f"transport_mode_{lvl}"]) * gdf_valid[f"pop_{lvl}"] for lvl in income_levels) - gdf_valid["share_car"] * gdf_valid["pop"]))
+        error_mode_AMB = np.abs(np.nansum(np.sum((1 - gdf_valid[f"transport_mode_{lvl}"]) * gdf_valid[f"pop_{lvl}"] for lvl in income_levels)) - np.nansum(gdf_valid["share_car"] * gdf_valid["pop"]))
         print(f"error_mode_AMB = {error_mode_AMB}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
         
         employed_results = employed_results.merge(employment_centers, left_index = True, right_on = "cluster")
