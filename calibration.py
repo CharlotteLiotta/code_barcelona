@@ -414,7 +414,7 @@ def compute_cost_car_poly_i(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PR
 
 
     #init_wage = np.array([3126, 2905, 3040, 2976, 2903, 2979, 2869, 3005])
-    init_wage = np.array([1600, 1600, 1600, 1600, 1600, 1600, 1600])
+    init_wage = np.array([1600, 1600, 1600, 1600, 1600, 1600, 1600, 1600])
     x0 = [200, 250] + (init_wage * 0.6).tolist() + (init_wage).tolist() + (init_wage * 1.4).tolist()
     bounds = [(0, 300), (0, 400)] + [(0, 10000)] * 3 * len(np.unique(employment_centers.cluster))
     

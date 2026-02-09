@@ -61,7 +61,7 @@ gdf = import_ppl_per_hh(gdf, path_data)
 gdf = import_rent_and_size(gdf, path_data)
 Y_median, gdf = import_income(gdf, path_data)
 gdf = import_amenities(gdf, path_data, 0, 0)
-employment_centers = gpd.read_file(path_data + "cluster_employment.shp")
+employment_centers = gpd.read_file(path_data + "cluster_employment2.shp")
 employment_centers["cluster"] = employment_centers.index
 jobs_in_toll_area, houses_in_toll_area, zone_tax = import_tax_zone(gdf, employment_centers)
 plot_base_map(gdf)
@@ -83,7 +83,7 @@ gdf.loc[np.isnan(gdf["rent_m2"]), "rent_m2"] = np.nanmin(gdf.loc[gdf["rent_m2"]>
 gdf.loc[np.isnan(gdf["size"]), "size"] = np.nansum(gdf.loc[~np.isnan(gdf["size"]), "size"] * gdf.loc[~np.isnan(gdf["size"]), "pop"]) / np.nansum(gdf.loc[~np.isnan(gdf["size"]), "pop"])
 
 #Import transport data
-#import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
+import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
 travel_time_matrix_car, travel_time_matrix_transit = load_transport_times_poly(gdf, path_data, center)
 travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers, jobs_in_toll_area, houses_in_toll_area, zone_tax)
 gdf = import_cost_transit(gdf)
@@ -110,10 +110,10 @@ mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
 B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
 
 #Transport cost calibration
-#gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, MEDIAN_WAGE_SPAIN, scenario, compute_error_transport_poly)
-#with open(path_data + "calib_trans_poly_i_v2.pkl", "wb") as f:
-#    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
-with open(path_data + "calib_trans_poly_i_v2.pkl", "rb") as f: #_v2
+gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, MEDIAN_WAGE_SPAIN, scenario, compute_error_transport_poly)
+with open(path_data + "calib_trans_poly_i_v3.pkl", "wb") as f:
+    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
+with open(path_data + "calib_trans_poly_i_v3.pkl", "rb") as f: #_v2
     FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
 print("FIXED_COST_CAR: ", FIXED_COST_CAR)
 print("LAMBDA: ", LAMBDA)
