@@ -2,6 +2,7 @@ import numpy as np
 from copy import deepcopy
 from scipy.sparse import csr_matrix # type: ignore
 import pickle
+import datetime
 
 from outcomes import *
 from ABM import *
@@ -97,18 +98,8 @@ travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 100
 
 ### CALIBRATION POLICY SUPPORT
 
-BETA_OPINION, INITIAL_OPINION = import_opinion_parameters(path_data, scenario)
-BETA_PRICE, INITIAL_PRICE, INITIAL_CC, INITIAL_WELFARE, INITIAL_QOL, INITIAL_KNOWLEDGE = import_price_parameters(path_data, scenario)
-
-tax = INITIAL_PRICE
-acceptable_price = {"LOW": INITIAL_PRICE, "MED": INITIAL_PRICE, "HIGH": INITIAL_PRICE}
-support = {"LOW": INITIAL_OPINION, "MED": INITIAL_OPINION, "HIGH": INITIAL_OPINION}
-save_score_emissions = np.zeros(MAX_YEAR)
-save_score_emissions[0] = INITIAL_CC
-save_knowledge = np.zeros(MAX_YEAR)
-save_knowledge[0] = INITIAL_KNOWLEDGE
-score_qol = {"LOW": INITIAL_QOL, "MED": INITIAL_QOL, "HIGH": INITIAL_QOL}
-score_welfare = {"LOW": INITIAL_WELFARE, "MED": INITIAL_WELFARE, "HIGH": INITIAL_WELFARE}
+#BETA_OPINION, INITIAL_OPINION = import_opinion_parameters(path_data, scenario)
+#BETA_PRICE, INITIAL_PRICE, INITIAL_CC, INITIAL_WELFARE, INITIAL_QOL, INITIAL_KNOWLEDGE = import_price_parameters(path_data, scenario)
 
 
 ### CALIBRATION POLICY IMPACT MODEL
@@ -126,11 +117,11 @@ mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
 B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
 
 #Transport cost calibration
-gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario)
-#with open(path_data + "calib_trans_poly_i_UEA.pkl", "wb") as f:
+#gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario)
+#with open(path_data + "calib_trans_poly_i_UEA_v2.pkl", "wb") as f:
 #    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
-#with open(path_data + "calib_trans_poly_i_UEA.pkl", "rb") as f:
-#    FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
+with open(path_data + "calib_trans_poly_i_UEA_v2.pkl", "rb") as f:
+    FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
 print("FIXED_COST_CAR: ", FIXED_COST_CAR)
 print("LAMBDA: ", LAMBDA)
 del compute_transport_cost_logit, compute_cost_car_logit
@@ -151,7 +142,7 @@ def compute_log_likelihood(x):
     print(x)
     return calibration_utility_amenity2(x, gdf, income_levels, SOFT_RENT, 0, 0)
 
-calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.45, 224, 386, 553], bounds=[(0.1,0.9), (0,None), (0,None), (0,None)]) #[0.45, 100, 500, 900]
+calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.3, 100, 500, 900], bounds=[(0.25,0.5), (0,None), (0,None), (0,None)]) #[0.45, 100, 500, 900] #[0.3, 224, 386, 553]
 BETA = calib_beta.x[0]
 print("BETA:", BETA)
 amenities = calibration_utility_amenity(calib_beta.x, gdf, income_levels, SOFT_RENT, 1, 1)
@@ -288,6 +279,45 @@ efficiency = 0
 discount = 12.79346
 time_discount = 0
 
+### FIRST SIMULATION TO COMPUTE UTILITY LOSSES
+
+gdf_init, _, _ = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0, income_levels, wage_factors, "baseline", 0, 0)
+ 
+utility_init = {lvl: compute_utility_manually(gdf_init[f"wage_{lvl}"],
+                                              gdf_init[f"transport_cost_{lvl}"],
+                                              q_group[f"{lvl}"],
+                                              R_group[f"{lvl}"],
+                                              BETA, gdf["amenities"]
+                                              ) for lvl in income_levels}
+
+gdf_tax, _, _ = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0.5, income_levels, wage_factors, "baseline", 0, 0)
+ 
+utility_tax = {lvl: compute_utility_manually(gdf_tax[f"wage_{lvl}"],
+                                              gdf_tax[f"transport_cost_{lvl}"],
+                                              q_group[f"{lvl}"],
+                                              R_group[f"{lvl}"],
+                                              BETA, gdf["amenities"]
+                                              ) for lvl in income_levels}
+
+for lvl in income_levels:
+    gdf[f"score_welfare_{lvl.lower()}"] = compute_score(compute_change_in_welfare(utility_init[lvl], utility_tax[lvl]), LOGISTIC_PARAM_WELFARE)
+
+expected_welfare_loss = gdf[["ID", "geometry"] + [f"score_welfare_{lvl.lower()}" for lvl in income_levels]]
+
+### CALIBRATION POLICY SUPPORT
+
+BETA_OPINION, BETA_PRICE, INITIAL_OPINION, INITIAL_PRICE, INITIAL_CC, INITIAL_WELFARE, INITIAL_QOL, INITIAL_KNOWLEDGE = import_opinion_parameters2(path_data, scenario, expected_welfare_loss)
+
+tax = INITIAL_PRICE
+acceptable_price = {"LOW": INITIAL_PRICE, "MED": INITIAL_PRICE, "HIGH": INITIAL_PRICE}
+#support = {"LOW": INITIAL_OPINION, "MED": INITIAL_OPINION, "HIGH": INITIAL_OPINION}
+save_score_emissions = np.zeros(MAX_YEAR)
+save_score_emissions[0] = INITIAL_CC
+save_knowledge = np.zeros(MAX_YEAR)
+save_knowledge[0] = INITIAL_KNOWLEDGE
+score_qol = {"LOW": INITIAL_QOL, "MED": INITIAL_QOL, "HIGH": INITIAL_QOL}
+score_welfare = {"LOW": INITIAL_WELFARE, "MED": INITIAL_WELFARE, "HIGH": INITIAL_WELFARE}
+support = {lvl: INITIAL_OPINION * np.ones(N[lvl]) for lvl in income_levels}
 
 ### MODELING THE PSC
 
@@ -493,11 +523,15 @@ while year < MAX_YEAR:
             score_qol[lvl] = (indiv_loc_matrix[lvl] @ mask_zone) * score_qol_zone + (indiv_loc_matrix[lvl] @ mask_out) * score_qol_out
 
         # Political opinion and price
-        political_opinion[lvl] = compute_political_opinion(score_welfare[lvl], score_qol[lvl],
-                                                       save_score_emissions[year], 0, BETA_OPINION, False)
+        political_opinion[lvl] = compute_opinion2(score_welfare[lvl], score_qol[lvl],
+                                                       save_score_emissions[year], BETA_OPINION, scenario, lvl, save_knowledge[year])
         
-        price_here[lvl] = compute_price(score_welfare[lvl], score_qol[lvl],
-                                        save_score_emissions[year], 0, BETA_PRICE, False, scenario, save_knowledge[year], lvl)
+        price_here[lvl] = compute_opinion2(score_welfare[lvl], score_qol[lvl], save_score_emissions[year], BETA_PRICE, scenario, lvl, save_knowledge[year])
+        #political_opinion[lvl] = compute_political_opinion(score_welfare[lvl], score_qol[lvl],
+        #                                               save_score_emissions[year], 0, BETA_OPINION, False)
+       # 
+        #price_here[lvl] = compute_price(score_welfare[lvl], score_qol[lvl],
+        #                                save_score_emissions[year], 0, BETA_PRICE, False, scenario, save_knowledge[year], lvl)
         
         if scenario == "instant_welfare_adjust":
             support[lvl] = political_opinion[lvl]

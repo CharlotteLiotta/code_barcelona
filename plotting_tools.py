@@ -14,6 +14,59 @@ from matplotlib.colors import TwoSlopeNorm
 
 from matplotlib.colors import TwoSlopeNorm
 
+def plot_mobility_loss(x,y, df_reg):
+    label_x = x
+    label_y = y
+    x = df_reg[x]
+    y = df_reg[y]
+    w = df_reg.PESAIX   # survey weights
+
+    # Define bins
+    bins = np.linspace(x.min(), x.max(), 10)
+    df_reg['bin'] = pd.cut(x, bins)
+
+    # Weighted mean function
+    def weighted_mean(series, weights):
+        return np.average(series, weights=weights)
+
+    # Group by bin and calculate weighted stats
+    grouped = (
+        df_reg.groupby('bin').apply(lambda g: pd.Series({
+            "mean": weighted_mean(g[y.name], g[w.name]),
+            "share": g[w.name].sum() / w.sum() * 100  # % of total respondents
+            })))
+
+    # Drop bins with too few weighted respondents (optional, e.g. <1% share)
+    grouped = grouped[grouped['share'] >= 1]
+
+    # Get bin centers for plotting
+    bin_centers = [interval.mid for interval in grouped.index]
+
+        # --- Plot ---
+    fig, ax1 = plt.subplots()
+
+    # Line plot: weighted mean acceptable toll
+    ax1.plot(bin_centers, grouped['mean'], marker='o', color='blue')
+    ax1.set_xlabel(label_x, fontsize=14)
+    ax1.set_ylabel(label_y, fontsize=14, color='blue')
+    ax1.tick_params(axis='x', labelsize=12)
+    ax1.tick_params(axis='y', labelsize=12, colors='blue')
+
+    # Bar plot: share of respondents (%)
+    ax2 = ax1.twinx()
+    ax2.bar(
+        bin_centers,
+        grouped['share'],
+        width=(bins[1]-bins[0]),  # a bit narrower than bin width
+        alpha=0.3,
+        color='gray',
+        edgecolor='black',
+        align="center")
+    ax2.set_ylabel('Share of respondents (%)', color='black', fontsize=14)
+    ax2.tick_params(axis='y', labelsize=12, colors='black')
+
+    plt.show()
+
 def plot_employment(gdf, employment_centers, var):
     base = gdf.plot(color='lightgrey', edgecolor='white', figsize=(10, 10))
 

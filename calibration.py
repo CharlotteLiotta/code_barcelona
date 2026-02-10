@@ -373,7 +373,7 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
         
         return (error_mode_by_tract + error_mode_AMB + error_employment + error_wage + error_spatial_wage)
 
-    init_wage = np.array([3126, 2905, 3040, 2976, 2903, 2979, 2869, 3005])
+    init_wage = np.array([3126, 2905, 3040, 2976, 2903, 2979]) #, 2869]) #, 3005])
     init_wage = init_wage * Y_median / np.nanmean(init_wage)
     x0 = [200, 250] + (init_wage * 0.6).tolist() + (init_wage).tolist() + (init_wage * 1.4).tolist()
     bounds = [(0, 300), (0, 400)] + [(0, 10000)] * 3 * len(np.unique(employment_centers.cluster))
