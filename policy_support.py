@@ -95,7 +95,7 @@ def import_opinion_parameters2(path_data, scenario, expected_welfare_loss):
     df_reg.loc[df_reg["vehicle_ownership_license"] == 0, "score_welfare_vehicle_ownership_license"] = 0.5
 
     #Export plots
-    plot_mobility_loss("score_welfare_vehicle_ownership_license","acceptability", df_reg)
+    plot_mobility_loss("score_welfare","acceptable_price", df_reg)
      
     def plot_hist_survey(df_reg, var, xlabel):
 
@@ -133,7 +133,7 @@ def import_opinion_parameters2(path_data, scenario, expected_welfare_loss):
 
     df_reg[["climate_change", "quality_of_life", "acceptability"]] = df_reg[["climate_change", "quality_of_life", "acceptability"]] / 10
 
-    X = df_reg[["climate_change", "quality_of_life", "score_welfare_vehicle_ownership_license", "LOW", "HIGH"]]
+    X = df_reg[["climate_change", "quality_of_life", "score_welfare", "LOW", "HIGH"]]
     X = sm.add_constant(X)
     y_acceptability = df_reg["acceptability"].values.reshape(-1, 1).flatten()
     y_price = (df_reg["acceptable_price"].values.reshape(-1, 1)).flatten()
@@ -150,7 +150,7 @@ def import_opinion_parameters2(path_data, scenario, expected_welfare_loss):
     INITIAL_OPINION = weighted_median(y_acceptability, df_reg["PESAIX"].values)
     INITIAL_PRICE = weighted_median(y_price, df_reg["PESAIX"].values)
     INITIAL_CC = weighted_median(X["climate_change"].values, df_reg["PESAIX"].values)
-    INITIAL_WELFARE = weighted_median(X["score_welfare_vehicle_ownership_license"].values, df_reg["PESAIX"].values)
+    INITIAL_WELFARE = weighted_median(X["score_welfare"].values, df_reg["PESAIX"].values)
     INITIAL_QOL = weighted_median(X["quality_of_life"].values, df_reg["PESAIX"].values)
 
     if scenario == "increasing_knowledge":
