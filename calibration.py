@@ -30,11 +30,23 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
     # --- 3. Estimate amenities regression ---
     gdf_here = gdf.loc[~np.isnan(gdf["log_A"]) & ~np.isinf(gdf["log_A"]), :]
     y = gdf_here["log_A"]
-    X = gdf_here.loc[:, ["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km",
-                         "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b",
-                         "station_500m", "station_500m_1km", "station_1km_2km",
-                         "airport_500m", "high_tourism", 'mean_activity',
-                         'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
+    #X = gdf_here.loc[:, ["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km",
+    #                     "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b",
+    #                     "station_500m", "station_500m_1km", "station_1km_2km",
+    ##                     "airport_500m", "high_tourism", 'mean_activity',
+    #                     'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
+    X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
+                         #'parc_2h_500m','parc_2h_500m_1km',
+                         "station_500m", "station_500m_1km", #"station_1km_2km",
+                         'fgc_500m', 'rodalies_500m', #'rodalies_500m_1km', 'fgc_500m_1km',
+                         "airport_500m",
+                         "high_tourism", #"high_tourism", "medium_tourism",
+                         'mean_activity',
+                         'pedestrian_density',
+                         #'slope_20',
+                         ]]
+    
+    
     X = sm.add_constant(X)
     model = sm.OLS(y, X).fit()
     if print_summary == 1:
@@ -102,7 +114,7 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
         print("log_L_size:", log_L_size)
         print("log_sorting:", log_sorting)
         # Final log-likelihood (maximize sum of log-likelihoods and sorting)
-        return - (log_L_A + log_L_size + log_sorting)
+        return - (log_L_A + log_L_size)# + log_sorting)
 
 def calibration_utility_amenity2(x, gdf, income_levels, alpha, print_summary=0, export_amenities=0):
     """Calibrate BETA and U_LOW/MED/HIGH by minimizing likelihood with numerical stabilization."""
@@ -137,10 +149,16 @@ def calibration_utility_amenity2(x, gdf, income_levels, alpha, print_summary=0, 
     #                     "airport_500m", "high_tourism", 'mean_activity',
     #                     'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
     
-    X = gdf_here.loc[:, ["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km",
-                         "station_500m", "station_500m_1km", "station_1km_2km",
-                         "airport_500m", "high_tourism", 'mean_activity',
-                         'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
+    X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
+                         'parc_2h_500m','parc_2h_500m_1km',
+                         "station_500m", "station_500m_1km", 
+                         'fgc_500m', 'rodalies_500m', 'rodalies_500m_1km', 'fgc_500m_1km',
+                         "airport_500m",
+                         "index_tourism",
+                         'mean_activity',
+                         'pedestrian_data_density',
+                         ]]
+    
     #X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
     #                     "station_500m", "station_500m_1km",
     #                     "airport_500m", "index_tourism", 'mean_activity',
@@ -228,8 +246,7 @@ def calibration_utility_amenity2(x, gdf, income_levels, alpha, print_summary=0, 
     
     # --- 7. Export amenities if requested ---
     if export_amenities:
-        #amenities = np.exp(np.nansum(X.iloc[:,1:] * model.params.iloc[1:], 1))
-        amenities = np.exp(np.nansum(X * model.params, 1))
+        amenities = np.exp(np.nansum(X.iloc[:,1:] * model.params.iloc[1:], 1))
         gdf_here = gdf_here.copy()
         gdf_here["amenities"] = amenities
         return gdf_here[["ID", "amenities"]]
@@ -327,57 +344,63 @@ def compute_cost_car_logit(gdf, Y, import_trans_mode, PRICE_TIME, WORKING_DAYS, 
 #    ARRAY_WAGE = solving_transport.x[2:]
 #    return gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE
 
-def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario):
-    """ Calibrate the fixed cost of private car to match the transport modes data """
+def compute_error_transport_poly(x, employment_centers, gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario, Y_median, import_trans_mode, path_data):
 
     trans_mode = import_trans_mode(path_data)
 
     gdf = gdf.merge(trans_mode.loc[:,["code_city", "share_car"]], on = "code_city", how = "left")
     
-    def compute_error_transport_poly(x):
-        FIXED_COST_CAR = x[0]
-        LAMBDA = x[1]
-        n_centers = len(employment_centers)
-        ARRAY_WAGE_LOW = x[2:2 + n_centers]
-        ARRAY_WAGE_MED = x[2 + n_centers:2 + 2 * n_centers]
-        ARRAY_WAGE_HIGH = x[2 + 2 * n_centers:]
+    FIXED_COST_CAR = x[0]
+    LAMBDA = x[1]
+    n_centers = len(employment_centers)
+    ARRAY_WAGE_LOW = x[2:2 + n_centers]
+    ARRAY_WAGE_MED = x[2 + n_centers:2 + 2 * n_centers]
+    ARRAY_WAGE_HIGH = x[2 + 2 * n_centers:]
 
-        gdf_here, employed_results, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0, income_levels, wage_factors, scenario)
+    gdf_here, employed_results, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0, income_levels, wage_factors, scenario)
         
-        car_use_data = (gdf_here["share_car"] * gdf_here["pop"])
-        car_use_estimated = np.sum((1 - gdf_here[f"transport_mode_{lvl}"]) * gdf_here[f"pop_{lvl}"] for lvl in income_levels)
-        error_mode_by_tract = np.nansum(np.abs(car_use_estimated - car_use_data))
-        print(f"x = {x}")
-        print(f"error_mode_by_tract = {error_mode_by_tract}")
+    car_use_data = (gdf_here["share_car"] * gdf_here["pop"])
+    car_use_estimated = np.sum((1 - gdf_here[f"transport_mode_{lvl}"]) * gdf_here[f"pop_{lvl}"] for lvl in income_levels)
+    error_mode_by_tract = np.nansum(np.abs(car_use_estimated - car_use_data))
+    print(f"x = {x}")
+    print(f"error_mode_by_tract = {error_mode_by_tract}")
 
-        gdf_valid = gdf_here.dropna(subset=["share_car"])
-        error_mode_AMB = np.abs(np.nansum(np.sum((1 - gdf_valid[f"transport_mode_{lvl}"]) * gdf_valid[f"pop_{lvl}"] for lvl in income_levels)) - np.nansum(gdf_valid["share_car"] * gdf_valid["pop"]))
-        print(f"error_mode_AMB = {error_mode_AMB}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
+    gdf_valid = gdf_here.dropna(subset=["share_car"])
+    error_mode_AMB = np.abs(np.nansum(np.sum((1 - gdf_valid[f"transport_mode_{lvl}"]) * gdf_valid[f"pop_{lvl}"] for lvl in income_levels)) - np.nansum(gdf_valid["share_car"] * gdf_valid["pop"]))
+    print(f"error_mode_AMB = {error_mode_AMB}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
         
-        employed_results = employed_results.merge(employment_centers, left_index = True, right_on = "cluster")
-        error_employment = np.nansum(np.abs(employed_results[[f"employed_{lvl}" for lvl in income_levels]].sum(axis=1) - employed_results["employment"])) / 2
-        print(f"error_employment = {error_employment}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
+    employed_results = employed_results.merge(employment_centers, left_index = True, right_on = "cluster")
+    error_employment = np.nansum(np.abs(employed_results[[f"employed_{lvl}" for lvl in income_levels]].sum(axis=1) - employed_results["employment"])) / 2
+    print(f"error_employment = {error_employment}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
         
-        error_wage = 0
-        for lvl in income_levels:
-            estimated_wage = np.nansum(gdf_here[f"pop_{lvl}"] * gdf_here[f"wage_{lvl}"]) / np.nansum(gdf_here[f"pop_{lvl}"])
-            print(f"estimated_wage_{lvl}", estimated_wage)
-            error_wage += np.abs(Y_median * wage_factors[lvl] - estimated_wage) * np.nansum(gdf_here[f"pop_{lvl}"])
-        error_wage /= np.nansum([gdf_here[f"pop_{lvl}"] for lvl in income_levels])
-        print(f"error_wage = {error_wage}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
+    error_wage = 0
+    for lvl in income_levels:
+        estimated_wage = np.nansum(gdf_here[f"pop_{lvl}"] * gdf_here[f"wage_{lvl}"]) / np.nansum(gdf_here[f"pop_{lvl}"])
+        print(f"estimated_wage_{lvl}", estimated_wage)
+        error_wage += np.abs(Y_median * wage_factors[lvl] - estimated_wage) * np.nansum(gdf_here[f"pop_{lvl}"])
+    error_wage /= np.nansum([gdf_here[f"pop_{lvl}"] for lvl in income_levels])
+    print(f"error_wage = {error_wage}") #Error on transport mode by census tract = {error2}") #Error on transport mode at AMB level
         
-        estimated_wage_spatial = sum(gdf_here[f"pop_{lvl}"] * gdf_here[f"wage_{lvl}"] for lvl in income_levels) / \
-                                 sum([gdf_here[f"pop_{lvl}"] for lvl in income_levels])
-        error_spatial_wage = np.nansum(gdf["pop"] * np.abs(estimated_wage_spatial - gdf["net_income_median"])) / np.nansum(gdf["pop"])
-        print(f"error_spatial_wage = {error_spatial_wage}")
+    estimated_wage_spatial = sum(gdf_here[f"pop_{lvl}"] * gdf_here[f"wage_{lvl}"] for lvl in income_levels) / \
+        sum([gdf_here[f"pop_{lvl}"] for lvl in income_levels])
+    error_spatial_wage = np.nansum(gdf["pop"] * np.abs(estimated_wage_spatial - gdf["net_income_median"])) / np.nansum(gdf["pop"])
+    print(f"error_spatial_wage = {error_spatial_wage}")
         
-        return (error_mode_by_tract + error_mode_AMB + error_employment + error_wage + error_spatial_wage)
+    return (error_mode_by_tract + error_mode_AMB + error_employment + error_wage + error_spatial_wage)
 
-    init_wage = np.array([3126, 2905, 3040, 2976, 2903, 2979]) #, 2869]) #, 3005])
+
+def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario, compute_error_transport_poly):
+    """ Calibrate the fixed cost of private car to match the transport modes data """
+
+    init_wage = np.array([3126, 2905, 3040, 2976, 2903, 2979, 2869]) #, 3005])
     init_wage = init_wage * Y_median / np.nanmean(init_wage)
     x0 = [200, 250] + (init_wage * 0.6).tolist() + (init_wage).tolist() + (init_wage * 1.4).tolist()
     bounds = [(0, 300), (0, 400)] + [(0, 10000)] * 3 * len(np.unique(employment_centers.cluster))
-    solving_transport = scipy.optimize.minimize(compute_error_transport_poly, x0=x0, method='L-BFGS-B', bounds=bounds)
+    
+    def compute_error_transport_poly_here(x):
+        return compute_error_transport_poly(x, employment_centers, gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario, Y_median, import_trans_mode, path_data)
+    
+    solving_transport = scipy.optimize.minimize(compute_error_transport_poly_here, x0=x0, method='L-BFGS-B', bounds=bounds)
     FIXED_COST_CAR = solving_transport.x[0]
     LAMBDA = solving_transport.x[1]
     n_centers = len(employment_centers)

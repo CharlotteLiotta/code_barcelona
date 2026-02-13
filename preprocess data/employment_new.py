@@ -98,7 +98,7 @@ plt.show()
 # STEP 2: Find CBD (unchanged)
 # ============================================================
 
-#gdf["centroid"] = gdf.geometry.centroid
+gdf["centroid"] = gdf.geometry.centroid
 gdf["x"] = gdf.centroid.x
 gdf["y"] = gdf.centroid.y
 gdf.fillna({"employment": 0}, inplace=True)
@@ -108,11 +108,11 @@ y_cbd = np.average(gdf["y"], weights=gdf["employment"])
 
 
 CBD = Point(x_cbd, y_cbd)
-#lon, lat = 2.170047, 41.387016 #placa catalunya
-#from pyproj import Transformer
-#transformer = Transformer.from_crs("EPSG:4326", "EPSG:25830", always_xy=True)
-#CBD = Point(transformer.transform(lon, lat))
-#print(f"CBD coordinates: ({x_cbd:.3f}, {y_cbd:.3f})")
+lon, lat = 2.170047, 41.387016 #placa catalunya
+from pyproj import Transformer
+transformer = Transformer.from_crs("EPSG:4326", "EPSG:25830", always_xy=True)
+CBD = Point(transformer.transform(lon, lat))
+print(f"CBD coordinates: ({x_cbd:.3f}, {y_cbd:.3f})")
 
 gdf["dist_cbd"] = gdf.centroid.distance(CBD)
 
@@ -137,7 +137,7 @@ gdf["residual"] = gdf["ln_density"] - gdf["fitted_ln_density"]
 
 threshold = np.percentile(gdf["residual"], 85)   # try 85% or 90%
 gdf["candidate"] = gdf["residual"] >= threshold
-gdf.loc[gdf.dist_km < 1.5, "candidate"] = False
+gdf.loc[gdf.dist_km < 1.5, "candidate"] = False #1.5
 
 # --- Step 3.5: Cluster adjacent high-residual tracts (DBSCAN)
 candidate_coords = np.vstack([gdf.loc[gdf["candidate"], "x"], gdf.loc[gdf["candidate"], "y"]]).T
@@ -220,7 +220,7 @@ true_subcenters = pd.concat([true_subcenters, cbd_df], ignore_index=True)
 #merged = gpd.GeoDataFrame(geometry=merged, crs=gdf.crs).reset_index(drop=True)
 
 # --- Identify tracts belonging to a subcenter (within 1 km of a cluster centroid)
-buffer_radius = 1000  # meters
+buffer_radius = 750  # meters
 gdf["subcenter"] = False
 
 for _, row in true_subcenters.iterrows():
@@ -347,4 +347,4 @@ ax.legend(fontsize=12)
 
 
 allocation_plot["employment_cluster"] = allocation_plot["total_jobs"] * np.nansum(gdf["pop"]) / np.nansum(allocation_plot["total_jobs"])
-allocation_plot.loc[:,["geometry", "employment_cluster"]].to_file(path_data + "cluster_employment_new.shp")
+allocation_plot.loc[:,["geometry", "employment_cluster"]].to_file(path_data + "cluster_employment_catalunya.shp")

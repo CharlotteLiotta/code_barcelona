@@ -2,6 +2,7 @@ import geopandas as gpd # type: ignore
 import pandas as pd
 
 from import_data import *
+from plotting_tools import *
 
 path_data = "../data_barcelona/"
 center = "0801901025"
@@ -16,6 +17,37 @@ categories = gpd.read_file(path_data + "cobertes-sol-v1r0-2023.gpkg", layer="cob
 gdf = import_data(path_data, center, option = "SECTION")
 
 land_cover = land_cover.to_crs(gdf.crs)
+
+land_cover_plot = gpd.clip(land_cover, gdf)
+
+land_cover_plot["recat"] = ""
+land_cover_plot["recat"].loc[land_cover_plot["nivell_2"].isin([111,112,113,114,115,116])] = "Agricultural areas"
+land_cover_plot["recat"].loc[land_cover_plot["nivell_2"].isin([221,222,223,224,225,226,227,228,229])] = "Woodlands and other natural areas"
+land_cover_plot["recat"].loc[land_cover_plot["nivell_2"].isin([230,231,232,233,234])] = "Others"
+land_cover_plot["recat"].loc[land_cover_plot["nivell_2"].isin([341,342,343,344,345,346,347,348,349,350,351,352,352,353, 354,355])] = "Developed land"
+land_cover_plot["recat"].loc[land_cover_plot["nivell_2"].isin([461,462,463,464,465,466])] = "Water"
+
+# define colors in the order of categories
+categories = land_cover_plot["recat"].astype("category")
+cats = categories.cat.categories
+
+color_dict = {
+    "Developed land": "#d67c27",
+    "Woodlands and other natural areas": "#3fb86b",
+    "Water": "#4575b4",
+    "Agricultural areas": "#fee08b",
+    "Others": "#B0A78E"
+}
+
+new_color_dict = {}
+for cat, hex_color in color_dict.items():
+    rgba = mcolors.to_rgba(hex_color)  # convert hex to RGBA tuple (0-1)
+    if cat == "Water":
+        new_color_dict[cat] = rgba        # keep original alpha = 1
+    else:
+        new_color_dict[cat] = rgba[:3] + (0.6,)  # set alpha = 0.6
+
+plot_base_map_with_land_cover(gdf, land_cover_plot, new_color_dict)
 
 # Spatial intersection
 intersection = gpd.overlay(land_cover, gdf, how='intersection')

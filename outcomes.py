@@ -2,6 +2,25 @@ import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 from numba import njit, prange # type: ignore
 
+def relative_change_outputs(save_emissions, qol_in_zone, qol_out_zone, save_utility, compute_relative_change, compute_change_in_welfare, MAX_YEAR):
+    
+    emission_change = np.empty(MAX_YEAR)
+    change_qol_in_zone = np.empty(MAX_YEAR)
+    change_qol_out_zone = np.empty(MAX_YEAR)
+    utility_change_low = np.empty(MAX_YEAR)
+    utility_change_med = np.empty(MAX_YEAR)
+    utility_change_high = np.empty(MAX_YEAR)
+
+    for i in range(MAX_YEAR):
+        emission_change[i] = np.nanmedian(compute_relative_change(save_emissions[0], save_emissions[i]))
+        change_qol_in_zone[i] = np.nanmean(compute_relative_change(qol_in_zone[0], qol_in_zone[i]))
+        change_qol_out_zone[i] = np.nanmean(compute_relative_change(qol_out_zone[0], qol_out_zone[i]))
+        utility_change_low[i] = np.nanmedian(compute_change_in_welfare(save_utility["LOW"][:, 0], save_utility["LOW"][:, i]))
+        utility_change_med[i] = np.nanmedian(compute_change_in_welfare(save_utility["MED"][:, 0], save_utility["MED"][:, i]))
+        utility_change_high[i] = np.nanmedian(compute_change_in_welfare(save_utility["HIGH"][:, 0], save_utility["HIGH"][:, i]))
+
+    return emission_change, change_qol_in_zone, change_qol_out_zone, utility_change_low, utility_change_med, utility_change_high
+
 def compute_utility_manually(Y, T, q, R, BETA, amenities):
     """ Compute agents' utility """
     
@@ -53,6 +72,7 @@ def compute_relative_change(outcome_without_tax, outcome_with_tax):
 
     return 100 * (outcome_with_tax - outcome_without_tax) / outcome_without_tax
 
+
 def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax, WORKING_DAYS, discount, SCALE_ABM):
     
     for lvl in income_levels:
@@ -63,6 +83,7 @@ def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_
         * travel_matrix[f"proba_center_{lvl}"]
         * (1 - travel_matrix[f"transport_mode_{lvl}"])
         )
+
         distance_emi = travel_matrix.groupby("from_id", observed=True)[f"distance_emi_{lvl}"].sum()
         if f"distance_emi_{lvl}" in gdf.columns:
             gdf = gdf.drop(columns = f"distance_emi_{lvl}")
@@ -127,11 +148,12 @@ def compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_
         
     emissions = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"emissions_{lvl}"] for lvl in income_levels))
     total_vkm = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"distance_emi_{lvl}"] for lvl in income_levels))
+    total_vkm_lvl = {inc: np.nansum(np.nansum(indiv_loc_matrix[inc], axis=0) * gdf[f"distance_emi_{inc}"]) for inc in income_levels}
     tax_revenues = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"tax_revenues_{lvl}"] for lvl in income_levels)) * tax * WORKING_DAYS * 12 * (1/SCALE_ABM)
     subvention = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"subvention_{lvl}"] for lvl in income_levels)) * discount * 12 * (1/SCALE_ABM)
     transit_users = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"transit_{lvl}"] for lvl in income_levels)) * (1/SCALE_ABM)
 
-    return emissions, total_vkm, tax_revenues, subvention, transit_users
+    return emissions, total_vkm, tax_revenues, subvention, transit_users, total_vkm_lvl
 
 def compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, clusters_in_zone, house_in_zone):
     
@@ -164,7 +186,6 @@ def compute_nb_trips(indiv_loc_matrix, gdf, travel_matrix, income_levels, cluste
     ].sum(skipna=True)
     
     return car_users_working_in_zone, car_users_living_or_working_in_zone
-
 
 def compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels):
     
@@ -221,6 +242,7 @@ def compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels):
     qol_out_zone = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"qol_out_zone{lvl}"] for lvl in income_levels))
     vkm_in_zone = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"distance_in_zone_{lvl}"] for lvl in income_levels))
     vkm_out_zone = np.nansum(sum(np.nansum(indiv_loc_matrix[lvl], 0) * gdf[f"distance_out_zone_{lvl}"] for lvl in income_levels))
-
-    return qol_in_zone, qol_out_zone, vkm_in_zone, vkm_out_zone
-
+    vkm_in_zone_lvl = {inc: np.nansum(np.nansum(indiv_loc_matrix[inc], axis=0) * gdf[f"distance_in_zone_{inc}"]) for inc in income_levels}
+    vkm_out_zone_lvl = {inc: np.nansum(np.nansum(indiv_loc_matrix[inc], axis=0) * gdf[f"distance_out_zone_{inc}"]) for inc in income_levels}
+    
+    return qol_in_zone, qol_out_zone, vkm_in_zone, vkm_out_zone, vkm_in_zone_lvl, vkm_out_zone_lvl

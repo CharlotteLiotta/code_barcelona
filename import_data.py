@@ -543,22 +543,45 @@ def import_parcs(gdf, path_data):
     parcs_combined = pd.concat([parcs["geometry"], parcs2["geometry"]])
     parcs_combined = gpd.GeoDataFrame(parcs_combined, geometry="geometry", crs=parcs.crs)
 
-    parcs_combined = gpd.GeoDataFrame(
+    parcs_2h = parcs.loc[parcs.area_ha > 2, :]
+    parcs_5h = parcs.loc[parcs.area_ha > 5, :]
+
+    parcs_combined_2h = gpd.GeoDataFrame(
         geometry=pd.concat([parcs.loc[parcs.area_ha > 2, "geometry"], parcs2["geometry"]]),
         crs=parcs.crs
     )
 
-    gdf['min_distance_parc_combined'] = gdf.centroid.apply(lambda geom: parcs_combined.distance(geom).min())
+    parcs_combined_5h = gpd.GeoDataFrame(
+        geometry=pd.concat([parcs.loc[parcs.area_ha > 5, "geometry"], parcs2["geometry"]]),
+        crs=parcs.crs
+    )
 
-    gdf["parc_500m"] = (gdf['min_distance_parc_combined'] < 500) * 1
-    gdf["parc_500m_1km"] = ((gdf['min_distance_parc_combined'] < 1000) & (gdf['min_distance_parc_combined'] > 500)) * 1
-    gdf["parc_1km_2km"] = ((gdf['min_distance_parc_combined'] < 2000) & (gdf['min_distance_parc_combined'] > 1000)) * 1
+    gdf['min_distance_parc_combined_2h'] = gdf.centroid.apply(lambda geom: parcs_combined_2h.distance(geom).min())
+    gdf['min_distance_parc_combined_5h'] = gdf.centroid.apply(lambda geom: parcs_combined_5h.distance(geom).min())
+    gdf['min_distance_parc_2h'] = gdf.centroid.apply(lambda geom: parcs_2h.distance(geom).min())
+    gdf['min_distance_parc_5h'] = gdf.centroid.apply(lambda geom: parcs_5h.distance(geom).min())
+    
+    gdf["parc_combined_2h_500m"] = (gdf['min_distance_parc_combined_2h'] < 500) * 1
+    gdf["parc_combined_2h_500m_1km"] = ((gdf['min_distance_parc_combined_2h'] < 1000) & (gdf['min_distance_parc_combined_2h'] > 500)) * 1
+    gdf["parc_combined_2h_1km_2km"] = ((gdf['min_distance_parc_combined_2h'] < 2000) & (gdf['min_distance_parc_combined_2h'] > 1000)) * 1
 
-    gdf["parc_500m_b"] = gdf["parc_500m"] * gdf["barcelona"]
-    gdf["parc_500m_1km_b"] = gdf["parc_500m_1km"] * gdf["barcelona"]
-    gdf["parc_1km_2km_b"] = gdf["parc_1km_2km"] * gdf["barcelona"]
+    gdf["parc_combined_5h_500m"] = (gdf['min_distance_parc_combined_5h'] < 500) * 1
+    gdf["parc_combined_5h_500m_1km"] = ((gdf['min_distance_parc_combined_5h'] < 1000) & (gdf['min_distance_parc_combined_5h'] > 500)) * 1
+    gdf["parc_combined_5h_1km_2km"] = ((gdf['min_distance_parc_combined_5h'] < 2000) & (gdf['min_distance_parc_combined_5h'] > 1000)) * 1
 
-    return gdf.loc[:,["ID", 'min_distance_parc_combined', "parc_500m", "parc_500m_1km", "parc_1km_2km", "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b"]]
+    gdf["parc_2h_500m"] = (gdf['min_distance_parc_2h'] < 500) * 1
+    gdf["parc_2h_500m_1km"] = ((gdf['min_distance_parc_2h'] < 1000) & (gdf['min_distance_parc_2h'] > 500)) * 1
+    gdf["parc_2h_1km_2km"] = ((gdf['min_distance_parc_2h'] < 2000) & (gdf['min_distance_parc_2h'] > 1000)) * 1
+
+    gdf["parc_5h_500m"] = (gdf['min_distance_parc_5h'] < 500) * 1
+    gdf["parc_5h_500m_1km"] = ((gdf['min_distance_parc_5h'] < 1000) & (gdf['min_distance_parc_5h'] > 500)) * 1
+    gdf["parc_5h_1km_2km"] = ((gdf['min_distance_parc_5h'] < 2000) & (gdf['min_distance_parc_5h'] > 1000)) * 1
+
+    #gdf["parc_500m_b"] = gdf["parc_500m"] * gdf["barcelona"]
+    #gdf["parc_500m_1km_b"] = gdf["parc_500m_1km"] * gdf["barcelona"]
+    #gdf["parc_1km_2km_b"] = gdf["parc_1km_2km"] * gdf["barcelona"]
+
+    return gdf.loc[:,["ID", 'min_distance_parc_combined_2h', 'min_distance_parc_combined_5h', 'min_distance_parc_2h', 'min_distance_parc_5h', "parc_combined_2h_500m", "parc_combined_2h_500m_1km", "parc_combined_2h_1km_2km", "parc_combined_5h_500m", "parc_combined_5h_500m_1km", "parc_combined_5h_1km_2km", "parc_2h_500m", "parc_2h_500m_1km", "parc_2h_1km_2km", "parc_5h_500m", "parc_5h_500m_1km", "parc_5h_1km_2km"]]
 
 def import_stations(gdf, option = "sants_only"):
     """ Import the locations of the main train stations of Barcelona """
@@ -587,8 +610,7 @@ def import_stations(gdf, option = "sants_only"):
     else:
         station_geom = stations.geometry
 
-    gdf['min_distance_stations'] = gdf.centroid.distance(station_geom)
-
+    gdf["min_distance_stations"] = gdf.geometry.apply(lambda geom: station_geom.distance(geom).min())
     gdf["station_500m"] = (gdf['min_distance_stations'] < 500) * 1
     gdf["station_500m_1km"] = ((gdf['min_distance_stations'] < 1000) & (gdf['min_distance_stations'] > 500)) * 1
     gdf["station_1km_2km"] = ((gdf['min_distance_stations'] < 2000) & (gdf['min_distance_stations'] > 1000)) * 1
@@ -627,7 +649,7 @@ def import_touristic_areas(gdf, path_data):
     gdf["high_tourism"] = (gdf['index_tourism'] > 50) * 1
     gdf["medium_tourism"] = ((gdf['index_tourism'] < 50) & (gdf['index_tourism'] > 30)) * 1
 
-    return gdf.loc[:,["ID", "high_tourism", "medium_tourism"]]
+    return gdf.loc[:,["ID", "high_tourism", "medium_tourism", 'index_tourism']]
 
 def import_activity(gdf, path_data):
     """ Import data about activity from Barcelona """
@@ -768,7 +790,7 @@ def import_amenities(gdf, path_data, option_load, option_save):
 
         data_amenity = import_beach(gdf, path_data)
         data_amenity = data_amenity.merge(import_parcs(gdf, path_data), on = "ID", how = "left")
-        data_amenity = data_amenity.merge(import_stations(gdf, option = "sants_only"), on = "ID", how = "left")
+        data_amenity = data_amenity.merge(import_stations(gdf, option = "all"), on = "ID", how = "left")
         data_amenity = data_amenity.merge(import_airport(gdf), on = "ID", how = "left")
         data_amenity = data_amenity.merge(import_touristic_areas(gdf, path_data), on = "ID", how = "left")
         data_amenity = data_amenity.merge(import_activity(gdf, path_data), on = "ID", how = "left")
