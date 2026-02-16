@@ -38,7 +38,7 @@ LOGISTIC_PARAM_QOL = 0.3
 
 #Time
 year = 0
-MAX_YEAR = 20
+MAX_YEAR = 50
 
 #Policy impact model
 INTEREST_RATE = 0.05
@@ -48,6 +48,7 @@ PRICE_FUEL = 0.11 #euros/km
 center = "0801901025"
 SOFT_RENT = 50
 DIFF_SPEED_CONGESTION = 10
+
 
 #ABM
 SCALE_ABM = 1/100 #Nb of agents in the ABM
@@ -86,7 +87,7 @@ gdf.loc[np.isnan(gdf["rent_m2"]), "rent_m2"] = np.nanmin(gdf.loc[gdf["rent_m2"]>
 gdf.loc[np.isnan(gdf["size"]), "size"] = np.nansum(gdf.loc[~np.isnan(gdf["size"]), "size"] * gdf.loc[~np.isnan(gdf["size"]), "pop"]) / np.nansum(gdf.loc[~np.isnan(gdf["size"]), "pop"])
 
 #Import transport data
-#import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
+import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
 travel_time_matrix_car, travel_time_matrix_transit = load_transport_times_poly(gdf, path_data, center)
 travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers, jobs_in_toll_area, houses_in_toll_area, zone_tax)
 gdf = import_cost_transit(gdf)
@@ -118,9 +119,9 @@ mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
 B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
 
 #Transport cost calibration
-#gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario, compute_error_transport_poly)
-#with open(path_data + "calib_trans_poly_i_test1.pkl", "wb") as f: #UEA_v2
-#    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
+gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario, compute_error_transport_poly)
+with open(path_data + "calib_trans_poly_i_test1.pkl", "wb") as f: #UEA_v2
+    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
 with open(path_data + "calib_trans_poly_i_UEA_v2.pkl", "rb") as f:
     FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
 print("FIXED_COST_CAR: ", FIXED_COST_CAR)
@@ -140,12 +141,13 @@ plot_employment(gdf, employment_centers, employment_centers['employment'] * 0.00
 
 gdf["rodalies_500m_1km"] = ((gdf["min_distance_rodalies"] > 500) & (gdf["min_distance_rodalies"] < 1000)) * 1
 gdf["fgc_500m_1km"] = ((gdf["min_distance_fgc"] > 500) & (gdf["min_distance_fgc"] < 1000)) * 1
+
 #Calibrate beta and amenities
 def compute_log_likelihood(x):
     print(x)
     return calibration_utility_amenity2(x, gdf, income_levels, SOFT_RENT, 0, 0)
 
-calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.3, 224, 386, 553], bounds=[(0.2,0.7), (0,None), (0,None), (0,None)]) #[0.45, 100, 500, 900] #[0.3, 224, 386, 553]
+calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.3, 224, 386, 553], bounds=[(0.2,0.5), (0,None), (0,None), (0,None)]) #[0.45, 100, 500, 900] #[0.3, 224, 386, 553]
 BETA = calib_beta.x[0]
 print("BETA:", BETA)
 #gdf = gdf.drop(columns = "amenities")
@@ -159,7 +161,7 @@ def compute_error_in_population_from_utility(u):
 
     return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function)
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [130, 250, 380], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800]) #[180, 420, 600]
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [100, 300, 500], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800]) #[180, 420, 600]
 
 if solving_model.fun < 1:
     R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
@@ -450,9 +452,19 @@ while year < MAX_YEAR:
             #    (housing_without_inertia * SCALE_ABM * w[lvl]).to_numpy()
             #    )
 
+            #proba_from, proba_to = compute_proba_of_moving(
+            #    np.nansum(indiv_loc_matrix[lvl], 0), #save_housing[lvl][:, year - 1],
+            #    (n_group[lvl] * SCALE_ABM).to_numpy() #(n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
+            #    )
+            
+            #proba_from, proba_to = compute_proba_of_moving(
+            #    np.nansum(indiv_loc_matrix[lvl], 0), #save_housing[lvl][:, year - 1],
+            #    (n_group[lvl] * SCALE_ABM).to_numpy() #(n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
+            #    )
+            
             proba_from, proba_to = compute_proba_of_moving(
-                np.nansum(indiv_loc_matrix[lvl], 0), #save_housing[lvl][:, year - 1],
-                (n_group[lvl] * SCALE_ABM).to_numpy() #(n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
+                save_housing[lvl][:, year - 1],
+                (n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
                 )
     
             indiv_loc_matrix_new[lvl] = deepcopy(indiv_loc_matrix[lvl])
@@ -490,8 +502,8 @@ while year < MAX_YEAR:
         #    )
         
         proba_from, proba_to = compute_proba_of_moving(
-            np.nansum(indiv_loc_matrix[lvl], 0), #save_housing[lvl][:, year - 1],
-            (n_group[lvl] * SCALE_ABM).to_numpy() #(n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
+            save_housing[lvl][:, year - 1],
+            (n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
             )
     
         indiv_loc_matrix_new[lvl] = deepcopy(indiv_loc_matrix[lvl])

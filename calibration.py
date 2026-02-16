@@ -23,7 +23,7 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
 
     estimated_A = {}
     for lvl in income_levels:
-        estimated_A[lvl] = np.clip(U[lvl] / (factor * (wage_minus_tc[lvl] / gdf["rent_m2"])), 1e-12, None)
+        estimated_A[lvl] = np.clip(U[lvl] / (factor * (wage_minus_tc[lvl] / (gdf["rent_m2"]**BETA))), 1e-12, None)
 
     gdf["log_A"] = np.log(sum(w[lvl] * estimated_A[lvl] for lvl in income_levels))
 
@@ -35,17 +35,27 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
     #                     "station_500m", "station_500m_1km", "station_1km_2km",
     ##                     "airport_500m", "high_tourism", 'mean_activity',
     #                     'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
-    X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
-                         #'parc_2h_500m','parc_2h_500m_1km',
-                         "station_500m", "station_500m_1km", #"station_1km_2km",
-                         'fgc_500m', 'rodalies_500m', #'rodalies_500m_1km', 'fgc_500m_1km',
-                         "airport_500m",
-                         "high_tourism", #"high_tourism", "medium_tourism",
-                         'mean_activity',
-                         'pedestrian_density',
-                         #'slope_20',
-                         ]]
+    #X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
+    #                     #'parc_2h_500m','parc_2h_500m_1km',
+    #                     "station_500m", "station_500m_1km", #"station_1km_2km",
+    #                     'fgc_500m', 'rodalies_500m', #'rodalies_500m_1km', 'fgc_500m_1km',
+    #                     "airport_500m",
+    #                     "high_tourism", #"high_tourism", "medium_tourism",
+    #                     'mean_activity',
+    #                     'pedestrian_density',
+    #                     #'slope_20',
+    #                     ]]
     
+    
+    X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
+                         'parc_2h_500m','parc_2h_500m_1km',
+                         "station_500m", "station_500m_1km", 
+                         'fgc_500m', 'rodalies_500m', 'rodalies_500m_1km', 'fgc_500m_1km',
+                         "airport_500m",
+                         "index_tourism", #"index_tourism",
+                         'mean_activity',
+                         'pedestrian_data_density',#'pedestrian_data_density',
+                         ]]
     
     X = sm.add_constant(X)
     model = sm.OLS(y, X).fit()
@@ -114,7 +124,7 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
         print("log_L_size:", log_L_size)
         print("log_sorting:", log_sorting)
         # Final log-likelihood (maximize sum of log-likelihoods and sorting)
-        return - (log_L_A + log_L_size)# + log_sorting)
+        return - (log_L_A + log_L_size) #+ log_sorting)# + log_sorting)
 
 def calibration_utility_amenity2(x, gdf, income_levels, alpha, print_summary=0, export_amenities=0):
     """Calibrate BETA and U_LOW/MED/HIGH by minimizing likelihood with numerical stabilization."""
@@ -154,9 +164,9 @@ def calibration_utility_amenity2(x, gdf, income_levels, alpha, print_summary=0, 
                          "station_500m", "station_500m_1km", 
                          'fgc_500m', 'rodalies_500m', 'rodalies_500m_1km', 'fgc_500m_1km',
                          "airport_500m",
-                         "index_tourism",
+                         "high_tourism", #"index_tourism",
                          'mean_activity',
-                         'pedestrian_data_density',
+                         'pedestrian_data_density',#'pedestrian_data_density',
                          ]]
     
     #X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
@@ -257,7 +267,7 @@ def calibration_utility_amenity2(x, gdf, income_levels, alpha, print_summary=0, 
         print("scoreAmenities:", scoreAmenities)
         print("log_sorting:", log_sorting)
 
-        return -(scoreDwellingSize + scoreAmenities + log_sorting) #log_sorting scoreAmenities + 
+        return -(scoreDwellingSize + scoreAmenities) # + log_sorting)# + log_sorting) #log_sorting scoreAmenities + 
 
 def compute_cost_car(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, path_data):
     """ Calibrate the fixed cost of private car to match the transport modes data """
@@ -392,7 +402,7 @@ def compute_error_transport_poly(x, employment_centers, gdf, travel_time_matrix_
 def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario, compute_error_transport_poly):
     """ Calibrate the fixed cost of private car to match the transport modes data """
 
-    init_wage = np.array([3126, 2905, 3040, 2976, 2903, 2979, 2869]) #, 3005])
+    init_wage = np.array([3126, 2905, 3040, 2976, 2903, 2979, 2869, 3005])
     init_wage = init_wage * Y_median / np.nanmean(init_wage)
     x0 = [200, 250] + (init_wage * 0.6).tolist() + (init_wage).tolist() + (init_wage * 1.4).tolist()
     bounds = [(0, 300), (0, 400)] + [(0, 10000)] * 3 * len(np.unique(employment_centers.cluster))
