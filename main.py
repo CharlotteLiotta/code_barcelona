@@ -201,7 +201,7 @@ solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility
 if solving_model.fun < 500000:
 
     R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
-
+    housing_t0 = n * q
     R = R * np.exp(rent_residual)
     q = q * np.exp(size_residual)
     #n_group = {lvl: n * w[lvl] * np.exp(density_residual[lvl]) for lvl in ["LOW", "MED", "HIGH"]}
@@ -442,6 +442,7 @@ score_welfare = {"LOW": INITIAL_WELFARE, "MED": INITIAL_WELFARE, "HIGH": INITIAL
 #support = {lvl: INITIAL_OPINION * np.ones(N[lvl]) for lvl in income_levels}
 support = {lvl: INITIAL_OPINION * np.ones(len(gdf)) for lvl in income_levels}
 
+
 ### MODELING THE PSC
 
 while year < MAX_YEAR:
@@ -499,7 +500,7 @@ while year < MAX_YEAR:
         if solving_model.fun < 500000:
 
             R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
-
+            housing_without_inertia = n * q
             R = R * np.exp(rent_residual)
             q = q * np.exp(size_residual)
             n_group = {lvl: n * w[lvl] * np.exp(density_residual) for lvl in ["LOW", "MED", "HIGH"]}
@@ -510,9 +511,43 @@ while year < MAX_YEAR:
 
         else:
             raise ValueError("Minimization failed!")
+        
+        
+        
+        def compute_housing_supply(housing_supply_t1_without_inertia, housing_supply_t0, TIME_LAG, DEPRECIATION_TIME):
+            diff_housing = ((housing_supply_t1_without_inertia - housing_supply_t0) / TIME_LAG) - (housing_supply_t0 / DEPRECIATION_TIME)
+            for i in range(0, len(housing_supply_t1_without_inertia)):
+                if housing_supply_t1_without_inertia[i] <= housing_supply_t0[i]:
+                    diff_housing[i] = - (housing_supply_t0[i] / DEPRECIATION_TIME)
 
-        #housing_without_inertia = n * q
+            housing_supply_t1 = housing_supply_t0 + diff_housing
+            return housing_supply_t1
+    
+        housing_supply_t1 = compute_housing_supply(housing_without_inertia, housing_t0, 3, 100)
 
+        def compute_error_in_population_from_utility(u):
+            """ Compute error in population associated to utility u"""
+
+            error_population = sum((compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual, option_housing_supply = True, housing_supply = housing_supply_t1)) ** 2)
+            return error_population
+
+        #solving_model = scipy.optimize.root(compute_error_in_population_from_utility, solving_model.x, method = "hybr")
+        solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method="Nelder-Mead", options={"maxiter": 500})
+
+        if solving_model.fun < 500000:
+
+            R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function, option_housing_supply = True, housing_supply = housing_supply_t1)
+            housing_t0_new = n * q
+            R = R * np.exp(rent_residual)
+            q = q * np.exp(size_residual)
+            n_group = {lvl: n * w[lvl] * np.exp(density_residual) for lvl in ["LOW", "MED", "HIGH"]}
+            n = np.nansum(list(n_group.values()), axis=0)
+            n[np.isnan(n)] = 0
+            for lvl in income_levels:
+                n_group[lvl][np.isnan(n_group[lvl])] = 0
+
+        else:
+            raise ValueError("Minimization failed!")
         # AMB
         #has_moved = {}
         #indiv_loc_matrix_new = {}
@@ -560,7 +595,7 @@ while year < MAX_YEAR:
             condition = (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 1) | (np.abs(efficiency - 73)> 0.1)
         else:
             print("TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT", TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT)
-            condition = (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 10)
+            condition = (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 20)
 
 
     
@@ -616,6 +651,7 @@ while year < MAX_YEAR:
         # Compute individual housing
     #    housing_indiv[lvl] = dwelling_size_indiv[lvl] @ csr_matrix(indiv_loc_matrix[lvl])
     
+    housing_t0 = housing_t0_new
     # Compute utility
     for lvl in income_levels:
         utility[lvl] = compute_utility_manually(

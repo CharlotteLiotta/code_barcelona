@@ -141,7 +141,7 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
 def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
                                 transport_cost_LOW, transport_cost_MED, transport_cost_HIGH,
                                 B, KAPPA, SIGMA, RHO,L, alpha, option_resid,
-                                option_function="CES", resid_rent=0, resid_density=0, resid_size=0):
+                                option_function="CES", resid_rent=0, resid_density=0, resid_size=0, option_housing_supply = False, housing_supply = 0):
     """
     Compute smooth squared error between model-estimated and observed populations
     given a trial utility vector u = [u_low, base_rent, u_high].
@@ -185,7 +185,10 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
     R = np.amax([R_LOW, R_MED, R_HIGH], 0)
     
     a = 1-B
-    h = KAPPA ** (1/a) * (B * R / RHO) ** (B/a) * L
+    if option_housing_supply == False:
+        h = KAPPA ** (1/a) * (B * R / RHO) ** (B/a) * L
+    elif option_housing_supply == True:
+        h = housing_supply
     #avg_wage = w_LOW * Y_LOW + w_MED * Y_MED + w_HIGH * Y_HIGH
     #avg_t_cost = w_LOW * transport_cost_LOW + w_MED * transport_cost_MED + w_HIGH * transport_cost_HIGH
 
@@ -303,7 +306,7 @@ def compute_population(b, kappa, sigma, R, rho, L, q, option_function = "CES"):
 def CES_func(x, kappa, a, sigma):
     return kappa * (a ** (-sigma / (1 - sigma))) * ((1 - ((1 - a) ** sigma) * ((kappa * x) ** (sigma - 1))) ** (sigma / (1 - sigma)))
 
-def compute_outcomes(utility, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, alpha, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function = "CES"):
+def compute_outcomes(utility, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, alpha, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function = "CES", option_housing_supply = False, housing_supply = 0):
 
 
     R_group = {
@@ -328,8 +331,11 @@ def compute_outcomes(utility, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, alpha, 
     #R = sum(w[lvl] * R_group[lvl] for lvl in income_levels)
     
     a = 1-B
-    h = KAPPA ** (1/a) * (B * R / INTEREST_RATE) ** (B/a) * gdf["urb_area"]
-
+    if option_housing_supply == False:
+        h = KAPPA ** (1/a) * (B * R / INTEREST_RATE) ** (B/a) * gdf["urb_area"]
+    elif option_housing_supply == True:
+        h = housing_supply
+        
     # --- Compute dwelling sizes ---
     q_group = {
         lvl: compute_dwelling_size(BETA, gdf[f"wage_{lvl}"], gdf[f"transport_cost_{lvl}"], R)
