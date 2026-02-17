@@ -39,7 +39,7 @@ LOGISTIC_PARAM_QOL = 0.3
 
 #Time
 year = 0
-MAX_YEAR = 50
+MAX_YEAR = 20
 
 #Policy impact model
 INTEREST_RATE = 0.05
@@ -52,9 +52,9 @@ DIFF_SPEED_CONGESTION = 10
 
 
 #ABM
-SCALE_ABM = 1/100 #Nb of agents in the ABM
-PROBA_MOVE = 1 #0.2
-INERTIA_OPINION = 0.8 #inertia
+#SCALE_ABM = 1/100 #Nb of agents in the ABM
+#PROBA_MOVE = 1 #0.2
+#INERTIA_OPINION = 0.8 #inertia
 
 ### IMPORT DATA
 
@@ -151,7 +151,7 @@ def compute_log_likelihood(x):
 calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.3, 224, 386, 553], bounds=[(0.2,0.5), (0,None), (0,None), (0,None)]) #[0.45, 100, 500, 900] #[0.3, 224, 386, 553]
 BETA = calib_beta.x[0]
 print("BETA:", BETA)
-gdf = gdf.drop(columns = "amenities")
+#gdf = gdf.drop(columns = "amenities")
 amenities = calibration_utility_amenity2(calib_beta.x, gdf, income_levels, SOFT_RENT, 1, 1)
 gdf = gdf.merge(amenities, on = "ID", how = "left")
 gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1
@@ -159,24 +159,27 @@ gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1
 # Solve the model
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
+    #print("u", u)
+    #print("error", compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function))
+    return sum(compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function))
 
-    return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function)
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [161, 287, 411], bounds=[(0,None), (0,None), (0,None)], method = "Powell") #np.array([399,690,995]) np.array([370,690,800]) #[180, 420, 600]
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800]) #[180, 420, 600]
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [100, 300, 500], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800]) #[180, 420, 600]
-
-if solving_model.fun < 1:
+if solving_model.fun < 200000:
     R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
 else:
     raise ValueError("Minimization failed!")
 
-share_col = {"LOW": "share_low_income", "MED": None, "HIGH": "share_high_income"}
-density_residual = {
-    lvl: np.log(
-        (gdf["pop"] * (gdf[share_col[lvl]] / 100 if share_col[lvl] else (100 - gdf["share_low_income"] - gdf["share_high_income"]) / 100))
-        / (w[lvl] * n)
-    )
-    for lvl in income_levels
-}
+#share_col = {"LOW": "share_low_income", "MED": None, "HIGH": "share_high_income"}
+#density_residual = {
+#    lvl: np.log(
+#        (gdf["pop"] * (gdf[share_col[lvl]] / 100 if share_col[lvl] else (100 - gdf["share_low_income"] - gdf["share_high_income"]) / 100))
+#        / (w[lvl] * n)
+#    )
+#    for lvl in income_levels
+#}
+density_residual = np.log(gdf["pop"] / n)
 rent_residual = np.log(gdf["rent_m2"] / R)
 size_residual = np.log(gdf["size"] / q)
 
@@ -188,17 +191,20 @@ plot_line_charts(gdf, n, q, R)
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
+    return sum(compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual))
 
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Powell")
 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead")
 
-if solving_model.fun < 1:
+
+if solving_model.fun < 500000:
 
     R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
 
     R = R * np.exp(rent_residual)
     q = q * np.exp(size_residual)
-    n_group = {lvl: n * w[lvl] * np.exp(density_residual[lvl]) for lvl in ["LOW", "MED", "HIGH"]}
+    #n_group = {lvl: n * w[lvl] * np.exp(density_residual[lvl]) for lvl in ["LOW", "MED", "HIGH"]}
+    n_group = {lvl: n * w[lvl] * np.exp(density_residual) for lvl in ["LOW", "MED", "HIGH"]}
     n = np.nansum(list(n_group.values()), axis=0)
     n[np.isnan(n)] = 0
     for lvl in income_levels:
@@ -210,62 +216,94 @@ else:
 plot_line_charts(gdf, n, q, R)
 
 # ABM: translate outputs at the household level
-N = {lvl: round(pop[lvl] * SCALE_ABM) for lvl in income_levels}
-#support = {lvl: INITIAL_OPINION * np.ones(N[lvl]) for lvl in income_levels}
-indiv_loc_matrix = {
-    lvl: compute_indiv_loc_matrix2(
-        N[lvl], len(gdf), (n_group[lvl] * SCALE_ABM).to_numpy()
-    )
-    for lvl in income_levels
-}
+#N = {lvl: round(pop[lvl] * SCALE_ABM) for lvl in income_levels}
+#indiv_loc_matrix = {
+#    lvl: compute_indiv_loc_matrix2(
+#        N[lvl], len(gdf), (n_group[lvl] * SCALE_ABM).to_numpy()
+#    )
+#    for lvl in income_levels
+#}
 
-rent_indiv = {lvl: indiv_loc_matrix[lvl] @ R_group[lvl].to_numpy() for lvl in income_levels}
-dwelling_size_indiv = {lvl: indiv_loc_matrix[lvl] @ q_group[lvl] for lvl in income_levels}
+#rent_indiv = {lvl: indiv_loc_matrix[lvl] @ R_group[lvl].to_numpy() for lvl in income_levels}
+#dwelling_size_indiv = {lvl: indiv_loc_matrix[lvl] @ q_group[lvl] for lvl in income_levels}
 
 utility = {}
 
 for lvl in income_levels:
     u = compute_utility_manually(
-        indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"],
-        indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
-        dwelling_size_indiv[lvl],
-        rent_indiv[lvl],
-        BETA, indiv_loc_matrix[lvl] @ gdf["amenities"]
+        gdf[f"wage_{lvl}"],
+        gdf[f"transport_cost_{lvl}"],
+        q_group[lvl],
+        R_group[lvl],
+        BETA, gdf["amenities"]
     )
     u[np.isnan(u)] = 0
     utility[lvl] = u
 
-housing_indiv = {
-    lvl: dwelling_size_indiv[lvl] @ csr_matrix(indiv_loc_matrix[lvl])
-    for lvl in income_levels
-}
+#for lvl in income_levels:
+#    u = compute_utility_manually(
+#        indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"],
+#        indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
+#        dwelling_size_indiv[lvl],
+#        rent_indiv[lvl],
+#        BETA, indiv_loc_matrix[lvl] @ gdf["amenities"]
+#    )
+#    u[np.isnan(u)] = 0
+#    utility[lvl] = u
+
+#housing_indiv = {
+#    lvl: dwelling_size_indiv[lvl] @ csr_matrix(indiv_loc_matrix[lvl])
+#    for lvl in income_levels
+#}
 
 # Save outputs
+#save_housing = {lvl: np.zeros((len(gdf), MAX_YEAR)) for lvl in income_levels}
+#save_rent = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
+#save_dwelling_size = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
+#save_transport_mode = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
+#save_utility = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
+
+#for lvl in income_levels:
+#    save_housing[lvl][:, 0] = deepcopy(housing_indiv[lvl])
+#    save_rent[lvl][:, 0] = deepcopy(rent_indiv[lvl])
+#    save_dwelling_size[lvl][:, 0] = deepcopy(dwelling_size_indiv[lvl])
+#    save_transport_mode[lvl][:, 0] = deepcopy(indiv_loc_matrix[lvl] @ gdf[f"transport_mode_{lvl}"])
+#    save_utility[lvl][:, 0] = deepcopy(utility[lvl])
+
 save_housing = {lvl: np.zeros((len(gdf), MAX_YEAR)) for lvl in income_levels}
-save_rent = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
-save_dwelling_size = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
-save_transport_mode = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
-save_utility = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
+save_rent = {lvl: np.zeros((len(gdf), MAX_YEAR)) for lvl in income_levels}
+save_dwelling_size = {lvl: np.zeros((len(gdf), MAX_YEAR)) for lvl in income_levels}
+save_transport_mode = {lvl: np.zeros((len(gdf), MAX_YEAR)) for lvl in income_levels}
+save_utility = {lvl: np.zeros((len(gdf), MAX_YEAR)) for lvl in income_levels}
+
 
 for lvl in income_levels:
-    save_housing[lvl][:, 0] = deepcopy(housing_indiv[lvl])
-    save_rent[lvl][:, 0] = deepcopy(rent_indiv[lvl])
-    save_dwelling_size[lvl][:, 0] = deepcopy(dwelling_size_indiv[lvl])
-    save_transport_mode[lvl][:, 0] = deepcopy(indiv_loc_matrix[lvl] @ gdf[f"transport_mode_{lvl}"])
+    save_housing[lvl][:, 0] = deepcopy(n_group[lvl] * q_group[lvl])
+    save_rent[lvl][:, 0] = deepcopy(R_group[lvl])
+    save_dwelling_size[lvl][:, 0] = deepcopy(q_group[lvl])
+    save_transport_mode[lvl][:, 0] = deepcopy(gdf[f"transport_mode_{lvl}"])
     save_utility[lvl][:, 0] = deepcopy(utility[lvl])
 
+
 save_population = np.zeros((len(gdf), MAX_YEAR))
-save_population[:, 0] = np.sum([np.nansum(indiv_loc_matrix[lvl], 0) for lvl in income_levels], axis=0)
+#save_population[:, 0] = np.sum([np.nansum(indiv_loc_matrix[lvl], 0) for lvl in income_levels], axis=0)
+save_population[:, 0] = np.sum([n_group[lvl] for lvl in income_levels], axis=0)
 save_population_lvl = {lvl: np.zeros((len(gdf), MAX_YEAR)) for lvl in income_levels}
+#for lvl in income_levels:
+#    save_population_lvl[lvl][:, 0] = np.nansum(indiv_loc_matrix[lvl], 0)
 for lvl in income_levels:
-    save_population_lvl[lvl][:, 0] = np.nansum(indiv_loc_matrix[lvl], 0)
+    save_population_lvl[lvl][:, 0] = n_group[lvl]
 
 save_tax = np.zeros(MAX_YEAR)
 save_tax[0] = 0
 save_emissions = np.zeros(MAX_YEAR)
-save_score_welfare = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
-save_score_qol = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
-save_score_congestion = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
+#save_score_welfare = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
+#save_score_qol = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
+#save_score_congestion = {lvl: np.zeros((N[lvl], MAX_YEAR)) for lvl in income_levels}
+save_score_welfare = {lvl: np.zeros((len(gdf), MAX_YEAR)) for lvl in income_levels}
+save_score_qol = {lvl: np.zeros((len(gdf), MAX_YEAR)) for lvl in income_levels}
+save_score_congestion = {lvl: np.zeros((len(gdf), MAX_YEAR)) for lvl in income_levels}
+
 save_median_support = np.zeros(MAX_YEAR)
 qol_in_zone = np.zeros(MAX_YEAR)
 qol_out_zone = np.zeros(MAX_YEAR)
@@ -290,8 +328,11 @@ avg_dsize_lvl = {lvl: np.full(MAX_YEAR, np.nan) for lvl in income_levels}
 
 tax_revenues = np.zeros(MAX_YEAR)
 
-save_emissions[0], total_vkm[0], tax_revenues[0], _, _, total_vkm_lvl[0] = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, 0, WORKING_DAYS, 0, SCALE_ABM)
-qol_in_zone[0], qol_out_zone[0], vkm_in_zone[0], vkm_out_zone[0], vkm_in_zone_lvl[0], vkm_out_zone_lvl[0] = compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels)
+#save_emissions[0], total_vkm[0], tax_revenues[0], _, _, total_vkm_lvl[0] = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, 0, WORKING_DAYS, 0, SCALE_ABM)
+#qol_in_zone[0], qol_out_zone[0], vkm_in_zone[0], vkm_out_zone[0], vkm_in_zone_lvl[0], vkm_out_zone_lvl[0] = compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels)
+save_emissions[0], total_vkm[0], tax_revenues[0], _, _, total_vkm_lvl[0] = compute_emissions_NEDUM(gdf, travel_matrix, n_group, income_levels, jobs_in_toll_area, houses_in_toll_area, 0, WORKING_DAYS, 0)
+qol_in_zone[0], qol_out_zone[0], vkm_in_zone[0], vkm_out_zone[0], vkm_in_zone_lvl[0], vkm_out_zone_lvl[0] = compute_qol_congestion_NEDUM(gdf, travel_matrix, n_group, income_levels)
+
 
 ### DECOMPOSITION TRANSPORT
 
@@ -301,27 +342,53 @@ for lvl in income_levels:
                       ["from_id", f"proba_center_{lvl}"]].groupby("from_id")[f"proba_center_{lvl}"].sum())
     gdf = gdf.merge(s, left_on="ID", right_on="from_id", how="left").rename(columns={f"proba_center_{lvl}": f"work_in_toll_{lvl}"}).fillna(0)
 
+#for lvl in income_levels:
+    #mode share
+#    mode_shares_lvl[lvl][0] = np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)) / np.nansum(np.nansum(indiv_loc_matrix[lvl], 0))
+    #distances
+#    avg_vkm_lvl[lvl][0] = (total_vkm_lvl[0][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0))))
+#    avg_vkm_in_zone_lvl[lvl][0] = vkm_in_zone_lvl[0][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)))
+#    avg_vkm_out_zone_lvl[lvl][0] = vkm_out_zone_lvl[0][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)))
+    #repartition
+#    gdf[f"live_and_work_in_toll_{lvl}"] = (gdf["live_in_toll"] == True) * gdf[f"work_in_toll_{lvl}"]
+#    gdf[f"live_out_and_work_in_toll_{lvl}"] = (gdf["live_in_toll"] == False) * gdf[f"work_in_toll_{lvl}"]
+#    gdf[f"live_in_toll_and_work_out_{lvl}"] = (gdf["live_in_toll"] == True) * (1 - gdf[f"work_in_toll_{lvl}"])
+#    gdf[f"live_out_and_work_out_toll_{lvl}"] = (gdf["live_in_toll"] == False) * (1 - gdf[f"work_in_toll_{lvl}"])
+#    live_and_work_in_toll_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_and_work_in_toll_{lvl}"]) / N[lvl]
+#    live_out_and_work_in_toll_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_out_and_work_in_toll_{lvl}"]) / N[lvl]
+#    live_in_toll_and_work_out_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_in_toll_and_work_out_{lvl}"]) / N[lvl]
+#    live_out_and_work_out_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_out_and_work_out_toll_{lvl}"]) / N[lvl]
+    #decompo util
+#    avg_wage_lvl[lvl][0] = np.nanmean(indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"])
+#    avg_tcost_lvl[lvl][0] = np.nanmean(indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"])
+#    avg_rent_lvl[lvl][0] = np.nanmean(rent_indiv[lvl])
+#    avg_dsize_lvl[lvl][0] = np.nanmean(dwelling_size_indiv[lvl])
+
 for lvl in income_levels:
     #mode share
-    mode_shares_lvl[lvl][0] = np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)) / np.nansum(np.nansum(indiv_loc_matrix[lvl], 0))
+    mode_shares_lvl[lvl][0] = np.nansum(gdf[f"transport_mode_{lvl}"] * n_group[lvl]) / np.nansum(n_group[lvl])
     #distances
-    avg_vkm_lvl[lvl][0] = (total_vkm_lvl[0][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0))))
-    avg_vkm_in_zone_lvl[lvl][0] = vkm_in_zone_lvl[0][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)))
-    avg_vkm_out_zone_lvl[lvl][0] = vkm_out_zone_lvl[0][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)))
+    avg_vkm_lvl[lvl][0] = (total_vkm_lvl[0][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * n_group[lvl])))
+    avg_vkm_in_zone_lvl[lvl][0] = vkm_in_zone_lvl[0][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * n_group[lvl]))
+    avg_vkm_out_zone_lvl[lvl][0] = vkm_out_zone_lvl[0][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * n_group[lvl]))
     #repartition
     gdf[f"live_and_work_in_toll_{lvl}"] = (gdf["live_in_toll"] == True) * gdf[f"work_in_toll_{lvl}"]
     gdf[f"live_out_and_work_in_toll_{lvl}"] = (gdf["live_in_toll"] == False) * gdf[f"work_in_toll_{lvl}"]
     gdf[f"live_in_toll_and_work_out_{lvl}"] = (gdf["live_in_toll"] == True) * (1 - gdf[f"work_in_toll_{lvl}"])
     gdf[f"live_out_and_work_out_toll_{lvl}"] = (gdf["live_in_toll"] == False) * (1 - gdf[f"work_in_toll_{lvl}"])
-    live_and_work_in_toll_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_and_work_in_toll_{lvl}"]) / N[lvl]
-    live_out_and_work_in_toll_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_out_and_work_in_toll_{lvl}"]) / N[lvl]
-    live_in_toll_and_work_out_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_in_toll_and_work_out_{lvl}"]) / N[lvl]
-    live_out_and_work_out_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_out_and_work_out_toll_{lvl}"]) / N[lvl]
+    live_and_work_in_toll_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_and_work_in_toll_{lvl}"]) / np.nansum(n_group[lvl])
+    live_out_and_work_in_toll_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_out_and_work_in_toll_{lvl}"]) / np.nansum(n_group[lvl])
+    live_in_toll_and_work_out_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_in_toll_and_work_out_{lvl}"]) / np.nansum(n_group[lvl])
+    live_out_and_work_out_lvl[lvl][0] = np.nansum(save_population_lvl[lvl][:,0] * gdf[f"live_out_and_work_out_toll_{lvl}"]) / np.nansum(n_group[lvl])
     #decompo util
-    avg_wage_lvl[lvl][0] = np.nanmean(indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"])
-    avg_tcost_lvl[lvl][0] = np.nanmean(indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"])
-    avg_rent_lvl[lvl][0] = np.nanmean(rent_indiv[lvl])
-    avg_dsize_lvl[lvl][0] = np.nanmean(dwelling_size_indiv[lvl])
+    avg_wage_lvl[lvl][0] = np.nansum(n_group[lvl] * gdf[f"wage_{lvl}"])  / np.nansum(n_group[lvl])
+    avg_tcost_lvl[lvl][0] = np.nansum(n_group[lvl] * gdf[f"transport_cost_{lvl}"])  / np.nansum(n_group[lvl])
+    avg_rent_lvl[lvl][0] = np.nansum(R_group[lvl] * n_group[lvl]) / np.nansum(n_group[lvl])
+    avg_dsize_lvl[lvl][0] = np.nansum(q_group[lvl] * n_group[lvl]) / np.nansum(n_group[lvl])
+
+
+
+
 BETA_CONG = DIFF_SPEED_CONGESTION/total_vkm[0]
 
 year = year + 1
@@ -371,7 +438,8 @@ save_knowledge = np.zeros(MAX_YEAR)
 save_knowledge[0] = INITIAL_KNOWLEDGE
 score_qol = {"LOW": INITIAL_QOL, "MED": INITIAL_QOL, "HIGH": INITIAL_QOL}
 score_welfare = {"LOW": INITIAL_WELFARE, "MED": INITIAL_WELFARE, "HIGH": INITIAL_WELFARE}
-support = {lvl: INITIAL_OPINION * np.ones(N[lvl]) for lvl in income_levels}
+#support = {lvl: INITIAL_OPINION * np.ones(N[lvl]) for lvl in income_levels}
+support = {lvl: INITIAL_OPINION * np.ones(len(gdf)) for lvl in income_levels}
 
 ### MODELING THE PSC
 
@@ -394,8 +462,8 @@ while year < MAX_YEAR:
 
     while condition == True:
 
-        print("DISCOUNT", discount)
-        print("DIFF SUBVENTION TAX REVENUE", subvention_here-tax_revenue_here)
+        #print("DISCOUNT", discount)
+        #print("DIFF SUBVENTION TAX REVENUE", subvention_here-tax_revenue_here)
 
         if scenario == "less_expensive_transport":
             discount = discount - (subvention_here-tax_revenue_here)/10000000
@@ -409,9 +477,9 @@ while year < MAX_YEAR:
         
         TRIP_TO_ZONE_INPUT = TRIP_TO_ZONE_OUTPUT.copy()
         index_q = index_q + 1
-        travel_time_matrix_car["speed"] = travel_time_matrix_car["uncongested_speed"] - BETA_CONG * TRIP_TO_ZONE_INPUT
-        travel_time_matrix_car.loc[travel_time_matrix_car["speed"] < 10, "speed"] = 10
-        travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 1000) / travel_time_matrix_car["speed"]) * 60
+        #travel_time_matrix_car["speed"] = travel_time_matrix_car["uncongested_speed"] - BETA_CONG * TRIP_TO_ZONE_INPUT
+        #travel_time_matrix_car.loc[travel_time_matrix_car["speed"] < 10, "speed"] = 10
+        #travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 1000) / travel_time_matrix_car["speed"]) * 60
 
         gdf, workers_per_cluster, travel_matrix = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors, scenario, discount, time_discount)
 
@@ -424,15 +492,16 @@ while year < MAX_YEAR:
                 error_population = compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
             return error_population
 
-        solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead")
+        solving_model = scipy.optimize.root(compute_error_in_population_from_utility, solving_model.x, method = "hybr")
+        #solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead")
 
-        if solving_model.fun < 1:
+        if sum(np.abs(solving_model.fun)) < 300:
 
             R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
 
             R = R * np.exp(rent_residual)
             q = q * np.exp(size_residual)
-            n_group = {lvl: n * w[lvl] * np.exp(density_residual[lvl]) for lvl in ["LOW", "MED", "HIGH"]}
+            n_group = {lvl: n * w[lvl] * np.exp(density_residual) for lvl in ["LOW", "MED", "HIGH"]}
             n = np.nansum(list(n_group.values()), axis=0)
             n[np.isnan(n)] = 0
             for lvl in income_levels:
@@ -441,13 +510,13 @@ while year < MAX_YEAR:
         else:
             raise ValueError("Minimization failed!")
 
-        housing_without_inertia = n * q
+        #housing_without_inertia = n * q
 
         # AMB
-        has_moved = {}
-        indiv_loc_matrix_new = {}
+        #has_moved = {}
+        #indiv_loc_matrix_new = {}
 
-        for lvl in income_levels:
+        #for lvl in income_levels:
             #proba_from, proba_to = compute_proba_of_moving(
             #    save_housing[lvl][:, year - 1],
             #    (housing_without_inertia * SCALE_ABM * w[lvl]).to_numpy()
@@ -463,24 +532,24 @@ while year < MAX_YEAR:
             #    (n_group[lvl] * SCALE_ABM).to_numpy() #(n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
             #    )
             
-            proba_from, proba_to = compute_proba_of_moving(
-                save_housing[lvl][:, year - 1],
-                (n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
-                )
+            #proba_from, proba_to = compute_proba_of_moving(
+            #    save_housing[lvl][:, year - 1],
+            #    (n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
+            #    )
     
-            indiv_loc_matrix_new[lvl] = deepcopy(indiv_loc_matrix[lvl])
+            #indiv_loc_matrix_new[lvl] = deepcopy(indiv_loc_matrix[lvl])
     
-            indiv_loc_matrix_new[lvl], has_moved[lvl] = make_people_move(
-                indiv_loc_matrix_new[lvl],
-                N[lvl],
-                len(gdf),
-                indiv_loc_matrix[lvl],
-                proba_from,
-                proba_to,
-                PROBA_MOVE
-                )
+            #indiv_loc_matrix_new[lvl], has_moved[lvl] = make_people_move(
+            #    indiv_loc_matrix_new[lvl],
+            #    N[lvl],
+            #    len(gdf),
+            #    indiv_loc_matrix[lvl],
+            #    proba_from,
+            #    proba_to,
+            #    PROBA_MOVE
+            #    )
         
-        _, TRIP_TO_ZONE_OUTPUT, tax_revenue_here, subvention_here, commuters_transit, _ = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax, WORKING_DAYS, discount, SCALE_ABM)
+        _, TRIP_TO_ZONE_OUTPUT, tax_revenue_here, subvention_here, commuters_transit, _ = compute_emissions_NEDUM(gdf, travel_matrix, n_group, income_levels, jobs_in_toll_area, houses_in_toll_area, tax, WORKING_DAYS, discount)
 
         efficiency = - time_discount * commuters_transit / (tax_revenue_here / 1000000)
 
@@ -489,79 +558,111 @@ while year < MAX_YEAR:
         elif scenario == "reduce_transport_time":
             condition = (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 1) | (np.abs(efficiency - 73)> 0.1)
         else:
+            print("TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT", TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT)
             condition = (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 1)
+
+
     
 
     # AMB
-    has_moved = {}
-    indiv_loc_matrix_new = {}
+    #has_moved = {}
+    #indiv_loc_matrix_new = {}
 
-    for lvl in income_levels:
+    #for lvl in income_levels:
         #proba_from, proba_to = compute_proba_of_moving(
         #    save_housing[lvl][:, year - 1],
         #    (housing_without_inertia * SCALE_ABM * w[lvl]).to_numpy()
         #    )
         
-        proba_from, proba_to = compute_proba_of_moving(
-            save_housing[lvl][:, year - 1],
-            (n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
-            )
+    #    proba_from, proba_to = compute_proba_of_moving(
+    #        save_housing[lvl][:, year - 1],
+    #        (n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
+    #        )
     
-        indiv_loc_matrix_new[lvl] = deepcopy(indiv_loc_matrix[lvl])
+    #    indiv_loc_matrix_new[lvl] = deepcopy(indiv_loc_matrix[lvl])
     
-        indiv_loc_matrix[lvl], has_moved[lvl] = make_people_move(
-            indiv_loc_matrix_new[lvl],
-            N[lvl],
-            len(gdf),
-            indiv_loc_matrix[lvl],
-            proba_from,
-            proba_to,
-            PROBA_MOVE
-            )
+    #    indiv_loc_matrix[lvl], has_moved[lvl] = make_people_move(
+    #        indiv_loc_matrix_new[lvl],
+    #        N[lvl],
+    #        len(gdf),
+    #        indiv_loc_matrix[lvl],
+    #        proba_from,
+    #        proba_to,
+    #        PROBA_MOVE
+    #        )
     
-    rent_indiv_new = {lvl: indiv_loc_matrix[lvl] @ R_group[lvl].to_numpy() for lvl in income_levels}
-    dwelling_size_indiv_new = {lvl: indiv_loc_matrix[lvl] @ q_group[lvl] for lvl in income_levels}
+    #rent_indiv_new = {lvl: indiv_loc_matrix[lvl] @ R_group[lvl].to_numpy() for lvl in income_levels}
+    #dwelling_size_indiv_new = {lvl: indiv_loc_matrix[lvl] @ q_group[lvl] for lvl in income_levels}
 
-    for lvl in income_levels:
+    #for lvl in income_levels:
         # Update rents and dwelling sizes for movers
-        mask_moved = has_moved[lvl] == 1
-        rent_indiv[lvl][mask_moved] = rent_indiv_new[lvl][mask_moved]
-        dwelling_size_indiv[lvl][mask_moved] = dwelling_size_indiv_new[lvl][mask_moved]
+    #    mask_moved = has_moved[lvl] == 1
+    #    rent_indiv[lvl][mask_moved] = rent_indiv_new[lvl][mask_moved]
+    #    dwelling_size_indiv[lvl][mask_moved] = dwelling_size_indiv_new[lvl][mask_moved]
 
         # Compute utility
+    #   # Compute utility
+    #    utility[lvl] = compute_utility_manually(
+    #        indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"],
+    #        indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
+    #        dwelling_size_indiv[lvl],
+    #        rent_indiv[lvl],
+    #        BETA, indiv_loc_matrix[lvl] @ gdf["amenities"]
+    #    )
+    
+    #    utility[lvl][np.isnan(utility[lvl])] = 0
+
+        # Compute individual housing
+    #    housing_indiv[lvl] = dwelling_size_indiv[lvl] @ csr_matrix(indiv_loc_matrix[lvl])
+    
+    # Compute utility
+    for lvl in income_levels:
         utility[lvl] = compute_utility_manually(
-            indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"],
-            indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
-            dwelling_size_indiv[lvl],
-            rent_indiv[lvl],
-            BETA, indiv_loc_matrix[lvl] @ gdf["amenities"]
+            gdf[f"wage_{lvl}"],
+            gdf[f"transport_cost_{lvl}"],
+            q_group[lvl],
+            R_group[lvl],
+            BETA, gdf["amenities"]
         )
     
         utility[lvl][np.isnan(utility[lvl])] = 0
-
-        # Compute individual housing
-        housing_indiv[lvl] = dwelling_size_indiv[lvl] @ csr_matrix(indiv_loc_matrix[lvl])
     
     #Save outputs
-    save_population[:, year] = np.sum([np.nansum(indiv_loc_matrix[lvl], 0) for lvl in income_levels], axis=0)
+    #save_population[:, year] = np.sum([np.nansum(indiv_loc_matrix[lvl], 0) for lvl in income_levels], axis=0)
+    #save_tax[year] = tax
+    #for lvl in income_levels:
+    #    save_population_lvl[lvl][:, year] = np.nansum(indiv_loc_matrix[lvl], 0)
+
+    #for lvl in income_levels:
+    #    save_housing[lvl][:, year] = deepcopy(housing_indiv[lvl])
+    #    save_rent[lvl][:, year] = deepcopy(rent_indiv[lvl])
+    #    save_dwelling_size[lvl][:, year] = deepcopy(dwelling_size_indiv[lvl])
+    #    save_transport_mode[lvl][:, year] = deepcopy(indiv_loc_matrix[lvl] @ gdf[f"transport_mode_{lvl}"])
+    #    save_utility[lvl][:, year] = deepcopy(utility[lvl])
+
+    save_population[:, year] = np.sum([n_group[lvl] for lvl in income_levels], axis=0)
     save_tax[year] = tax
     for lvl in income_levels:
-        save_population_lvl[lvl][:, year] = np.nansum(indiv_loc_matrix[lvl], 0)
+        save_population_lvl[lvl][:, year] = n_group[lvl]
 
     for lvl in income_levels:
-        save_housing[lvl][:, year] = deepcopy(housing_indiv[lvl])
-        save_rent[lvl][:, year] = deepcopy(rent_indiv[lvl])
-        save_dwelling_size[lvl][:, year] = deepcopy(dwelling_size_indiv[lvl])
-        save_transport_mode[lvl][:, year] = deepcopy(indiv_loc_matrix[lvl] @ gdf[f"transport_mode_{lvl}"])
+        save_housing[lvl][:, year] = deepcopy(n_group[lvl] * q_group[lvl])
+        save_rent[lvl][:, year] = deepcopy(R_group[lvl])
+        save_dwelling_size[lvl][:, year] = deepcopy(q_group[lvl])
+        save_transport_mode[lvl][:, year] = deepcopy(gdf[f"transport_mode_{lvl}"])
         save_utility[lvl][:, year] = deepcopy(utility[lvl])
+
 
     # Policy support
     score_welfare = {lvl: compute_score(compute_change_in_welfare(save_utility[lvl][:, 0], save_utility[lvl][:, year]), LOGISTIC_PARAM_WELFARE)
                  for lvl in income_levels}
     
-    save_emissions[year], total_vkm[year], tax_revenues[year], _, _, total_vkm_lvl[year] = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax, WORKING_DAYS, discount, SCALE_ABM)
+    #save_emissions[year], total_vkm[year], tax_revenues[year], _, _, total_vkm_lvl[year] = compute_emissions(gdf, travel_matrix, indiv_loc_matrix, income_levels, jobs_in_toll_area, houses_in_toll_area, tax, WORKING_DAYS, discount, SCALE_ABM)
 
-    qol_in_zone[year], qol_out_zone[year], vkm_in_zone[year], vkm_out_zone[year], vkm_in_zone_lvl[year], vkm_out_zone_lvl[year] = compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels)
+    #qol_in_zone[year], qol_out_zone[year], vkm_in_zone[year], vkm_out_zone[year], vkm_in_zone_lvl[year], vkm_out_zone_lvl[year] = compute_qol_congestion(gdf, travel_matrix, indiv_loc_matrix, income_levels)
+    save_emissions[year], total_vkm[year], tax_revenues[year], _, _, total_vkm_lvl[year] = compute_emissions_NEDUM(gdf, travel_matrix, n_group, income_levels, jobs_in_toll_area, houses_in_toll_area, tax, WORKING_DAYS, discount)
+
+    qol_in_zone[year], qol_out_zone[year], vkm_in_zone[year], vkm_out_zone[year], vkm_in_zone_lvl[year], vkm_out_zone_lvl[year] = compute_qol_congestion_NEDUM(gdf, travel_matrix, n_group, income_levels)
 
 
     ### DECOMPOSITION TRANSPORT
@@ -572,27 +673,50 @@ while year < MAX_YEAR:
                       ["from_id", f"proba_center_{lvl}"]].groupby("from_id")[f"proba_center_{lvl}"].sum())
         gdf = gdf.merge(s, left_on="ID", right_on="from_id", how="left").rename(columns={f"proba_center_{lvl}": f"work_in_toll_{lvl}"}).fillna(0)
 
+    #for lvl in income_levels:
+        #mode share
+    #    mode_shares_lvl[lvl][year] = np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)) / np.nansum(np.nansum(indiv_loc_matrix[lvl], 0))
+        #distances
+    #    avg_vkm_lvl[lvl][year] = (total_vkm_lvl[year][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0))))
+    #    avg_vkm_in_zone_lvl[lvl][year] = vkm_in_zone_lvl[year][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)))
+    #    avg_vkm_out_zone_lvl[lvl][year] = vkm_out_zone_lvl[year][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)))
+        #repartition
+    #    gdf[f"live_and_work_in_toll_{lvl}"] = (gdf["live_in_toll"] == True) * gdf[f"work_in_toll_{lvl}"]
+    #    gdf[f"live_out_and_work_in_toll_{lvl}"] = (gdf["live_in_toll"] == False) * gdf[f"work_in_toll_{lvl}"]
+    #    gdf[f"live_in_toll_and_work_out_{lvl}"] = (gdf["live_in_toll"] == True) * (1 - gdf[f"work_in_toll_{lvl}"])
+    #    gdf[f"live_out_and_work_out_toll_{lvl}"] = (gdf["live_in_toll"] == False) * (1 - gdf[f"work_in_toll_{lvl}"])
+    #    live_and_work_in_toll_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_and_work_in_toll_{lvl}"]) / N[lvl]
+    #    live_out_and_work_in_toll_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_out_and_work_in_toll_{lvl}"]) / N[lvl]
+    #    live_in_toll_and_work_out_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_in_toll_and_work_out_{lvl}"]) / N[lvl]
+    #    live_out_and_work_out_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_out_and_work_out_toll_{lvl}"]) / N[lvl]
+        #decompo util
+    #    avg_wage_lvl[lvl][year] = np.nanmean(indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"])
+    #    avg_tcost_lvl[lvl][year] = np.nanmean(indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"])
+    #    avg_rent_lvl[lvl][year] = np.nanmean(rent_indiv[lvl])
+    #    avg_dsize_lvl[lvl][year] = np.nanmean(dwelling_size_indiv[lvl])
+
     for lvl in income_levels:
         #mode share
-        mode_shares_lvl[lvl][year] = np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)) / np.nansum(np.nansum(indiv_loc_matrix[lvl], 0))
+        mode_shares_lvl[lvl][year] = np.nansum(gdf[f"transport_mode_{lvl}"] * n_group[lvl]) / np.nansum(n_group[lvl])
         #distances
-        avg_vkm_lvl[lvl][year] = (total_vkm_lvl[year][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0))))
-        avg_vkm_in_zone_lvl[lvl][year] = vkm_in_zone_lvl[year][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)))
-        avg_vkm_out_zone_lvl[lvl][year] = vkm_out_zone_lvl[year][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * np.nansum(indiv_loc_matrix[lvl], 0)))
+        avg_vkm_lvl[lvl][year] = (total_vkm_lvl[year][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * n_group[lvl])))
+        avg_vkm_in_zone_lvl[lvl][year] = vkm_in_zone_lvl[year][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * n_group[lvl]))
+        avg_vkm_out_zone_lvl[lvl][year] = vkm_out_zone_lvl[year][lvl] / (np.nansum(gdf[f"transport_mode_{lvl}"] * n_group[lvl]))
         #repartition
         gdf[f"live_and_work_in_toll_{lvl}"] = (gdf["live_in_toll"] == True) * gdf[f"work_in_toll_{lvl}"]
         gdf[f"live_out_and_work_in_toll_{lvl}"] = (gdf["live_in_toll"] == False) * gdf[f"work_in_toll_{lvl}"]
         gdf[f"live_in_toll_and_work_out_{lvl}"] = (gdf["live_in_toll"] == True) * (1 - gdf[f"work_in_toll_{lvl}"])
         gdf[f"live_out_and_work_out_toll_{lvl}"] = (gdf["live_in_toll"] == False) * (1 - gdf[f"work_in_toll_{lvl}"])
-        live_and_work_in_toll_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_and_work_in_toll_{lvl}"]) / N[lvl]
-        live_out_and_work_in_toll_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_out_and_work_in_toll_{lvl}"]) / N[lvl]
-        live_in_toll_and_work_out_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_in_toll_and_work_out_{lvl}"]) / N[lvl]
-        live_out_and_work_out_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_out_and_work_out_toll_{lvl}"]) / N[lvl]
+        live_and_work_in_toll_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_and_work_in_toll_{lvl}"]) / np.nansum(n_group[lvl])
+        live_out_and_work_in_toll_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_out_and_work_in_toll_{lvl}"]) / np.nansum(n_group[lvl])
+        live_in_toll_and_work_out_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_in_toll_and_work_out_{lvl}"]) / np.nansum(n_group[lvl])
+        live_out_and_work_out_lvl[lvl][year] = np.nansum(save_population_lvl[lvl][:,year] * gdf[f"live_out_and_work_out_toll_{lvl}"]) / np.nansum(n_group[lvl])
         #decompo util
-        avg_wage_lvl[lvl][year] = np.nanmean(indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"])
-        avg_tcost_lvl[lvl][year] = np.nanmean(indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"])
-        avg_rent_lvl[lvl][year] = np.nanmean(rent_indiv[lvl])
-        avg_dsize_lvl[lvl][year] = np.nanmean(dwelling_size_indiv[lvl])
+        avg_wage_lvl[lvl][year] = np.nansum(n_group[lvl] * gdf[f"wage_{lvl}"]) / np.nansum(n_group[lvl])
+        avg_tcost_lvl[lvl][year] = np.nansum(n_group[lvl] * gdf[f"transport_cost_{lvl}"]) / np.nansum(n_group[lvl])
+        avg_rent_lvl[lvl][year] = np.nanmean(R_group[lvl])
+        avg_dsize_lvl[lvl][year] = np.nanmean(q_group[lvl])
+
 
 
 
@@ -611,11 +735,8 @@ while year < MAX_YEAR:
         mask_zone = gdf.ID.isin(houses_in_toll_area).to_numpy()
         mask_out = ~gdf.ID.isin(houses_in_toll_area).to_numpy()
         
-        if scenario == "instant_welfare_adjust":
-            new_score_qol = (indiv_loc_matrix[lvl] @ mask_zone) * score_qol_zone + (indiv_loc_matrix[lvl] @ mask_out) * score_qol_out
-            score_qol[lvl] = (INERTIA_OPINION * score_qol[lvl]) + ((1 - INERTIA_OPINION) * new_score_qol) 
-        else:
-            score_qol[lvl] = (indiv_loc_matrix[lvl] @ mask_zone) * score_qol_zone + (indiv_loc_matrix[lvl] @ mask_out) * score_qol_out
+        #score_qol[lvl] = (indiv_loc_matrix[lvl] @ mask_zone) * score_qol_zone + (indiv_loc_matrix[lvl] @ mask_out) * score_qol_out
+        score_qol[lvl] = (mask_zone) * score_qol_zone + (mask_out) * score_qol_out
 
         # Political opinion and price
         political_opinion[lvl] = compute_opinion2(score_welfare[lvl], score_qol[lvl],
@@ -628,12 +749,12 @@ while year < MAX_YEAR:
         #price_here[lvl] = compute_price(score_welfare[lvl], score_qol[lvl],
         #                                save_score_emissions[year], 0, BETA_PRICE, False, scenario, save_knowledge[year], lvl)
         
-        if scenario == "instant_welfare_adjust":
-            support[lvl] = political_opinion[lvl]
-            acceptable_price[lvl] = price_here[lvl]
-        else:
-            support[lvl] = (INERTIA_OPINION * support[lvl]) + ((1 - INERTIA_OPINION) * political_opinion[lvl])
-            acceptable_price[lvl] = (INERTIA_OPINION * acceptable_price[lvl]) + ((1 - INERTIA_OPINION) * price_here[lvl])
+        #if scenario == "instant_welfare_adjust":
+        support[lvl] = political_opinion[lvl]
+        acceptable_price[lvl] = price_here[lvl]
+        #else:
+        #    support[lvl] = (INERTIA_OPINION * support[lvl]) + ((1 - INERTIA_OPINION) * political_opinion[lvl])
+        #    acceptable_price[lvl] = (INERTIA_OPINION * acceptable_price[lvl]) + ((1 - INERTIA_OPINION) * price_here[lvl])
 
         # Save scores
         save_score_welfare[lvl][:, year] = score_welfare[lvl]
@@ -753,7 +874,8 @@ plt.close()
 
 #Spatial analysis plot: price
 weighted_values = {
-    lvl: compute_weighted_mean_opinions(acceptable_price[lvl], indiv_loc_matrix[lvl], N[lvl]) * 2
+    #lvl: compute_weighted_mean_opinions(acceptable_price[lvl], indiv_loc_matrix[lvl], N[lvl]) * 2
+    lvl: compute_weighted_mean_opinions(acceptable_price[lvl], n_group[lvl], sum(n_group[lvl])) * 2
     for lvl in income_levels}
 
 for lvl in income_levels:
@@ -767,7 +889,8 @@ for lvl in income_levels:
     moving[lvl] = 0
     for i in range(19):
         moving[lvl] = moving[lvl] + np.nansum(np.abs(save_population_lvl[lvl][:, i+1] - save_population_lvl[lvl][:, i]))/2
-    print(lvl, 100 * (moving[lvl] / N["HIGH"]),  "% moving relative to the population")
+    #print(lvl, 100 * (moving[lvl] / N["HIGH"]),  "% moving relative to the population")
+    print(lvl, 100 * (moving[lvl] / sum(n_group[lvl])),  "% moving relative to the population")
 
 
 
