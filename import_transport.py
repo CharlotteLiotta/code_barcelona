@@ -5,7 +5,7 @@ from shapely.geometry import Point # type: ignore
 from shapely.geometry import LineString, MultiLineString
 import pandas as pd
 
-def import_transport_times_poly(gdf, date_here, center, path_data, employment_centers):
+def import_transport_times_poly(gdf, date_here, center, path_data, employment_centers, option_center):
     """ Import transport times using GTFS data for transit, OSM data for private cars, and the r5py package """
 
     points = gdf.copy()
@@ -55,7 +55,7 @@ def import_transport_times_poly(gdf, date_here, center, path_data, employment_ce
         
             travel_time_matrix = travel_time_matrix_computer.compute_travel_times()
 
-            np.save(path_data + "travel_time_matrix_poly_" + mode + "_" + str(i), travel_time_matrix)
+            np.save(path_data + "travel_time_matrix_poly_" + mode + "_" + str(i) + "_" + option_center, travel_time_matrix)
             print("Travel time " + mode + ": ", round(100 * i/len(points)), "%")
     
         travel_time_matrix_computer = TravelTimeMatrixComputer(
@@ -68,7 +68,7 @@ def import_transport_times_poly(gdf, date_here, center, path_data, employment_ce
         
         travel_time_matrix = travel_time_matrix_computer.compute_travel_times()
 
-        np.save(path_data + "travel_time_matrix_poly_" + mode + "_" + str(len(points)), travel_time_matrix)
+        np.save(path_data + "travel_time_matrix_poly_" + mode + "_" + str(len(points))+ "_" + option_center, travel_time_matrix)
         print("Travel time " + mode + " saved")
 
     compute_travel_times("car")

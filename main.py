@@ -16,6 +16,7 @@ from policy_support import *
 ### SCENARIOS
 
 scenario = "baseline"
+option_center = "UEA" #test1, "catalunya"
 
 #scenario = "exemption_trips_inside_zone"    #DONE
 #scenario = "tax_question_P17"               #DONE
@@ -52,7 +53,7 @@ DIFF_SPEED_CONGESTION = 10
 
 #ABM
 SCALE_ABM = 1/100 #Nb of agents in the ABM
-PROBA_MOVE = 0.2
+PROBA_MOVE = 1 #0.2
 INERTIA_OPINION = 0.8 #inertia
 
 ### IMPORT DATA
@@ -65,7 +66,7 @@ gdf = import_ppl_per_hh(gdf, path_data)
 gdf = import_rent_and_size(gdf, path_data)
 Y_median, gdf = import_income_new(gdf, path_data)
 gdf = import_amenities(gdf, path_data, 0, 0)
-employment_centers = gpd.read_file(path_data + "cluster_employment_UEA.shp")
+employment_centers = gpd.read_file(path_data + "cluster_employment_" + option_center + ".shp")
 employment_centers["cluster"] = employment_centers.index
 jobs_in_toll_area, houses_in_toll_area, zone_tax = import_tax_zone(gdf, employment_centers)
 plot_base_map(gdf)
@@ -87,8 +88,8 @@ gdf.loc[np.isnan(gdf["rent_m2"]), "rent_m2"] = np.nanmin(gdf.loc[gdf["rent_m2"]>
 gdf.loc[np.isnan(gdf["size"]), "size"] = np.nansum(gdf.loc[~np.isnan(gdf["size"]), "size"] * gdf.loc[~np.isnan(gdf["size"]), "pop"]) / np.nansum(gdf.loc[~np.isnan(gdf["size"]), "pop"])
 
 #Import transport data
-import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers) #datetime.datetime(2025, 7, 15, 8, 0, 0)
-travel_time_matrix_car, travel_time_matrix_transit = load_transport_times_poly(gdf, path_data, center)
+#import_transport_times_poly(gdf, datetime.datetime(2025, 7, 15, 8, 0, 0), center, path_data, employment_centers, option_center) #datetime.datetime(2025, 7, 15, 8, 0, 0)
+travel_time_matrix_car, travel_time_matrix_transit = load_transport_times_poly(gdf, path_data, center, option_center)
 travel_time_matrix_car = load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers, jobs_in_toll_area, houses_in_toll_area, zone_tax)
 gdf = import_cost_transit(gdf)
 travel_time_matrix_transit = travel_time_matrix_transit.merge(gdf[['ID', 'monthly_cost_transit']].rename(columns={'ID': 'from_id'}), on='from_id', how='left')
@@ -119,10 +120,10 @@ mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
 B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
 
 #Transport cost calibration
-gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario, compute_error_transport_poly)
-with open(path_data + "calib_trans_poly_i_test1.pkl", "wb") as f: #UEA_v2
-    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
-with open(path_data + "calib_trans_poly_i_UEA_v2.pkl", "rb") as f:
+#gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario, compute_error_transport_poly)
+#with open(path_data + "calib_trans_poly_i" + option_center + ".pkl", "wb") as f: #UEA_v2
+#    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
+with open(path_data + "calib_trans_poly_i_" + option_center + ".pkl", "rb") as f:
     FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
 print("FIXED_COST_CAR: ", FIXED_COST_CAR)
 print("LAMBDA: ", LAMBDA)
@@ -150,7 +151,7 @@ def compute_log_likelihood(x):
 calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.3, 224, 386, 553], bounds=[(0.2,0.5), (0,None), (0,None), (0,None)]) #[0.45, 100, 500, 900] #[0.3, 224, 386, 553]
 BETA = calib_beta.x[0]
 print("BETA:", BETA)
-#gdf = gdf.drop(columns = "amenities")
+gdf = gdf.drop(columns = "amenities")
 amenities = calibration_utility_amenity2(calib_beta.x, gdf, income_levels, SOFT_RENT, 1, 1)
 gdf = gdf.merge(amenities, on = "ID", how = "left")
 gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1

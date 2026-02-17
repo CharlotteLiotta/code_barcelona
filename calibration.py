@@ -164,7 +164,7 @@ def calibration_utility_amenity2(x, gdf, income_levels, alpha, print_summary=0, 
                          "station_500m", "station_500m_1km", 
                          'fgc_500m', 'rodalies_500m', 'rodalies_500m_1km', 'fgc_500m_1km',
                          "airport_500m",
-                         "high_tourism", #"index_tourism",
+                         "index_tourism", #"index_tourism",
                          'mean_activity',
                          'pedestrian_data_density',#'pedestrian_data_density',
                          ]]
