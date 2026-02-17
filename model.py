@@ -228,9 +228,9 @@ def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
     error_population_MED = (N[1] - pop_MED_model) **2
     error_population_HIGH = (N[2] - pop_HIGH_model)**2
 
-    print("error_population_LOW", (N[0] - pop_LOW_model))
-    print("error_population_MED", (N[1] - pop_MED_model))
-    print("error_population_HIGH", (N[2] - pop_HIGH_model))
+    #print("error_population_LOW", (N[0] - pop_LOW_model))
+    #print("error_population_MED", (N[1] - pop_MED_model))
+    #print("error_population_HIGH", (N[2] - pop_HIGH_model))
     return np.array([
         pop_LOW_model - N[0],
         pop_MED_model - N[1],
