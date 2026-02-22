@@ -89,13 +89,20 @@ def import_opinion_parameters2(path_data, scenario, expected_welfare_loss):
     df_reg["LOW"] = (df_reg.ingressos_estimats  < 11550) * 1
     df_reg["HIGH"] = (df_reg.ingressos_estimats > 26950) * 1
 
-    df_reg["score_welfare"] = df_reg["score_welfare_low"] * df_reg["LOW"] + df_reg["score_welfare_high"] * df_reg["HIGH"]+ df_reg["score_welfare_med"] * (1 - df_reg["HIGH"] - df_reg["LOW"])
+    df_reg["score_welfare"] = df_reg["score_welfare_med"]
+    for i in range(len(df_reg["score_welfare"])):
+        if df_reg["LOW"].iloc[i] == 1:
+            df_reg["score_welfare"].iloc[i] = df_reg["score_welfare_low"].iloc[i]
+        elif df_reg["HIGH"].iloc[i] == 1:
+            df_reg["score_welfare"].iloc[i] = df_reg["score_welfare_high"].iloc[i]
+    
     df_reg["vehicle_ownership_license"] = 1 * (((df_reg.P34A > 0) &(df_reg.P33A  == 1))| ((df_reg.P34B > 0) &(df_reg.P33B  == 1)) |((df_reg.P34C > 0) &(df_reg.P33A  == 1))) 
     df_reg["score_welfare_vehicle_ownership_license"] = df_reg["score_welfare"]
     df_reg.loc[df_reg["vehicle_ownership_license"] == 0, "score_welfare_vehicle_ownership_license"] = 0.5
 
+    df_reg = df_reg.loc[~np.isnan(df_reg.score_welfare)]
     #Export plots
-    plot_mobility_loss("score_welfare","acceptable_price", df_reg)
+    plot_mobility_loss("score_welfare_vehicle_ownership_license","acceptable_price", df_reg)
      
     def plot_hist_survey(df_reg, var, xlabel):
 

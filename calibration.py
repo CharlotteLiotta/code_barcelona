@@ -166,7 +166,7 @@ def calibration_utility_amenity2(x, gdf, income_levels, alpha, print_summary=0, 
                          "airport_500m",
                          "index_tourism", #"index_tourism",
                          'mean_activity',
-                         'pedestrian_data_density',#'pedestrian_data_density',
+                         'pedestrian_data_density', 'slope_20' #'pedestrian_data_density',
                          ]]
     
     #X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
@@ -267,7 +267,175 @@ def calibration_utility_amenity2(x, gdf, income_levels, alpha, print_summary=0, 
         print("scoreAmenities:", scoreAmenities)
         print("log_sorting:", log_sorting)
 
-        return -(scoreDwellingSize + scoreAmenities) # + log_sorting)# + log_sorting) #log_sorting scoreAmenities + 
+        return -(scoreDwellingSize + scoreAmenities)# + log_sorting)# + log_sorting) #log_sorting scoreAmenities + 
+
+
+def calibration_utility_amenity3(x, gdf, income_levels, alpha, print_summary=0, export_amenities=0):
+    """Calibrate BETA and U_LOW/MED/HIGH by minimizing likelihood with numerical stabilization."""
+    
+    BETA, U_LOW, U_MED, U_HIGH = x
+    U = {"LOW": U_LOW, "MED": U_MED, "HIGH": U_HIGH}
+
+    #pop_sum = gdf[["pop_LOW","pop_MED","pop_HIGH"]].sum(axis=1)
+    w = {lvl: 0 for lvl in income_levels}
+
+    w["LOW"] = ((gdf["pop_LOW"] >= gdf["pop_MED"]) & (gdf["pop_LOW"] >= gdf["pop_HIGH"])) * 1
+    w["MED"] = ((gdf["pop_MED"] > gdf["pop_LOW"]) & (gdf["pop_MED"] > gdf["pop_HIGH"])) * 1
+    w["HIGH"] = ((gdf["pop_HIGH"] > gdf["pop_LOW"]) & (gdf["pop_HIGH"] > gdf["pop_MED"])) * 1
+    w["LOW"][w["LOW"] + w["MED"] + w["HIGH"] == 0] = 1
+
+    wage_minus_tc = {lvl: np.clip(gdf[f"wage_{lvl}"] - gdf[f"transport_cost_{lvl}"], 1e-12, None)
+                     for lvl in income_levels}
+
+    factor = ((1-BETA)**(1-BETA)) * (BETA**BETA)
+
+    estimated_A = {}
+    for lvl in income_levels:
+        estimated_A[lvl] = np.clip(U[lvl] / (factor * (wage_minus_tc[lvl] / (gdf["rent_m2"]** BETA))), 1e-12, None)
+
+    gdf["log_A"] = np.log(sum(w[lvl] * estimated_A[lvl] for lvl in income_levels)) #np.log
+    #A_bar = sum(w[lvl] * estimated_A[lvl] for lvl in income_levels)
+    #A_bar = np.maximum(A_bar, 1e-12)
+    #gdf["log_A"] = np.log(A_bar)
+    
+    # --- 3. Estimate amenities regression ---
+    gdf_here = gdf.loc[~np.isnan(gdf["log_A"]) & ~np.isinf(gdf["log_A"]), :]
+    y = (gdf_here["log_A"])
+    #X = gdf_here.loc[:, ["beach_500m", "parc_500m", "parc_500m_1km", "parc_1km_2km",
+    #                     "parc_500m_b", "parc_500m_1km_b", "parc_1km_2km_b",
+    #                     "station_500m", "station_500m_1km", "station_1km_2km",
+    #                     "airport_500m", "high_tourism", 'mean_activity',
+    #                     'pedestrian_density', 'slope_20', 'fgc_500m', 'rodalies_500m']]
+    
+    X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km", #"beach_1km_2km",
+                         'parc_2h_500m','parc_2h_500m_1km',#'parc_2h_1km_2km',
+                         #'parc_5h_500m','parc_5h_500m_1km','parc_5h_1km_2km',
+                         #'parc_combined_2h_500m','parc_combined_2h_500m_1km','parc_combined_2h_1km_2km',
+                         #'parc_combined_5h_500m','parc_combined_5h_500m_1km','parc_combined_5h_1km_2km',
+                         "station_500m", "station_500m_1km", "station_1km_2km", 
+                         'fgc_500m', 'rodalies_500m', 'rodalies_500m_1km', 'fgc_500m_1km', #'rodalies_1km_2km', 'fgc_1km_2km',
+                         "airport_500m",
+                         "index_tourism", #"high_tourism", "medium_tourism",
+                         'mean_activity',
+                         'pedestrian_data_density' #, "slope_20"#'pedestrian_data_density',
+                         ]]
+    
+    #X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
+    #                     "station_500m", "station_500m_1km",
+    #                     "airport_500m", "index_tourism", 'mean_activity',
+    #                     'log_combined_density', "slope_20", 'rodalies_500m', 'rodalies_500m_1km', "fgc_500m", "fgc_500m_1km"]]
+    #X = gdf_here.loc[:, ["beach_500m",
+    #                     "station_500m",
+    #                     "index_tourism", 'mean_activity',
+    #                     'rodalies_500m', "fgc_500m"]]
+    #"beach_500m", "parc_500m",
+    #                     "station_500m",
+    #                     "index_tourism", 'mean_activity',
+    #                     'rodalies_500m', "fgc_500m", 
+    X = sm.add_constant(X)
+    model = sm.OLS(y, X).fit()
+    if print_summary == 1:
+        print(model.summary())
+        stargazer = Stargazer([model])
+        print(stargazer.render_latex())
+    parametersAmenities = model.params
+    errorAmenities = model.resid_pearson
+
+    ComputeLogLikelihood = (
+        lambda sigma, error:
+            np.nansum(- np.log(2 * np.pi * sigma ** 2) / 2
+                      - 1 / (2 * sigma ** 2) * (error) ** 2)
+            )
+
+    sigmaAmenities = np.sqrt(np.nansum(errorAmenities ** 2) / np.nansum(~np.isnan(errorAmenities)))
+    scoreAmenities = ComputeLogLikelihood(sigmaAmenities, errorAmenities)
+
+    #epsilon_A = max(np.nanmean(residuals**2), 1e-12)
+    #log_L_A = - (len(gdf_here)/2)*np.log(2*np.pi*epsilon_A) - np.nansum(residuals**2)/(2*epsilon_A)
+
+    # --- 4. Compute bid rents per group ---
+    #weighted_A = sum(w[lvl] * estimated_A[lvl] for lvl in income_levels)
+    #est_a = np.exp(np.nansum(X.iloc[:,1:] * model.params.iloc[1:], 1))
+    #gdf_am = gdf_here.copy()
+    #gdf_am["est_a"] = est_a
+    #gdf_am = gdf_am.loc[:,["est_a", "ID"]]
+    #gdf = gdf.merge(gdf_am, on = "ID", how = "left")
+    #gdf.loc[np.isnan(gdf["est_a"]), "est_a"] = 1
+    
+    R = {
+        lvl: compute_rents(BETA, gdf[f"wage_{lvl}"], U[lvl] / np.exp(gdf_here["log_A"]), gdf[f"transport_cost_{lvl}"])
+        for lvl in income_levels
+            }
+
+    
+    #gdf = gdf.drop(columns = "est_a")
+    # --- Normalize rents for softmax ---
+    R_stack = np.vstack(list(R.values()))
+    R_stack[R_stack > 1e100] = 1e100
+    R_mean, R_std = np.nanmean(R_stack), np.nanstd(R_stack) + 1e-9
+    R_n = {lvl: (R[lvl] - R_mean) / R_std for lvl in income_levels}
+
+    # --- Soft assignment (numerically stable softmax) ---
+    R_max = np.maximum.reduce(list(R_n.values()))
+    exp_R = {lvl: np.exp(alpha * (R_n[lvl] - R_max)) for lvl in income_levels}
+    denom = sum(exp_R.values())
+    w_est = {lvl: exp_R[lvl] / denom for lvl in income_levels}
+    w_est = {lvl: np.clip(w_est[lvl], 1e-12, None) for lvl in income_levels}
+    
+    for lvl in income_levels:
+        #print(sum(w_est[lvl] == 0))
+        w_est["MED"].loc[w_est["MED"]==0] = 0.000000000000000001
+        w_est["HIGH"].loc[w_est["HIGH"]==0] = 0.000000000000000001
+    #log_sorting = sum(np.nansum(np.log(w_est[lvl]) * gdf[f"pop_{lvl}"]) for lvl in income_levels)
+    pop_sum = gdf[["pop_LOW","pop_MED","pop_HIGH"]].sum(axis=1)
+    w_here = {lvl: np.clip(gdf[f"pop_{lvl}"] / pop_sum, 1e-12, 1) for lvl in income_levels}
+
+    
+    log_sorting = sum(np.nansum(np.log(w_est[lvl]) * w_here[lvl]) for lvl in income_levels)
+    #minusLogLikIncomeSorting = (
+    #    lambda scaleParam:
+    #        - np.nansum(sum(w[lvl] * R[lvl] / scaleParam for lvl in income_levels))
+    #        + np.nansum(np.log(np.nansum(
+    #            np.exp(sum(R[lvl] / scaleParam for lvl in income_levels))),
+    #            0)))
+            
+    #scoreIncomeSorting = - minusLogLikIncomeSorting(10)
+
+    
+    
+            
+    
+    # --- 5. Compute city sizes ---
+    #simulatedRents = sum(w[lvl] * R[lvl] for lvl in income_levels)
+
+    #R_total = sum(w[lvl] * R[lvl] for lvl in income_levels) #w_est
+    #R_total = np.maximum(R_total, 1e-12)
+    size_est = sum(w[lvl] * BETA * (gdf[f"wage_{lvl}"] - gdf[f"transport_cost_{lvl}"]) / R[lvl] #Rtotal
+                   for lvl in income_levels)
+    
+    #diff_size = gdf["size"] - size_est
+    errorDwellingSize = np.log(size_est) - np.log(gdf["size"])
+    sigmaDwellingSize = np.sqrt(np.nansum(errorDwellingSize ** 2) / np.nansum(~np.isnan(errorDwellingSize)))
+    scoreDwellingSize = ComputeLogLikelihood(sigmaDwellingSize, errorDwellingSize)
+    #mask = (~np.isnan(diff_size)) & (~np.isinf(diff_size))
+    #epsilon_size = max(np.nanmean(diff_size[mask]**2), 1e-12)
+    #log_L_size = - np.sum(mask)/2 * np.log(2*np.pi*epsilon_size) - np.nansum(diff_size[mask]**2)/(2*epsilon_size)
+    
+    # --- 7. Export amenities if requested ---
+    if export_amenities:
+        amenities = np.exp(np.nansum(X.iloc[:,1:] * model.params.iloc[1:], 1))
+        gdf_here = gdf_here.copy()
+        gdf_here["amenities"] = amenities
+        return gdf_here[["ID", "amenities"]]
+    
+    else:
+        # Final log-likelihood (maximize sum of log-likelihoods and sorting)
+        #print("scoreDwellingSize:", scoreDwellingSize)
+        #print("scoreAmenities:", scoreAmenities)
+        #print("log_sorting:", log_sorting)
+
+        return -(scoreDwellingSize + scoreAmenities + log_sorting)# + log_sorting) #log_sorting scoreAmenities + 
+
 
 def compute_cost_car(gdf, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, path_data):
     """ Calibrate the fixed cost of private car to match the transport modes data """
@@ -404,7 +572,13 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
 
     init_wage = np.array([3126, 2905, 3040, 2976, 2903, 2979, 2869, 3005])
     init_wage = init_wage * Y_median / np.nanmean(init_wage)
-    x0 = [200, 250] + (init_wage * 0.6).tolist() + (init_wage).tolist() + (init_wage * 1.4).tolist()
+    #x0 = [200, 250] + (init_wage * 0.6).tolist() + (init_wage).tolist() + (init_wage * 1.4).tolist()
+    
+    init_wage_high = init_wage * [1.4, 1.4, 1.4, 1.42, 1.4, 1.4, 1.42, 1.42]
+    init_wage_low = init_wage * [0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6]
+    init_wage_med = init_wage * [1, 1, 1, 0.98, 1, 1, 0.98, 0.98]
+    #init_wage_high = np.array([1.4 * Y_median, 1.4 * Y_median, 1.4 * Y_median, 1.45 * Y_median, 1.4 * Y_median, 1.4 * Y_median, 1.45 * Y_median, 1.45 * Y_median])
+    x0 = [200, 250] + (init_wage_low).tolist() + (init_wage_med).tolist() + (init_wage_high).tolist()
     bounds = [(0, 300), (0, 400)] + [(0, 10000)] * 3 * len(np.unique(employment_centers.cluster))
     
     def compute_error_transport_poly_here(x):

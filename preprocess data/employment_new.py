@@ -108,11 +108,11 @@ y_cbd = np.average(gdf["y"], weights=gdf["employment"])
 
 
 CBD = Point(x_cbd, y_cbd)
-lon, lat = 2.170047, 41.387016 #placa catalunya
-from pyproj import Transformer
-transformer = Transformer.from_crs("EPSG:4326", "EPSG:25830", always_xy=True)
-CBD = Point(transformer.transform(lon, lat))
-print(f"CBD coordinates: ({x_cbd:.3f}, {y_cbd:.3f})")
+#lon, lat = 2.170047, 41.387016 #placa catalunya
+#from pyproj import Transformer
+#transformer = Transformer.from_crs("EPSG:4326", "EPSG:25830", always_xy=True)
+#CBD = Point(transformer.transform(lon, lat))
+#print(f"CBD coordinates: ({x_cbd:.3f}, {y_cbd:.3f})")
 
 gdf["dist_cbd"] = gdf.centroid.distance(CBD)
 
@@ -344,6 +344,8 @@ ax.set_xticklabels(cities, rotation=45, ha="right", fontsize=14)
 ax.legend(fontsize=12)
 
 
+print(100 * np.nansum(comparison["total_jobs"].loc[comparison.code_city.isin(["08019", "08101", "08194"])]) / np.nansum(comparison["total_jobs"]), "%")
+print(100 * np.nansum(comparison["jobs_in_centers"].loc[comparison.code_city.isin(["08019", "08101", "08194"])]) / np.nansum(comparison["total_jobs"]), "%")
 
 
 allocation_plot["employment_cluster"] = allocation_plot["total_jobs"] * np.nansum(gdf["pop"]) / np.nansum(allocation_plot["total_jobs"])

@@ -226,13 +226,10 @@ def load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers, jobs
     travel_time_matrix_car = travel_time_matrix_car.merge(gdf[['ID', 'geometry']].rename(columns={'ID': 'from_id', 'geometry': 'from_geom'}), on='from_id', how='left')
     travel_time_matrix_car = travel_time_matrix_car.merge(employment_centers[['cluster', 'geometry']].rename(columns={'cluster': 'to_id', 'geometry': 'to_geom'}), on='to_id', how='left')
     
-    travel_time_matrix_car['distance_car'] = travel_time_matrix_car.apply(
-        lambda row: row['from_geom'].distance(row['to_geom']) if row['from_geom'] and row['to_geom'] else None,
-        axis=1
-    )
+    #travel_time_matrix_car['distance_car'] = travel_time_matrix_car.apply(lambda row: row['from_geom'].centroid.distance(row['to_geom'].centroid) if row['from_geom'] is not None and row['to_geom'] is not None else None, axis=1)
 
-    travel_time_matrix_car["distance_in_zone"] = ((travel_time_matrix_car.from_id.isin(houses_in_toll_area) * travel_time_matrix_car.to_id.isin(jobs_in_toll_area))) * travel_time_matrix_car['distance_car']
-    travel_time_matrix_car['distance_out_zone'] = ((~travel_time_matrix_car.from_id.isin(houses_in_toll_area) * ~travel_time_matrix_car.to_id.isin(jobs_in_toll_area))) * travel_time_matrix_car['distance_car']
+    #travel_time_matrix_car["distance_in_zone"] = ((travel_time_matrix_car.from_id.isin(houses_in_toll_area) * travel_time_matrix_car.to_id.isin(jobs_in_toll_area))) * travel_time_matrix_car['distance_car']
+    #travel_time_matrix_car['distance_out_zone'] = ((~travel_time_matrix_car.from_id.isin(houses_in_toll_area) * ~travel_time_matrix_car.to_id.isin(jobs_in_toll_area))) * travel_time_matrix_car['distance_car']
 
     
 
@@ -260,10 +257,11 @@ def load_distance_car_poly(travel_time_matrix_car, gdf, employment_centers, jobs
                                  zone=zone_tax,
                                  axis=1))
     
-    mixed = ((travel_time_matrix_car.from_id.isin(houses_in_toll_area)) & (~travel_time_matrix_car.to_id.isin(jobs_in_toll_area))) | ((~travel_time_matrix_car.from_id.isin(houses_in_toll_area)) & (travel_time_matrix_car.to_id.isin(jobs_in_toll_area)))
-    travel_time_matrix_car.loc[mixed, "distance_in_zone"] = travel_time_matrix_car.loc[mixed, "dist_inside"]
-    travel_time_matrix_car.loc[mixed, "distance_out_zone"] = travel_time_matrix_car.loc[mixed, "dist_outside"]
+    #mixed = ((travel_time_matrix_car.from_id.isin(houses_in_toll_area)) & (~travel_time_matrix_car.to_id.isin(jobs_in_toll_area))) | ((~travel_time_matrix_car.from_id.isin(houses_in_toll_area)) & (travel_time_matrix_car.to_id.isin(jobs_in_toll_area)))
+    travel_time_matrix_car.loc[:, "distance_in_zone"] = travel_time_matrix_car.loc[:, "dist_inside"]
+    travel_time_matrix_car.loc[:, "distance_out_zone"] = travel_time_matrix_car.loc[:, "dist_outside"]
 
     travel_time_matrix_car = travel_time_matrix_car.drop(columns = ['dist_total','dist_inside','dist_outside'])
+    travel_time_matrix_car['distance_car'] = travel_time_matrix_car['distance_in_zone'] + travel_time_matrix_car['distance_out_zone']
 
     return travel_time_matrix_car

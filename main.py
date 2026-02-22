@@ -16,7 +16,7 @@ from policy_support import *
 ### SCENARIOS
 
 scenario = "baseline"
-option_center = "UEA" #test1, "catalunya"
+option_center = "catalunya" #test1, "catalunya", "UEA"
 
 #scenario = "exemption_trips_inside_zone"    #DONE
 #scenario = "tax_question_P17"               #DONE
@@ -39,7 +39,7 @@ LOGISTIC_PARAM_QOL = 0.3
 
 #Time
 year = 0
-MAX_YEAR = 50
+MAX_YEAR = 20
 
 #Policy impact model
 INTEREST_RATE = 0.05
@@ -47,13 +47,13 @@ PRICE_TIME = 10 #euros/h - later modulated by income level
 WORKING_DAYS = 40 #20 days per month, with 2 trips per day
 PRICE_FUEL = 0.11 #euros/km
 center = "0801901025"
-SOFT_RENT = 50
+SOFT_RENT = 10 #50
 DIFF_SPEED_CONGESTION = 10
 
 
 #ABM
 SCALE_ABM = 1/100 #Nb of agents in the ABM
-PROBA_MOVE = 1 #0.2
+PROBA_MOVE = 0.2
 INERTIA_OPINION = 0.8 #inertia
 
 ### IMPORT DATA
@@ -120,11 +120,11 @@ mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
 B, KAPPA, SIGMA = calibrate_b_kappa(gdf, mask, INTEREST_RATE, option_function, option_calib = "housing")
 
 #Transport cost calibration
-#gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario, compute_error_transport_poly)
+gdf, FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, travel_time_matrix_car, travel_time_matrix_transit, employment_centers, path_data, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario, compute_error_transport_poly)
 #with open(path_data + "calib_trans_poly_i" + option_center + ".pkl", "wb") as f: #UEA_v2
 #    pickle.dump((FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH), f)
-with open(path_data + "calib_trans_poly_i_" + option_center + ".pkl", "rb") as f:
-    FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
+#with open(path_data + "calib_trans_poly_i_" + option_center + ".pkl", "rb") as f:
+#    FIXED_COST_CAR, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH = pickle.load(f)
 print("FIXED_COST_CAR: ", FIXED_COST_CAR)
 print("LAMBDA: ", LAMBDA)
 compute_error_transport_poly([FIXED_COST_CAR, LAMBDA] + list(ARRAY_WAGE_LOW) + list(ARRAY_WAGE_MED) + list(ARRAY_WAGE_HIGH), employment_centers, gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, PRICE_FUEL, jobs_in_toll_area, houses_in_toll_area, income_levels, wage_factors, scenario, Y_median, import_trans_mode, path_data)
@@ -142,41 +142,47 @@ plot_employment(gdf, employment_centers, employment_centers['employment'] * 0.00
 
 gdf["rodalies_500m_1km"] = ((gdf["min_distance_rodalies"] > 500) & (gdf["min_distance_rodalies"] < 1000)) * 1
 gdf["fgc_500m_1km"] = ((gdf["min_distance_fgc"] > 500) & (gdf["min_distance_fgc"] < 1000)) * 1
+gdf["rodalies_1km_2km"] = ((gdf["min_distance_rodalies"] > 1000) & (gdf["min_distance_rodalies"] < 2000)) * 1
+gdf["fgc_1km_2km"] = ((gdf["min_distance_fgc"] > 1000) & (gdf["min_distance_fgc"] < 2000)) * 1
 
 #Calibrate beta and amenities
 def compute_log_likelihood(x):
     print(x)
-    return calibration_utility_amenity2(x, gdf, income_levels, SOFT_RENT, 0, 0)
+    return calibration_utility_amenity3(x, gdf, income_levels, SOFT_RENT, 0, 0)
 
-calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.3, 224, 386, 553], bounds=[(0.2,0.5), (0,None), (0,None), (0,None)]) #[0.45, 100, 500, 900] #[0.3, 224, 386, 553]
+calib_beta = scipy.optimize.minimize(compute_log_likelihood, [0.44, 183, 256, 434], bounds=[(0.2,0.7), (0,None), (0,None), (0,None)]) #[0.45, 100, 500, 900] #[0.3, 224, 386, 553]
 BETA = calib_beta.x[0]
 print("BETA:", BETA)
-gdf = gdf.drop(columns = "amenities")
-amenities = calibration_utility_amenity2(calib_beta.x, gdf, income_levels, SOFT_RENT, 1, 1)
+gdf = gdf.drop(columns="amenities", errors="ignore")
+amenities = calibration_utility_amenity3(calib_beta.x, gdf, income_levels, SOFT_RENT, 1, 1)
 gdf = gdf.merge(amenities, on = "ID", how = "left")
 gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1
 
 # Solve the model
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
+    #print(u)
+    #print(compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function))
+    return sum(compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function)**2)
 
-    return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function)
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, calib_beta.x[1:4], bounds=[(0,None), (0,None), (0,None)], method = "Powell") #[161, 287, 411] #[219, 329, 471]
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800]) #[180, 420, 600] #150 270 427
+print(solving_model)
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [100, 300, 500], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800]) #[180, 420, 600]
-
-if solving_model.fun < 1:
+if solving_model.fun < 20000000:
     R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
 else:
     raise ValueError("Minimization failed!")
 
-share_col = {"LOW": "share_low_income", "MED": None, "HIGH": "share_high_income"}
-density_residual = {
-    lvl: np.log(
-        (gdf["pop"] * (gdf[share_col[lvl]] / 100 if share_col[lvl] else (100 - gdf["share_low_income"] - gdf["share_high_income"]) / 100))
-        / (w[lvl] * n)
-    )
-    for lvl in income_levels
-}
+#share_col = {"LOW": "share_low_income", "MED": None, "HIGH": "share_high_income"}
+#density_residual = {
+#    lvl: np.log(
+#        (gdf["pop"] * (gdf[share_col[lvl]] / 100 if share_col[lvl] else (100 - gdf["share_low_income"] - gdf["share_high_income"]) / 100))
+#        / (w[lvl] * n)
+#    )
+#    for lvl in income_levels
+#}
+density_residual = np.log(gdf["pop"] / n)
 rent_residual = np.log(gdf["rent_m2"] / R)
 size_residual = np.log(gdf["size"] / q)
 
@@ -188,17 +194,17 @@ plot_line_charts(gdf, n, q, R)
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
 
-    return compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
+    return sum((compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual))**2)
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead")
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [159.7, 283.9, 404.7], method = "Powell") #[159.7, 283.9, 404.7]
 
-if solving_model.fun < 1:
+if solving_model.fun < 50000000:
 
     R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
 
     R = R * np.exp(rent_residual)
     q = q * np.exp(size_residual)
-    n_group = {lvl: n * w[lvl] * np.exp(density_residual[lvl]) for lvl in ["LOW", "MED", "HIGH"]}
+    n_group = {lvl: n * w[lvl] * np.exp(density_residual) for lvl in ["LOW", "MED", "HIGH"]}
     n = np.nansum(list(n_group.values()), axis=0)
     n[np.isnan(n)] = 0
     for lvl in income_levels:
@@ -208,6 +214,18 @@ else:
     raise ValueError("Minimization failed!")
 
 plot_line_charts(gdf, n, q, R)
+
+print(100 * np.nansum(n_group["LOW"].loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["LOW"]))
+print(100 * np.nansum(gdf.pop_LOW.loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["LOW"]))
+
+print(100 * np.nansum(n_group["MED"].loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["MED"]))
+print(100 * np.nansum(gdf.pop_MED.loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["MED"]))
+
+print(100 * np.nansum(n_group["HIGH"].loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["HIGH"]))
+print(100 * np.nansum(gdf.pop_HIGH.loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["HIGH"]))
+
+
+
 
 # ABM: translate outputs at the household level
 N = {lvl: round(pop[lvl] * SCALE_ABM) for lvl in income_levels}
@@ -339,8 +357,8 @@ gdf_init, _, _ = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, trav
  
 utility_init = {lvl: compute_utility_manually(gdf_init[f"wage_{lvl}"],
                                               gdf_init[f"transport_cost_{lvl}"],
-                                              q_group[f"{lvl}"],
-                                              R_group[f"{lvl}"],
+                                              q, #q_group[f"{lvl}"],
+                                              R, #R_group[f"{lvl}"],
                                               BETA, gdf["amenities"]
                                               ) for lvl in income_levels}
 
@@ -348,8 +366,8 @@ gdf_tax, _, _ = compute_transport_cost_poly_i(gdf, travel_time_matrix_car, trave
  
 utility_tax = {lvl: compute_utility_manually(gdf_tax[f"wage_{lvl}"],
                                               gdf_tax[f"transport_cost_{lvl}"],
-                                              q_group[f"{lvl}"],
-                                              R_group[f"{lvl}"],
+                                              q, #q_group[f"{lvl}"],
+                                              R, #R_group[f"{lvl}"],
                                               BETA, gdf["amenities"]
                                               ) for lvl in income_levels}
 
@@ -394,9 +412,6 @@ while year < MAX_YEAR:
 
     while condition == True:
 
-        print("DISCOUNT", discount)
-        print("DIFF SUBVENTION TAX REVENUE", subvention_here-tax_revenue_here)
-
         if scenario == "less_expensive_transport":
             discount = discount - (subvention_here-tax_revenue_here)/10000000
             time_discount = 0
@@ -421,18 +436,18 @@ while year < MAX_YEAR:
             if ((scenario == "improved_rodalies") & (year > 5)):
                 error_population = compute_error_in_population(u, gdf["amenities_improved_rodalies"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
             else:
-                error_population = compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)
+                error_population = sum((compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual)) ** 2)
             return error_population
 
         solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead")
 
-        if solving_model.fun < 1:
+        if solving_model.fun < 50000000:
 
             R, q, n, w, R_group, q_group = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, SOFT_RENT, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function)
 
             R = R * np.exp(rent_residual)
             q = q * np.exp(size_residual)
-            n_group = {lvl: n * w[lvl] * np.exp(density_residual[lvl]) for lvl in ["LOW", "MED", "HIGH"]}
+            n_group = {lvl: n * w[lvl] * np.exp(density_residual) for lvl in ["LOW", "MED", "HIGH"]}
             n = np.nansum(list(n_group.values()), axis=0)
             n[np.isnan(n)] = 0
             for lvl in income_levels:
@@ -458,15 +473,15 @@ while year < MAX_YEAR:
             #    (n_group[lvl] * SCALE_ABM).to_numpy() #(n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
             #    )
             
-            #proba_from, proba_to = compute_proba_of_moving(
-            #    np.nansum(indiv_loc_matrix[lvl], 0), #save_housing[lvl][:, year - 1],
-            #    (n_group[lvl] * SCALE_ABM).to_numpy() #(n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
-            #    )
-            
             proba_from, proba_to = compute_proba_of_moving(
-                save_housing[lvl][:, year - 1],
-                (n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
+                np.nansum(indiv_loc_matrix[lvl], 0), #save_housing[lvl][:, year - 1],
+                (n_group[lvl] * SCALE_ABM).to_numpy() #(n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
                 )
+            
+            #proba_from, proba_to = compute_proba_of_moving(
+            #    save_housing[lvl][:, year - 1],
+            #    (n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
+            #    )
     
             indiv_loc_matrix_new[lvl] = deepcopy(indiv_loc_matrix[lvl])
     
@@ -489,7 +504,8 @@ while year < MAX_YEAR:
         elif scenario == "reduce_transport_time":
             condition = (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 1) | (np.abs(efficiency - 73)> 0.1)
         else:
-            condition = (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 1)
+            print("(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT)", (TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT))
+            condition = (np.abs(TRIP_TO_ZONE_INPUT- TRIP_TO_ZONE_OUTPUT) > 3000)
     
 
     # AMB
@@ -502,10 +518,15 @@ while year < MAX_YEAR:
         #    (housing_without_inertia * SCALE_ABM * w[lvl]).to_numpy()
         #    )
         
+        #proba_from, proba_to = compute_proba_of_moving(
+        #    save_housing[lvl][:, year - 1],
+        #    (n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
+        #    )
+        
         proba_from, proba_to = compute_proba_of_moving(
-            save_housing[lvl][:, year - 1],
-            (n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
-            )
+                np.nansum(indiv_loc_matrix[lvl], 0), #save_housing[lvl][:, year - 1],
+                (n_group[lvl] * SCALE_ABM).to_numpy() #(n_group[lvl] * q_group[lvl] * SCALE_ABM).to_numpy()
+                )
     
         indiv_loc_matrix_new[lvl] = deepcopy(indiv_loc_matrix[lvl])
     
@@ -653,103 +674,179 @@ emission_change, change_qol_in_zone, change_qol_out_zone, utility_change_low, ut
 #Main results plot
 main_plot(save_tax, emission_change, change_qol_in_zone, change_qol_out_zone, utility_change_low, utility_change_med, utility_change_high)
 
-#Deepened analysis
+### MODE SHARES
+values_0 = [100*mode_shares_lvl[level][0] for level in income_levels]
+values_20 = [100*mode_shares_lvl[level][MAX_YEAR - 1] for level in income_levels]
+x = np.arange(len(income_levels))
+width = 0.35
 plt.figure()
-plt.plot(mode_shares_lvl["LOW"], label = "LOW")
-plt.plot(mode_shares_lvl["MED"], label = "MED")
-plt.plot(mode_shares_lvl["HIGH"], label = "HIGH")
+plt.bar(x - width/2, values_0, width, label="Year 0", color = "#4C72B0")
+plt.bar(x + width/2, values_20, width, label="Year " + str(MAX_YEAR - 1), color = "#DD8452")
+plt.xticks(x, ["Low-income", "Middle-income", "High-income"])
+plt.ylabel("Share of public transport users (%)")
 plt.legend()
 plt.show()
 plt.close()
 
+
+### DISTANCES
+in_0  = [avg_vkm_in_zone_lvl[lvl][0]  for lvl in income_levels]
+in_20 = [avg_vkm_in_zone_lvl[lvl][MAX_YEAR - 1] for lvl in income_levels]
+out_0  = [avg_vkm_out_zone_lvl[lvl][0]  for lvl in income_levels]
+out_20 = [avg_vkm_out_zone_lvl[lvl][MAX_YEAR - 1] for lvl in income_levels]
+
+x = np.arange(len(income_levels))
+width = 0.35
+
 plt.figure()
-plt.plot(avg_vkm_lvl["LOW"], label = "LOW")
-plt.plot(avg_vkm_lvl["MED"], label = "MED")
-plt.plot(avg_vkm_lvl["HIGH"], label = "HIGH")
+plt.bar(x - width/2, in_0,  width, label="Inside the tax zone (year 0)",  color="#4C72B0")
+plt.bar(x - width/2, out_0, width, bottom=in_0, label="Outside of the tax zone (year 0)", color="#9ecae9")
+plt.bar(x + width/2, in_20,  width, label="Inside the tax zone (year "+str(MAX_YEAR-1)+")",  color="#DD8452")
+plt.bar(x + width/2, out_20, width, bottom=in_20, label="Outside of the tax zone (year "+str(MAX_YEAR-1)+")", color="#fdd0a2")
+plt.xticks(x,  ["Low-income", "Middle-income", "High-income"])
+plt.ylabel("Average vehicle-km driven")
 plt.legend()
 plt.show()
 plt.close()
 
+
+plt.plot(avg_vkm_lvl["LOW"], label = "Low-income")
+plt.plot(avg_vkm_in_zone_lvl["LOW"] + avg_vkm_out_zone_lvl["LOW"], label = "Low-income")
+
+
+##### LIVING
+
+# Extract values for each category and year
+lw_in_0  = [100 * live_and_work_in_toll_lvl[l][0]  for l in income_levels]
+lw_in_20 = [100 * live_and_work_in_toll_lvl[l][MAX_YEAR - 1] for l in income_levels]
+
+lw_out_0  = [100 * live_out_and_work_out_lvl[l][0]  for l in income_levels]
+lw_out_20 = [100 * live_out_and_work_out_lvl[l][MAX_YEAR - 1] for l in income_levels]
+
+in_out_0  = [100 * live_in_toll_and_work_out_lvl[l][0]  for l in income_levels]
+in_out_20 = [100 * live_in_toll_and_work_out_lvl[l][MAX_YEAR - 1] for l in income_levels]
+
+out_in_0  = [100 * live_out_and_work_in_toll_lvl[l][0]  for l in income_levels]
+out_in_20 = [100 * live_out_and_work_in_toll_lvl[l][MAX_YEAR - 1] for l in income_levels]
+
+x = np.arange(len(income_levels))
+width = 0.32
+# Muted academic palette
+colors = {
+    "lw_in":  "#5B7C99",  # slate blue
+    "lw_out": "#8C9A5B",  # muted olive
+    "in_out": "#C2A878",  # sand
+    "out_in": "#B07A8F"   # dusty rose
+}
+
+
+from matplotlib.patches import Patch
 plt.figure()
-plt.plot(avg_vkm_in_zone_lvl["LOW"], label = "LOW")
-plt.plot(avg_vkm_in_zone_lvl["MED"], label = "MED")
-plt.plot(avg_vkm_in_zone_lvl["HIGH"], label = "HIGH")
-plt.legend()
+
+edge_col = "0.3"
+edge_lw = 0.6
+
+# --- Year 0 ---
+bottom_0 = np.zeros(len(income_levels))
+pos_0 = x - width/2
+
+for vals, key in zip(
+    [lw_in_0, lw_out_0, in_out_0, out_in_0],
+    ["lw_in", "lw_out", "in_out", "out_in"]
+):
+    plt.bar(pos_0, vals, width,
+            bottom=bottom_0,
+            color=colors[key],
+            edgecolor=edge_col,
+            linewidth=edge_lw)
+    bottom_0 += vals
+
+# --- Year 20 ---
+bottom_20 = np.zeros(len(income_levels))
+pos_20 = x + width/2
+
+for vals, key in zip(
+    [lw_in_20, lw_out_20, in_out_20, out_in_20],
+    ["lw_in", "lw_out", "in_out", "out_in"]
+):
+    plt.bar(pos_20, vals, width,
+            bottom=bottom_20,
+            color=colors[key],
+            edgecolor=edge_col,
+            linewidth=edge_lw)
+    bottom_20 += vals
+
+# Year labels above bars
+offset = 0.02
+for i in range(len(income_levels)):
+    plt.text(pos_0[i],  bottom_0[i]  + offset, "Year 0",  ha="center", va="bottom")
+    plt.text(pos_20[i], bottom_20[i] + offset, "Year " + str(MAX_YEAR - 1), ha="center", va="bottom")
+
+plt.xticks(x,  ["Low-income", "Middle-income", "High-income"])
+plt.ylabel("Share (%)")
+plt.ylim(0, max(max(bottom_0), max(bottom_20)) + 0.08)
+
+legend_elements = [
+    Patch(facecolor=colors["lw_in"],  edgecolor=edge_col, label="Live and work inside the tax zone"),
+    Patch(facecolor=colors["lw_out"], edgecolor=edge_col, label="Live and work outside of the tax zone"),
+    Patch(facecolor=colors["in_out"], edgecolor=edge_col, label="Live inside and work outside of the tax zone"),
+    Patch(facecolor=colors["out_in"], edgecolor=edge_col, label="Live outside and work inside of the tax zone"),
+]
+
+plt.legend(
+    handles=legend_elements,
+    frameon=False,
+    loc="upper center",
+    bbox_to_anchor=(0.5, -0.12),  # 0.5 = center horizontally, -0.12 = below plot
+    ncol=2  # one column per category
+)
+plt.tight_layout()
 plt.show()
 plt.close()
 
-plt.figure()
-plt.plot(avg_vkm_out_zone_lvl["LOW"], label = "LOW")
-plt.plot(avg_vkm_out_zone_lvl["MED"], label = "MED")
-plt.plot(avg_vkm_out_zone_lvl["HIGH"], label = "HIGH")
-plt.legend()
+
+
+############
+
+indicators = ["Average generalized travel cost", "Average rent per m2", "Average dwelling size"]
+
+# Compute % change from year 0 to 20
+change_tcost = [
+    (avg_tcost_lvl[l][MAX_YEAR-1] - avg_tcost_lvl[l][0]) / avg_tcost_lvl[l][0] * 100
+    for l in income_levels
+]
+
+change_rent = [
+    (avg_rent_lvl[l][MAX_YEAR-1] - avg_rent_lvl[l][0]) / avg_rent_lvl[l][0] * 100
+    for l in income_levels
+]
+
+change_dsize = [
+    (avg_dsize_lvl[l][MAX_YEAR-1] - avg_dsize_lvl[l][0]) / avg_dsize_lvl[l][0] * 100
+    for l in income_levels
+]
+
+# Combine into a single array
+changes = np.array([change_tcost, change_rent, change_dsize])  # shape: 3 indicators x 3 income levels
+
+x = np.arange(len(income_levels))
+width = 0.25
+
+# Muted palette for indicators
+colors = ["#4C72B0", "#55A868", "#C44E52"]
+
+plt.figure(figsize=(8,5))
+
+# Plot bars for each indicator
+for i in range(len(indicators)):
+    plt.bar(x + (i-1)*width, changes[i], width, color=colors[i], edgecolor="0.3", label=indicators[i])
+
+plt.xticks(x, income_levels)
+plt.ylabel("Change between year 0 and " + str(MAX_YEAR - 1) + " (%)")
+plt.legend(frameon=False)
+plt.tight_layout()
 plt.show()
 plt.close()
-
-plt.figure()
-plt.plot(live_and_work_in_toll_lvl["LOW"], label = "LOW")
-plt.plot(live_and_work_in_toll_lvl["MED"], label = "MED")
-plt.plot(live_and_work_in_toll_lvl["HIGH"], label = "HIGH")
-plt.legend()
-plt.show()
-plt.close()
-
-plt.figure()
-plt.plot(live_out_and_work_out_lvl["LOW"], label = "LOW")
-plt.plot(live_out_and_work_out_lvl["MED"], label = "MED")
-plt.plot(live_out_and_work_out_lvl["HIGH"], label = "HIGH")
-plt.legend()
-plt.show()
-plt.close()
-
-plt.figure()
-plt.plot(live_in_toll_and_work_out_lvl["LOW"], label = "LOW")
-plt.plot(live_in_toll_and_work_out_lvl["MED"], label = "MED")
-plt.plot(live_in_toll_and_work_out_lvl["HIGH"], label = "HIGH")
-plt.legend()
-plt.show()
-plt.close()
-
-plt.figure()
-plt.plot(live_out_and_work_in_toll_lvl["LOW"], label = "LOW")
-plt.plot(live_out_and_work_in_toll_lvl["MED"], label = "MED")
-plt.plot(live_out_and_work_in_toll_lvl["HIGH"], label = "HIGH")
-plt.legend()
-plt.show()
-plt.close()
-
-plt.figure()
-plt.plot(avg_wage_lvl["LOW"] / avg_wage_lvl["LOW"][0], label = "LOW")
-plt.plot(avg_wage_lvl["MED"] / avg_wage_lvl["MED"][0], label = "MED")
-plt.plot(avg_wage_lvl["HIGH"] / avg_wage_lvl["HIGH"][0], label = "HIGH")
-plt.legend()
-plt.show()
-plt.close()
-
-plt.figure()
-plt.plot(avg_tcost_lvl["LOW"] / avg_tcost_lvl["LOW"][0], label = "LOW")
-plt.plot(avg_tcost_lvl["MED"] / avg_tcost_lvl["MED"][0], label = "MED")
-plt.plot(avg_tcost_lvl["HIGH"] / avg_tcost_lvl["HIGH"][0], label = "HIGH")
-plt.legend()
-plt.show()
-plt.close()
-
-plt.figure()
-plt.plot(avg_rent_lvl["LOW"], label = "LOW")
-plt.plot(avg_rent_lvl["MED"], label = "MED")
-plt.plot(avg_rent_lvl["HIGH"], label = "HIGH")
-plt.legend()
-plt.show()
-plt.close()
-
-plt.figure()
-plt.plot(avg_dsize_lvl["LOW"] / avg_dsize_lvl["LOW"][0], label = "LOW")
-plt.plot(avg_dsize_lvl["MED"] / avg_dsize_lvl["MED"][0], label = "MED")
-plt.plot(avg_dsize_lvl["HIGH"] / avg_dsize_lvl["HIGH"][0], label = "HIGH")
-plt.legend()
-plt.show()
-plt.close()
-
 
 #Spatial analysis plot: price
 weighted_values = {
@@ -767,7 +864,7 @@ for lvl in income_levels:
     moving[lvl] = 0
     for i in range(19):
         moving[lvl] = moving[lvl] + np.nansum(np.abs(save_population_lvl[lvl][:, i+1] - save_population_lvl[lvl][:, i]))/2
-    print(lvl, 100 * (moving[lvl] / N["HIGH"]),  "% moving relative to the population")
+    print(lvl, 100 * (moving[lvl] / N[lvl]),  "% moving relative to the population")
 
 
 
