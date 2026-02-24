@@ -110,7 +110,7 @@ travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 100
 #Calibration of B and KAPPA
 gdf["land"] = gdf["urb_area"]
 
-mask = ((gdf["rent_m2"] < 19) &(gdf["rent_m2"] > 12)& #7,25
+mask = ((gdf["rent_m2"] < 19) &(gdf["rent_m2"] > 12)& #7,25 12, 19
         (gdf["pop"] > 484.0)&
         (~np.isnan(gdf["size"]))
         &(~np.isnan(gdf["pop"]))
@@ -671,6 +671,13 @@ while year < MAX_YEAR:
 
 emission_change, change_qol_in_zone, change_qol_out_zone, utility_change_low, utility_change_med, utility_change_high = relative_change_outputs(save_emissions, qol_in_zone, qol_out_zone, save_utility, compute_relative_change, compute_change_in_welfare, MAX_YEAR)
 
+emission_change[year:] = np.nan
+change_qol_in_zone[year:] = np.nan
+change_qol_out_zone[year:] = np.nan
+utility_change_low[year:] = np.nan
+utility_change_med[year:] = np.nan
+utility_change_high[year:] = np.nan
+
 #Main results plot
 main_plot(save_tax, emission_change, change_qol_in_zone, change_qol_out_zone, utility_change_low, utility_change_med, utility_change_high)
 
@@ -853,7 +860,8 @@ for lvl in income_levels:
     plot_spatial_price(gdf, weighted_values[lvl])
 
 #Spatial analysis plot: population
-plot_change_population_custom(gdf, save_population)
+plot_change_population_custom(gdf, save_population,
+                                  bins=[-60, -30, -10, -5, 0, 5, 10, 30, 167],cmap_name="bwr",)
 plot_change_pop_line(gdf, save_population)
 moving = {}
 for lvl in income_levels:
@@ -874,4 +882,4 @@ for lvl in income_levels:
 #    utility_change_low=utility_change_low,
 #    utility_change_med=utility_change_med,
 #    utility_change_high=utility_change_high
-#)
+#)§/MMMTTTTTTTTTTTRG§

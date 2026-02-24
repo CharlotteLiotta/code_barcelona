@@ -695,6 +695,17 @@ def plot_change_population_custom(gdf, save_population,
     plt.tight_layout()
     plt.show()
 
+    muni_bar["diff"] = 100 * (muni_bar["Year 19"] - muni_bar["Year 0"]) / muni_bar["Year 0"]
+    muni_bar[['diff']].plot(
+        kind='bar',
+        figsize=(10, 6))
+    
+    plt.xlabel('')
+    plt.ylabel('Change (%)')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
     muni_gdf = gdf_proj.dissolve(by='NMUN', as_index=False)
     muni_gdf['centroid'] = muni_gdf.geometry.centroid
     muni_gdf['x'] = muni_gdf.centroid.x

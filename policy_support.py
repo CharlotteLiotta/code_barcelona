@@ -44,25 +44,25 @@ def import_opinion_parameters2(path_data, scenario, expected_welfare_loss):
     #add welfare losses
     df_reg = gpd.GeoDataFrame(df_reg, geometry = gpd.points_from_xy(df_reg.GEO_X, df_reg.GEO_Y), crs="EPSG:4326")
     df_reg = df_reg.to_crs(expected_welfare_loss.crs)
-    df_reg = gpd.sjoin(df_reg, expected_welfare_loss, predicate="within")
+    df_reg = gpd.sjoin(df_reg, expected_welfare_loss, how = "left", predicate="within")
 
     #prepare variables
 
     #dependent var 1: acceptability
     df_reg.rename(columns={'P22_4': 'acceptability'}, inplace=True)
-    df_reg = df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97)]
-
+    
     #dependent var 2: acceptable price
     df_reg.rename(columns={'P18': 'acceptable_price'}, inplace=True)
-    
-    df_reg = df_reg.loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 20)]
     df_reg.acceptable_price = df_reg.acceptable_price / 2
 
+    
     print(spearmanr(df_reg["acceptability"], df_reg["acceptable_price"], nan_policy="omit"))
 
     # 4. Conditional means with 95% CI
+    df_reg_here = df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97)]
+    df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.acceptable_price) & (df_reg_here.acceptable_price < 20)]
     summary = (
-        df_reg.groupby("acceptability")["acceptable_price"]
+        df_reg_here.groupby("acceptability")["acceptable_price"]
         .agg(["mean", "std", "count"])
     )
     summary["se"] = summary["std"] / (summary["count"] ** 0.5)
@@ -81,28 +81,34 @@ def import_opinion_parameters2(path_data, scenario, expected_welfare_loss):
     #explanatory vars
 
     df_reg.rename(columns={'P21_3': 'climate_change'}, inplace=True)
-    df_reg = df_reg.loc[~np.isnan(df_reg.climate_change) & (df_reg.climate_change < 80)]
 
     df_reg.rename(columns={'P21_2': 'quality_of_life'}, inplace=True)
-    df_reg = df_reg.loc[~np.isnan(df_reg.quality_of_life) & (df_reg.quality_of_life < 80)]
     
     df_reg["LOW"] = (df_reg.ingressos_estimats  < 11550) * 1
     df_reg["HIGH"] = (df_reg.ingressos_estimats > 26950) * 1
 
+    #df_reg["score_welfare"] = df_reg["score_welfare_low"] * df_reg["LOW"] + df_reg["score_welfare_high"] * df_reg["HIGH"]+ df_reg["score_welfare_med"] * (1 - df_reg["HIGH"] - df_reg["LOW"])
     df_reg["score_welfare"] = df_reg["score_welfare_med"]
     for i in range(len(df_reg["score_welfare"])):
         if df_reg["LOW"].iloc[i] == 1:
             df_reg["score_welfare"].iloc[i] = df_reg["score_welfare_low"].iloc[i]
         elif df_reg["HIGH"].iloc[i] == 1:
             df_reg["score_welfare"].iloc[i] = df_reg["score_welfare_high"].iloc[i]
-    
+    #df_reg = df_reg.loc[~np.isnan(df_reg.score_welfare)]
+    sum(np.isnan(df_reg.score_welfare))
+
     df_reg["vehicle_ownership_license"] = 1 * (((df_reg.P34A > 0) &(df_reg.P33A  == 1))| ((df_reg.P34B > 0) &(df_reg.P33B  == 1)) |((df_reg.P34C > 0) &(df_reg.P33A  == 1))) 
     df_reg["score_welfare_vehicle_ownership_license"] = df_reg["score_welfare"]
     df_reg.loc[df_reg["vehicle_ownership_license"] == 0, "score_welfare_vehicle_ownership_license"] = 0.5
 
-    df_reg = df_reg.loc[~np.isnan(df_reg.score_welfare)]
+    #df_reg = df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97)]
+    #df_reg = df_reg.loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 20)]
+    #df_reg = df_reg.loc[~np.isnan(df_reg.climate_change) & (df_reg.climate_change < 80)]
+    #df_reg = df_reg.loc[~np.isnan(df_reg.quality_of_life) & (df_reg.quality_of_life < 80)]
+    #df_reg = df_reg.loc[~np.isnan(df_reg.score_welfare)]
+    
     #Export plots
-    plot_mobility_loss("score_welfare_vehicle_ownership_license","acceptable_price", df_reg)
+    plot_mobility_loss("score_welfare_vehicle_ownership_license","acceptable_price", df_reg.loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 20) & ~np.isnan(df_reg.score_welfare)])
      
     def plot_hist_survey(df_reg, var, xlabel):
 
@@ -127,28 +133,39 @@ def import_opinion_parameters2(path_data, scenario, expected_welfare_loss):
         plt.tight_layout()
         plt.show()
 
-    plot_hist_survey(df_reg, 'acceptability', 'Acceptability (0-10 scale)')
-    plot_hist_survey(df_reg, 'acceptable_price', 'Acceptable price per trip')
-    plot_hist_survey(df_reg, 'climate_change', 'Perceived benefits on GHG emissions')
-    plot_hist_survey(df_reg, 'quality_of_life', 'Perceived benefits on air and noise pollution and safety')
+    plot_hist_survey(df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97)], 'acceptability', 'Acceptability (0-10 scale)')
+    plot_hist_survey(df_reg.loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 20)], 'acceptable_price', 'Acceptable price per trip')
+    plot_hist_survey(df_reg.loc[~np.isnan(df_reg.climate_change) & (df_reg.climate_change < 80)], 'climate_change', 'Perceived benefits on GHG emissions')
+    plot_hist_survey(df_reg.loc[~np.isnan(df_reg.quality_of_life) & (df_reg.quality_of_life < 80)], 'quality_of_life', 'Perceived benefits on air and noise pollution and safety')
     plot_hist_survey(df_reg.loc[~np.isnan(df_reg.P20_1) & (df_reg.P20_1 < 97)], 'P20_1', '')
     plot_hist_survey(df_reg.loc[~np.isnan(df_reg.P20_4) & (df_reg.P20_4 < 97)], 'P20_4', '')
     plot_hist_survey(df_reg.loc[~np.isnan(df_reg.P20_7) & (df_reg.P20_7 < 97)], 'P20_7', '')
 
+    #initial values
+    INITIAL_OPINION = weighted_median(df_reg["acceptability"].loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97)].values, df_reg["PESAIX"].values)
+    INITIAL_PRICE = weighted_median(df_reg["acceptable_price"].loc[~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 20)].values, df_reg["PESAIX"].values)
+    INITIAL_CC = weighted_median(df_reg["climate_change"].loc[~np.isnan(df_reg.climate_change) & (df_reg.climate_change < 80)].values, df_reg["PESAIX"].values)
+    INITIAL_WELFARE = weighted_median(df_reg["score_welfare_vehicle_ownership_license"].loc[~np.isnan(df_reg.score_welfare)].values, df_reg["PESAIX"].values) #_vehicle_ownership_license
+    INITIAL_QOL = weighted_median(df_reg["quality_of_life"].loc[~np.isnan(df_reg.quality_of_life) & (df_reg.quality_of_life < 80)].values, df_reg["PESAIX"].values)
+
+    if scenario == "increasing_knowledge":
+        INITIAL_KNOWLEDGE = weighted_median(df_reg["knowledge"].values, df_reg["PESAIX"].values) #np.nanmedian(y_scaled) #np.nanmedian(y_raw)
+    else:
+        INITIAL_KNOWLEDGE = 0
 
     #regression model
-
-    df_reg[["climate_change", "quality_of_life", "acceptability"]] = df_reg[["climate_change", "quality_of_life", "acceptability"]] / 10
-
-    X = df_reg[["climate_change", "quality_of_life", "score_welfare_vehicle_ownership_license", "LOW", "HIGH"]] #score_welfare_vehicle_ownership_license
+    df_reg_here = df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97) & ~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 20) & ~np.isnan(df_reg.climate_change) & (df_reg.climate_change < 80) & ~np.isnan(df_reg.score_welfare) &~np.isnan(df_reg.quality_of_life) & (df_reg.quality_of_life < 80),:]
+    df_reg_here[["climate_change", "quality_of_life", "acceptability"]] = df_reg_here[["climate_change", "quality_of_life", "acceptability"]] / 10
+    
+    X = df_reg_here[["climate_change", "quality_of_life", "score_welfare_vehicle_ownership_license", "LOW", "HIGH"]] #score_welfare_vehicle_ownership_license
     X = sm.add_constant(X)
-    y_acceptability = df_reg["acceptability"].values.reshape(-1, 1).flatten()
-    y_price = (df_reg["acceptable_price"].values.reshape(-1, 1)).flatten()
+    y_acceptability = df_reg_here["acceptability"].values.reshape(-1, 1).flatten()
+    y_price = (df_reg_here["acceptable_price"].values.reshape(-1, 1)).flatten()
 
-    model_acceptability = sm.WLS(y_acceptability, X, weights=df_reg['PESAIX']).fit()
+    model_acceptability = sm.WLS(y_acceptability, X, weights=df_reg_here['PESAIX']).fit()
     print(model_acceptability.summary())
 
-    model_price = sm.WLS(y_price, X, weights=df_reg['PESAIX']).fit()
+    model_price = sm.WLS(y_price, X, weights=df_reg_here['PESAIX']).fit()
     print(model_price.summary())
 
     ## EXPLORATION
@@ -162,53 +179,47 @@ def import_opinion_parameters2(path_data, scenario, expected_welfare_loss):
     df_reg["man"] = (df_reg["man"] == 1) * 1
 
     df_reg.rename(columns={'P30': 'education'}, inplace=True)
-    df_reg = df_reg.loc[~np.isnan(df_reg.education) & (df_reg.education < 6)]
-
+    
     df_reg["children"] = 1 * ((df_reg.P03B_1 < 18) & (df_reg.P03C_1 == 2)) + 1 * ((df_reg.P03B_2 < 18) & (df_reg.P03C_2 == 2)) + 1 * ((df_reg.P03B_3 < 18) & (df_reg.P03C_3 == 2)) + 1 * ((df_reg.P03B_4 < 18) & (df_reg.P03C_4 == 2)) + 1 * ((df_reg.P03B_5 < 18) & (df_reg.P03C_5 == 2)) + 1 * ((df_reg.P03B_6 < 18) & (df_reg.P03C_6 == 2)) + 1 * ((df_reg.P03B_7 < 18) & (df_reg.P03C_7 == 2)) + 1 * ((df_reg.P03B_8 < 18) & (df_reg.P03C_8 == 2)) + 1 * ((df_reg.P03B_9 < 18) & (df_reg.P03C_9 == 2)) + 1 * ((df_reg.P03B_10 < 18) & (df_reg.P03C_10 == 2))
     df_reg["children2"] = 1 * ((df_reg.P03B_1 < 18)) + 1 * ((df_reg.P03B_2 < 18)) + 1 * ((df_reg.P03B_3 < 18)) + 1 * ((df_reg.P03B_4 < 18)) + 1 * ((df_reg.P03B_5 < 18)) + 1 * ((df_reg.P03B_6 < 18)) + 1 * ((df_reg.P03B_7 < 18)) + 1 * ((df_reg.P03B_8 < 18)) + 1 * ((df_reg.P03B_9 < 18)) + 1 * ((df_reg.P03B_10 < 18))
     df_reg["children3"] = (df_reg["children2"] > 0) * 1
 
     df_reg.rename(columns={'P35': 'political_ideology'}, inplace=True)
-    df_reg = df_reg.loc[~np.isnan(df_reg.political_ideology) & (df_reg.political_ideology < 80)]
-
+    
     df_reg.rename(columns={'P23': 'institutional_trust'}, inplace=True)
-    df_reg = df_reg.loc[~np.isnan(df_reg.institutional_trust) & (df_reg.institutional_trust < 80)]
-
+    
     df_reg.rename(columns={'P27_1': 'ecoanxiety'}, inplace=True)
-    df_reg = df_reg.loc[~np.isnan(df_reg.ecoanxiety) & (df_reg.ecoanxiety < 80)]
 
     df_reg.rename(columns={'P26_5': 'ecological_paradigm'}, inplace=True)
-    df_reg = df_reg.loc[~np.isnan(df_reg.ecological_paradigm) & (df_reg.ecological_paradigm < 80)]
-
+    
     df_reg.rename(columns={'P24': 'knowledge'}, inplace=True)
-    df_reg = df_reg.loc[~np.isnan(df_reg.knowledge) & (df_reg.knowledge < 80)]
+    
+    df_reg_here = df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97) & ~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 20) & ~np.isnan(df_reg.climate_change) & (df_reg.climate_change < 80) & ~np.isnan(df_reg.score_welfare) &~np.isnan(df_reg.quality_of_life) & (df_reg.quality_of_life < 80),:]
+    
+    df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.knowledge) & (df_reg_here.knowledge < 80)]
+    df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.ecological_paradigm) & (df_reg_here.ecological_paradigm < 80)]
+    df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.ecoanxiety) & (df_reg_here.ecoanxiety < 80)]
+    df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.institutional_trust) & (df_reg_here.institutional_trust < 80)]
+    df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.political_ideology) & (df_reg_here.political_ideology < 80)]
+    df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.education) & (df_reg_here.education < 6)]
 
 
-    X = df_reg[["climate_change", "quality_of_life", "score_welfare_vehicle_ownership_license", "LOW", "HIGH", "age", "man", "education", "children2", 'political_ideology', 'ecoanxiety', "knowledge"]] #score_welfare_vehicle_ownership_license
+    X = df_reg_here[["climate_change", "quality_of_life", "score_welfare_vehicle_ownership_license", "LOW", "HIGH", "age", "man", "education", "children2", 'political_ideology', 'ecoanxiety', "knowledge"]] #score_welfare_vehicle_ownership_license
     #X = df_reg[["climate_change", "quality_of_life", "score_welfare", "LOW", "HIGH"]]
     X = sm.add_constant(X)
-    y_acceptability = df_reg["acceptability"].values.reshape(-1, 1).flatten()
-    y_price = (df_reg["acceptable_price"].values.reshape(-1, 1)).flatten()
+    y_acceptability = df_reg_here["acceptability"].values.reshape(-1, 1).flatten()
+    y_price = (df_reg_here["acceptable_price"].values.reshape(-1, 1)).flatten()
 
-    model_acceptability_full = sm.WLS(y_acceptability, X, weights=df_reg['PESAIX']).fit()
+    model_acceptability_full = sm.WLS(y_acceptability, X, weights=df_reg_here['PESAIX']).fit()
     print(model_acceptability_full.summary())
 
-    model_price_full = sm.WLS(y_price, X, weights=df_reg['PESAIX']).fit()
+    model_price_full = sm.WLS(y_price, X, weights=df_reg_here['PESAIX']).fit()
     print(model_price_full.summary())
 
     #Export results
     BETA_OPINION = np.array(model_acceptability.params)
     BETA_PRICE = np.array(model_price.params)
-    INITIAL_OPINION = weighted_median(y_acceptability, df_reg["PESAIX"].values)
-    INITIAL_PRICE = weighted_median(y_price, df_reg["PESAIX"].values)
-    INITIAL_CC = weighted_median(X["climate_change"].values, df_reg["PESAIX"].values)
-    INITIAL_WELFARE = weighted_median(X["score_welfare_vehicle_ownership_license"].values, df_reg["PESAIX"].values) #_vehicle_ownership_license
-    INITIAL_QOL = weighted_median(X["quality_of_life"].values, df_reg["PESAIX"].values)
-
-    if scenario == "increasing_knowledge":
-        INITIAL_KNOWLEDGE = weighted_median(X["knowledge"].values, df_reg["PESAIX"].values) #np.nanmedian(y_scaled) #np.nanmedian(y_raw)
-    else:
-        INITIAL_KNOWLEDGE = 0
+    
 
     return BETA_OPINION, BETA_PRICE, INITIAL_OPINION, INITIAL_PRICE, INITIAL_CC, INITIAL_WELFARE, INITIAL_QOL, INITIAL_KNOWLEDGE
 

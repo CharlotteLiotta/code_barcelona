@@ -316,7 +316,7 @@ def calibration_utility_amenity3(x, gdf, income_levels, alpha, print_summary=0, 
                          "station_500m", "station_500m_1km", #"station_1km_2km", 
                          'fgc_500m', 'rodalies_500m', 'rodalies_500m_1km', 'fgc_500m_1km', #'rodalies_1km_2km', 'fgc_1km_2km',
                          "airport_500m",
-                         "index_tourism",
+                         "high_tourism", "medium_tourism",
                          'mean_activity',
                          'pedestrian_data_density', #"barcelona" #, "slope_20" #, "high_slope"#'pedestrian_data_density',
                          ]]
@@ -575,9 +575,12 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
     init_wage = init_wage * Y_median / np.nanmean(init_wage)
     #x0 = [200, 250] + (init_wage * 0.6).tolist() + (init_wage).tolist() + (init_wage * 1.4).tolist()
     
-    init_wage_high = init_wage * [1.4, 1.4, 1.4, 1.45, 1.4, 1.4, 1.45, 1.45]
-    init_wage_low = init_wage * [0.6, 0.6, 0.6, 0.58, 0.6, 0.6, 0.58, 0.58]
-    init_wage_med = init_wage * [1, 1, 1, 0.97, 1, 1, 0.97, 0.97]
+    init_wage_high = init_wage * [1.4, 1.4, 1.4, 1.42, 1.4, 1.4, 1.42, 1.42]
+    init_wage_low = init_wage * [0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6]
+    init_wage_med = init_wage * [1, 1, 1, 0.98, 1, 1, 0.98, 0.98]
+    #init_wage_high = init_wage * [1.4, 1.4, 1.4, 1.45, 1.4, 1.4, 1.45, 1.45]
+    #init_wage_low = init_wage * [0.6, 0.6, 0.6, 0.58, 0.6, 0.6, 0.58, 0.58]
+    #init_wage_med = init_wage * [1, 1, 1, 0.97, 1, 1, 0.97, 0.97]
     #init_wage_high = np.array([1.4 * Y_median, 1.4 * Y_median, 1.4 * Y_median, 1.45 * Y_median, 1.4 * Y_median, 1.4 * Y_median, 1.45 * Y_median, 1.45 * Y_median])
     x0 = [200, 250] + (init_wage_low).tolist() + (init_wage_med).tolist() + (init_wage_high).tolist()
     bounds = [(0, 300), (0, 400)] + [(0, 10000)] * 3 * len(np.unique(employment_centers.cluster))
