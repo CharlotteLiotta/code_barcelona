@@ -310,14 +310,15 @@ def calibration_utility_amenity3(x, gdf, income_levels, alpha, print_summary=0, 
     X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km", #"beach_1km_2km",
                          'parc_2h_500m','parc_2h_500m_1km',#'parc_2h_1km_2km',
                          #'parc_5h_500m','parc_5h_500m_1km','parc_5h_1km_2km',
-                         #'parc_combined_2h_500m','parc_combined_2h_500m_1km','parc_combined_2h_1km_2km',
-                         #'parc_combined_5h_500m','parc_combined_5h_500m_1km','parc_combined_5h_1km_2km',
-                         "station_500m", "station_500m_1km", "station_1km_2km", 
+                         #'parc_combined_2h_500m','parc_combined_2h_500m_1km',#'parc_combined_2h_1km_2km',
+                         #'parc_combined_2h_500m_b','parc_combined_2h_500m_1km_b',#'parc_combined_2h_1km_2km',
+                         #'parc_combined_5h_500m','parc_combined_5h_500m_1km',#'parc_combined_5h_1km_2km',
+                         "station_500m", "station_500m_1km", #"station_1km_2km", 
                          'fgc_500m', 'rodalies_500m', 'rodalies_500m_1km', 'fgc_500m_1km', #'rodalies_1km_2km', 'fgc_1km_2km',
                          "airport_500m",
-                         "index_tourism", #"high_tourism", "medium_tourism",
+                         "index_tourism",
                          'mean_activity',
-                         'pedestrian_data_density' #, "slope_20"#'pedestrian_data_density',
+                         'pedestrian_data_density', #"barcelona" #, "slope_20" #, "high_slope"#'pedestrian_data_density',
                          ]]
     
     #X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
@@ -574,9 +575,9 @@ def compute_cost_car_poly_i(gdf, Y_median, import_trans_mode, PRICE_TIME, WORKIN
     init_wage = init_wage * Y_median / np.nanmean(init_wage)
     #x0 = [200, 250] + (init_wage * 0.6).tolist() + (init_wage).tolist() + (init_wage * 1.4).tolist()
     
-    init_wage_high = init_wage * [1.4, 1.4, 1.4, 1.42, 1.4, 1.4, 1.42, 1.42]
-    init_wage_low = init_wage * [0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6]
-    init_wage_med = init_wage * [1, 1, 1, 0.98, 1, 1, 0.98, 0.98]
+    init_wage_high = init_wage * [1.4, 1.4, 1.4, 1.45, 1.4, 1.4, 1.45, 1.45]
+    init_wage_low = init_wage * [0.6, 0.6, 0.6, 0.58, 0.6, 0.6, 0.58, 0.58]
+    init_wage_med = init_wage * [1, 1, 1, 0.97, 1, 1, 0.97, 0.97]
     #init_wage_high = np.array([1.4 * Y_median, 1.4 * Y_median, 1.4 * Y_median, 1.45 * Y_median, 1.4 * Y_median, 1.4 * Y_median, 1.45 * Y_median, 1.45 * Y_median])
     x0 = [200, 250] + (init_wage_low).tolist() + (init_wage_med).tolist() + (init_wage_high).tolist()
     bounds = [(0, 300), (0, 400)] + [(0, 10000)] * 3 * len(np.unique(employment_centers.cluster))
@@ -612,7 +613,7 @@ def calibrate_b_kappa(gdf, mask, RHO, option_function = "CES", option_calib = "h
     gdf_here.loc[:,"log_q"] = np.log(gdf_here["size"])
     gdf_here.loc[:,"log_h"] = gdf_here["log_n"] + gdf_here["log_q"] - gdf_here["log_L"]
     
-
+    
     if option_calib == "population":
         y = (gdf_here["log_n"])
         X = (gdf_here.loc[:,["log_R", "log_L", "log_q"]])
@@ -625,6 +626,20 @@ def calibrate_b_kappa(gdf, mask, RHO, option_function = "CES", option_calib = "h
         X = sm.add_constant(X)  # Adds intercept
         model_statsmodel = sm.OLS(y, X).fit()
         print(model_statsmodel.summary())
+
+        # Predicted values
+        x_vals = np.linspace(X["log_R"].min(), X["log_R"].max(), 100)
+        X_plot = sm.add_constant(x_vals)
+        y_pred = model_statsmodel.predict(X_plot)
+
+        # Plot
+        plt.figure()
+        plt.scatter(X["log_R"], y, s = 0.5)
+        plt.plot(x_vals, y_pred)
+        plt.xlabel("log(Rent per m2)")
+        plt.ylabel("log(Housing per land unit)")
+        plt.title("Cobb-Douglas Housing Supply Regression")
+        plt.show()
 
         stargazer = Stargazer([model_statsmodel])
         print(stargazer.render_latex())
@@ -643,7 +658,7 @@ def calibrate_b_kappa(gdf, mask, RHO, option_function = "CES", option_calib = "h
             (1 - ((1 - a) ** sigma) * ((kappa * x) ** (sigma - 1))) ** (sigma / (1 - sigma))
             )
 
-        p0 = [0.1, 0.45, 5/7]  # initial guesses for kappa, a, sigma
+        p0 = [0.29, 0.66, 5/7]  # initial guesses for kappa, a, sigma
 
         params, cov = curve_fit(CES_func, np.exp(gdf_here.log_R), np.exp(gdf_here.log_h), p0=p0, maxfev=10000)
         KAPPA, A, SIGMA = params

@@ -110,7 +110,7 @@ travel_time_matrix_car.travel_time = ((travel_time_matrix_car.distance_car / 100
 #Calibration of B and KAPPA
 gdf["land"] = gdf["urb_area"]
 
-mask = ((gdf["rent_m2"] < 25) &(gdf["rent_m2"] > 7)&
+mask = ((gdf["rent_m2"] < 19) &(gdf["rent_m2"] > 12)& #7,25
         (gdf["pop"] > 484.0)&
         (~np.isnan(gdf["size"]))
         &(~np.isnan(gdf["pop"]))
@@ -144,7 +144,7 @@ gdf["rodalies_500m_1km"] = ((gdf["min_distance_rodalies"] > 500) & (gdf["min_dis
 gdf["fgc_500m_1km"] = ((gdf["min_distance_fgc"] > 500) & (gdf["min_distance_fgc"] < 1000)) * 1
 gdf["rodalies_1km_2km"] = ((gdf["min_distance_rodalies"] > 1000) & (gdf["min_distance_rodalies"] < 2000)) * 1
 gdf["fgc_1km_2km"] = ((gdf["min_distance_fgc"] > 1000) & (gdf["min_distance_fgc"] < 2000)) * 1
-
+gdf["barcelona"] = (gdf["code_city"].str.startswith("08019")) * 1
 #Calibrate beta and amenities
 def compute_log_likelihood(x):
     print(x)
@@ -165,8 +165,8 @@ def compute_error_in_population_from_utility(u):
     #print(compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function))
     return sum(compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, False, option_function)**2)
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, calib_beta.x[1:4], bounds=[(0,None), (0,None), (0,None)], method = "Powell") #[161, 287, 411] #[219, 329, 471]
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800]) #[180, 420, 600] #150 270 427
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, calib_beta.x[1:4], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #[161, 287, 411] #[219, 329, 471]
+#solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #np.array([399,690,995]) np.array([370,690,800]) #[180, 420, 600] #150 270 427
 print(solving_model)
 
 if solving_model.fun < 20000000:
@@ -196,7 +196,7 @@ def compute_error_in_population_from_utility(u):
 
     return sum((compute_error_in_population(u, gdf["amenities"], [pop[lvl] for lvl in income_levels], BETA, gdf["wage_LOW"], gdf["wage_MED"], gdf["wage_HIGH"], gdf["transport_cost_LOW"], gdf["transport_cost_MED"], gdf["transport_cost_HIGH"], B, KAPPA, SIGMA, INTEREST_RATE, gdf["urb_area"], SOFT_RENT, True, option_function, rent_residual, density_residual, size_residual))**2)
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [159.7, 283.9, 404.7], method = "Powell") #[159.7, 283.9, 404.7]
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead") #[159.7, 283.9, 404.7]
 
 if solving_model.fun < 50000000:
 
@@ -708,10 +708,6 @@ plt.ylabel("Average vehicle-km driven")
 plt.legend()
 plt.show()
 plt.close()
-
-
-plt.plot(avg_vkm_lvl["LOW"], label = "Low-income")
-plt.plot(avg_vkm_in_zone_lvl["LOW"] + avg_vkm_out_zone_lvl["LOW"], label = "Low-income")
 
 
 ##### LIVING
