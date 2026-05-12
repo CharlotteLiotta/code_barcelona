@@ -2,19 +2,19 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-df = pd.read_excel("../code_barcelona/simulation_results.xlsx")
+df = pd.read_excel("../code_barcelona/simulation_results_v2.xlsx")
 
 # Clean
 df = df.dropna(subset=['Unnamed: 0'])
 
 custom_order = [
     "baseline",
+    "improvement_public_transport",
     "exemption_residents",
     "exemption_low_income",
     "exemption_trips_inside_zone",
-    "improvement_public_transport",
     "discount_public_transport",
-    "increasing_knowledge"
+    #"increasing_knowledge"
 ]
 
 df["scenario"] = pd.Categorical(df["scenario"], categories=custom_order, ordered=True)
@@ -55,18 +55,22 @@ colors[0] = 'red'  # change the second bar
 
 for ax, var in zip(axes, plot_order):
     sub = df[df['Unnamed: 0'] == var]
+    sub = sub.dropna(subset=['scenario'])
     ax.bar(sub['scenario'], sub['t20'], color=colors, width=0.5)
     ax.set_title(custom_titles.get(var, var))
     ax.tick_params(axis='x', rotation=45)
+    ax.tick_params(axis='y', labelleft=True)
     for label in ax.get_xticklabels():
         label.set_ha("right")
 
 for ax in axes:
     if len(ax.get_xticklabels()) > 0:
         ax.tick_params(axis="x", labelrotation=45)
-        ax.label_outer()
+        #ax.label_outer()
         for label in ax.get_xticklabels():
             label.set_ha("right")
+
+
 # Hide unused axes
 #for ax in axes[len(variables):]:
 #    ax.axis('off')
@@ -78,10 +82,8 @@ axes[7].set_visible(False)
 # Apply rotation everywhere
 for ax in axes[:7]:
     ax.tick_params(axis="x", labelrotation=45)
-    ax.label_outer()# Force x-labels to appear on subplot #6 (index 5)
+    #ax.label_outer()# Force x-labels to appear on subplot #6 (index 5)
 
-axes[5].tick_params(axis="x", labelbottom=True)
-axes[5].label_outer()
 # Add room for overflow
 plt.subplots_adjust(bottom=0.05, hspace=0.01)
 plt.tight_layout()

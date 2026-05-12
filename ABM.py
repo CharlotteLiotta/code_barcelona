@@ -3,47 +3,6 @@ from numba import njit, prange # type: ignore
 
 @njit
 def compute_indiv_loc_matrix(N, len_gdf, n):
-    """ Build the agents location matrix.
-    
-    Allocate the N agents to
-    the len_gdf census tracts of analysis,
-    based on the simlulated population density n 
-    """
-    
-    opinion_distance_matrix = np.zeros((N, len_gdf))
-    step = 0
-
-    for k in range(len_gdf):
-        nb_pers = int(round(n[k]))  # rounding outside of array slices is OK in njit
-
-        end = step + nb_pers
-        if end < N:
-            for i in range(step, end):
-                opinion_distance_matrix[i, k] = 1.0
-            step = end
-        else:
-            for i in range(step, N):
-                opinion_distance_matrix[i, k] = 1.0
-            break
-
-    missing_ppl = int(N - opinion_distance_matrix.sum())
-
-    if missing_ppl > 0:
-        print("missing ppl", missing_ppl)
-    
-        # Get location indices sorted by population in descending order
-        pop_per_location = opinion_distance_matrix.sum(axis=0)
-        sorted_locs = np.argsort(-pop_per_location)  # descending order
-
-        # Start assigning one agent per location
-        step = int(N - missing_ppl)
-        for i in range(missing_ppl):
-            opinion_distance_matrix[step + i, sorted_locs[i % len(sorted_locs)]] = 1.0
-
-    return opinion_distance_matrix
-
-@njit
-def compute_indiv_loc_matrix2(N, len_gdf, n):
 
     alloc = np.empty(len_gdf, dtype=np.int64)
     remainders = np.empty(len_gdf)
@@ -114,7 +73,6 @@ def make_people_move(indiv_loc_matrix_new, N, len_gdf, indiv_loc_matrix, proba_o
                 if moving == 1:
                     has_moved[i] = 1
                     indiv_loc_matrix_new[i,:] = np.zeros(len_gdf)
-                    #destination = np.random.choice(np.arange(len(distance)), p=proba_of_moving_to)
                     destination = np.arange(len_gdf)[np.searchsorted(np.cumsum(proba_of_moving_to), np.random.random(), side="right")]
                     indiv_loc_matrix_new[i,destination] = 1
 

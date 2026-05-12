@@ -93,7 +93,7 @@ def import_jobs(gdf, path_data):
 
     return gdf
 
-def import_income_new(gdf, path_data):
+def import_income(gdf, path_data):
     """ Import data on the spatial distribution of incomes"""
 
     #https://www.ine.es/dynt3/inebase/en/index.htm?padre=12385&capsel=12384
@@ -166,69 +166,6 @@ def import_income_new(gdf, path_data):
     gdf["pop_HIGH"] = gdf["pop"] * gdf["share_high_income"] / 100
     gdf["pop_MED"] = gdf["pop"] - gdf["pop_HIGH"] - gdf["pop_LOW"]
     return Y_median, gdf
-
-def import_income(gdf, path_data):
-    """ Import data on the spatial distribution of incomes"""
-
-    #https://www.ine.es/dynt3/inebase/en/index.htm?padre=12385&capsel=12384
-    
-    #Import income data
-    income = pd.read_csv(path_data + '30896.csv', sep = ";", encoding="latin1")
-    income = income.loc[(income.Periodo == 2022) & (income['Mean and median income indicators'] == 'Average household net income'),["Sections", "Total"]]
-    income = income.dropna(subset=["Sections"])
-    income["ID"] = income["Sections"].str[:10]
-    income.columns = ['Sections', 'net_income', 'ID']
-    income.net_income = pd.to_numeric(income.net_income, errors= "coerce")
-    income.net_income = income.net_income * 1000
-
-    income_ineq = pd.read_csv(path_data + '30901.csv', sep = ";", encoding="latin1")
-    income_low = income_ineq.loc[(income_ineq.Periodo == 2023) & (income_ineq['Distribución de la renta por unidad de consumo'] == 'Población con ingresos por unidad de consumo por debajo 60% de la mediana'),["Secciones", "Total"]]
-    income_low = income_low.dropna(subset=["Secciones"])
-    income_low["ID"] = income_low["Secciones"].str[:10]
-    income_low.columns = ['Secciones', 'share_low_income', 'ID']
-    income_low['share_low_income'] = income_low['share_low_income'].str.replace(',', '.', regex=False)
-    income_low.share_low_income = pd.to_numeric(income_low.share_low_income, errors= "coerce")
-
-    income_high = income_ineq.loc[(income_ineq.Periodo == 2023) & (income_ineq['Distribución de la renta por unidad de consumo'] == 'Población con ingresos por unidad de consumo por encima 140% de la mediana'),["Secciones", "Total"]]
-    income_high = income_high.dropna(subset=["Secciones"])
-    income_high["ID"] = income_high["Secciones"].str[:10]
-    income_high.columns = ['Secciones', 'share_high_income', 'ID']
-    income_high['share_high_income'] = income_high['share_high_income'].str.replace(',', '.', regex=False)
-    income_high.share_high_income = pd.to_numeric(income_high.share_high_income, errors= "coerce")
-
-
-
-
-    #Merge with gdf
-    gdf = gdf.merge(income.loc[:,['net_income', 'ID']], on = "ID", how = "left")
-    gdf = gdf.merge(income_low.loc[:,['share_low_income', 'ID']], on = "ID", how = "left")
-    gdf = gdf.merge(income_high.loc[:,['share_high_income', 'ID']], on = "ID", how = "left")
-
-    gdf["net_income"] = (gdf["net_income"] / gdf["active_per_hh"]) / 12
-    #Compute average income
-    Y = (np.nansum(gdf.net_income * gdf["pop"]) / np.nansum(gdf["pop"]))
-    def weighted_median(values, weights):
-        mask = ~pd.isna(values) & ~pd.isna(weights)
-        values = np.asarray(values[mask])
-        weights = np.asarray(weights[mask])
-
-        # Sort by value
-        sorted_idx = np.argsort(values)
-        values_sorted = values[sorted_idx]
-        weights_sorted = weights[sorted_idx]
-
-        # Cumulative weights
-        cum_weights = np.cumsum(weights_sorted)
-        cutoff = 0.5 * np.sum(weights_sorted)
-
-        # Weighted median
-        return values_sorted[np.searchsorted(cum_weights, cutoff)]
-    Y_median = weighted_median(gdf["net_income"], gdf["pop"])
-
-    gdf["pop_LOW"] = gdf["pop"] * gdf["share_low_income"] / 100
-    gdf["pop_HIGH"] = gdf["pop"] * gdf["share_high_income"] / 100
-    gdf["pop_MED"] = gdf["pop"] - gdf["pop_HIGH"] - gdf["pop_LOW"]
-    return Y, Y_median, gdf
 
 def import_land_use(gdf, path_data):
     """ Import data on land use - pretreated in import_land_use """
@@ -381,28 +318,7 @@ def import_ppl_per_hh(gdf, path_data):
 
     return gdf
 
-def load_transport_times(gdf, path_data, center):
-    """ Load transport times previously retrieved with import_transport_time """
-
-    def load_transport_data(mode):
-        i = 100
-        travel_time_matrix = np.load(path_data + "/travel_time_matrix_" + mode + "_" + str(i) + ".npy", allow_pickle= True) #"tt_" + center + 
-    
-        while i < len(gdf) - 100:
-            i = i + 100
-            temp = np.load(path_data + "/travel_time_matrix_" + mode + "_" + str(i) + ".npy", allow_pickle= True) #"tt_" + center + 
-            travel_time_matrix = np.concatenate((travel_time_matrix, temp), axis=0)
-        
-        temp = np.load(path_data + "/travel_time_matrix_" + mode +  "_" + str(len(gdf)) + ".npy", allow_pickle= True) #"tt_" + center + 
-        travel_time_matrix = np.concatenate((travel_time_matrix, temp), axis=0)
-    
-        travel_time_matrix = pd.DataFrame(travel_time_matrix, columns = ['from_id', 'to_id', 'travel_time'])
-        travel_time_matrix['travel_time'] = pd.to_numeric(travel_time_matrix['travel_time'], errors='coerce')
-        return travel_time_matrix
-
-    return load_transport_data("car"), load_transport_data("transit")
-
-def load_transport_times_poly(gdf, path_data, center, option_center):
+def load_transport_times(gdf, path_data, center, option_center):
     """ Load transport times previously retrieved with import_transport_time """
 
     def load_transport_data(mode):
@@ -424,7 +340,7 @@ def load_transport_times_poly(gdf, path_data, center, option_center):
     return load_transport_data("car"), load_transport_data("transit")
 
 
-def load_transport_distance(gdf, path_data, center):
+def load_transport_distance(gdf, path_data):
     """ Load transport times previously retrieved with import_transport_time """
 
     i = 100
@@ -576,10 +492,6 @@ def import_parcs(gdf, path_data):
     gdf["parc_5h_500m"] = (gdf['min_distance_parc_5h'] < 500) * 1
     gdf["parc_5h_500m_1km"] = ((gdf['min_distance_parc_5h'] < 1000) & (gdf['min_distance_parc_5h'] > 500)) * 1
     gdf["parc_5h_1km_2km"] = ((gdf['min_distance_parc_5h'] < 2000) & (gdf['min_distance_parc_5h'] > 1000)) * 1
-
-    #gdf["parc_500m_b"] = gdf["parc_500m"] * gdf["barcelona"]
-    #gdf["parc_500m_1km_b"] = gdf["parc_500m_1km"] * gdf["barcelona"]
-    #gdf["parc_1km_2km_b"] = gdf["parc_1km_2km"] * gdf["barcelona"]
 
     return gdf.loc[:,["ID", 'min_distance_parc_combined_2h', 'min_distance_parc_combined_5h', 'min_distance_parc_2h', 'min_distance_parc_5h', "parc_combined_2h_500m", "parc_combined_2h_500m_1km", "parc_combined_2h_1km_2km", "parc_combined_5h_500m", "parc_combined_5h_500m_1km", "parc_combined_5h_1km_2km", "parc_2h_500m", "parc_2h_500m_1km", "parc_2h_1km_2km", "parc_5h_500m", "parc_5h_500m_1km", "parc_5h_1km_2km"]]
 
@@ -827,10 +739,6 @@ def import_rent_idealista(gdf, path_data):
 
 def import_tax_zone(gdf, employment_centers):
     zone_tax = gdf.loc[gdf.ID.str[:5].isin(["08019", "08101", "08194"]),:]
-    #fig, ax = plt.subplots(figsize=(8, 8))
-    #gdf.plot(ax = ax, color = "lightgrey")
-    #zone_tax.plot(ax = ax)
-    #plt.show()
     zone_union = zone_tax.union_all()
     clusters_in_zone = employment_centers[employment_centers.within(zone_union)]["cluster"].unique().tolist()
     house_in_zone = gdf[gdf.centroid.within(zone_union)]["ID"].unique().tolist()

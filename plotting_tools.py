@@ -4,17 +4,12 @@ import matplotlib.pyplot as plt # type: ignore
 import matplotlib.colors as mcolors
 from matplotlib.ticker import FuncFormatter
 import matplotlib.patches as mpatches
-import seaborn as sns
 import pandas as pd
 from statsmodels.nonparametric.smoothers_lowess import lowess
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.colors import BoundaryNorm
-from matplotlib.colors import TwoSlopeNorm
+from matplotlib.patches import Patch
 import matplotlib.lines as mlines
 
-def plot_spatial_price(gdf, values):
+def plot_spatial_price(gdf, values, include_missing = True):
     # --- prepare values ---
     gdf_proj = gdf.to_crs(epsg=32632).copy()   # keep projection if needed
     gdf_proj["value"] = values
@@ -57,7 +52,6 @@ def plot_spatial_price(gdf, values):
     city_border = muni_gdf[muni_gdf.ID.str[:5].isin(["08019", "08101", "08194"])]
     city_border.boundary.plot(ax=ax, color='black', linewidth=2, label = "Toll area")
     
-
     # continuous colorbar (no title)
     sm = plt.cm.ScalarMappable(cmap=cmap_name, norm=plt.Normalize(vmin=vmin, vmax=vmax))
     sm.set_array([])
@@ -65,15 +59,16 @@ def plot_spatial_price(gdf, values):
     ticks = np.linspace(vmin, vmax, 5)
     cbar.set_ticks(ticks)
     cbar.ax.set_yticklabels([f"{t:.1f}" for t in ticks], fontsize=14)  # show 1 decimal + %
-    import matplotlib.patches as mpatches
 
-    missing_patch = mpatches.Patch(facecolor="lightgrey", edgecolor="white", label="Income group not represented")
+    if include_missing == True:
+        missing_patch = mpatches.Patch(facecolor="lightgrey", edgecolor="white", label="Simulated population = 0")
+    
     toll_patch = mpatches.Patch(facecolor="none", edgecolor="black", linewidth=2, label="Toll area")
 
-    ax.legend(handles=[missing_patch, toll_patch], loc="lower right")
-
-    # title
-    #ax.set_title("Average opinions (year 20)", fontsize=14)
+    if include_missing == True:
+        ax.legend(handles=[missing_patch, toll_patch], loc="lower right")
+    else:
+        ax.legend(handles=[toll_patch], loc="lower right")
 
 def main_plot(save_tax, emission_change, change_qol_in_zone, change_qol_out_zone, utility_change_low, utility_change_med, utility_change_high):
     
@@ -84,17 +79,7 @@ def main_plot(save_tax, emission_change, change_qol_in_zone, change_qol_out_zone
     mpl.rcParams['ytick.labelsize'] = 9
     mpl.rcParams['legend.fontsize'] = 9
 
-    # Colorblind-safe palette (Wong 2011)
-    colors = {
-        "blue":  "#0072B2",
-        "orange":"#E69F00",
-        "green": "#009E73",
-        "red":   "#D55E00",
-        "purple":"#CC79A7",
-        "cyan":  "#56B4E9"
-    }
-
-    fig, axes = plt.subplots(3, 1, figsize=(8, 7), sharex=True, constrained_layout=True)
+    _, axes = plt.subplots(3, 1, figsize=(8, 7), sharex=True, constrained_layout=True)
     years = range(len(save_tax))
 
     # --- Panel 1 ---
@@ -106,7 +91,7 @@ def main_plot(save_tax, emission_change, change_qol_in_zone, change_qol_out_zone
     axes[1].plot(years, utility_change_med,  label="Middle-income", color="orangered",  linewidth=1.5)
     axes[1].plot(years, utility_change_high, label="High-income",   color="maroon",    linewidth=1.5)
     axes[1].set_ylabel("Median utility variation (%)")
-    axes[1].legend(frameon=False, loc="upper right", fontsize=9)
+    axes[1].legend(frameon=False, loc="lower right", fontsize=9)
 
     # --- Panel 3 ---
     axes[2].plot(years, emission_change,        label="Transport emissions", color="green", linewidth=1.5)
@@ -149,7 +134,6 @@ def plot_base_map(gdf):
     )
 
     # Municipality labels
-    sel = ["Badalona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]
     for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(["Badalona", "Barcelona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]),:].iterrows(): ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold', ha='center', va='center', color='black')
 
     # ----- Legend -----
@@ -213,12 +197,6 @@ def plot_base_map_with_land_cover(gdf, land_cover_plot, color_dict):
     )
 
     # Municipality labels
-    #for _, row in muni_gdf.iterrows():#.loc[muni_gdf["NMUN"].isin(
-    #    #["Badalona", "Barcelona", "Castelldefels", "Sant Cugat del Vallès"]), :].iterrows():
-    #    ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold',
-    #            ha='center', va='center', color='black')
-        
-    # Municipality labels
     for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin([
         "Barcelona",
         "Sant Adrià de Besòs",
@@ -249,11 +227,6 @@ def plot_base_map_with_land_cover(gdf, land_cover_plot, color_dict):
         ax.text(row.x, row.y, "Garraf massif", fontsize=9, fontweight='bold',
                 ha='center', va='center', color='black')
         
-    #for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(
-    #    ["Sant Cugat del Vallès"]), :].iterrows():
-    #    ax.text(row.x - 5500, row.y - 2000, "Llobregat River", fontsize=9, fontweight='bold',
-    #            ha='center', va='center', color='black')
-        
     for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(
         ["Sant Cugat del Vallès"]), :].iterrows():
         ax.text(row.x + 2000, row.y - 1500, "Collserola massif", fontsize=9, fontweight='bold',
@@ -263,7 +236,6 @@ def plot_base_map_with_land_cover(gdf, land_cover_plot, color_dict):
 
     # --- Legend: combine land-cover legend with manual handles ---
     # First get land-cover handles
-    import matplotlib.patches as mpatches
     # --- Land-cover handles ---
     land_cover_handles = [
         mpatches.Patch(color=color_dict[cat], label=cat) for cat in color_dict
@@ -289,7 +261,61 @@ def plot_base_map_with_land_cover(gdf, land_cover_plot, color_dict):
     plt.tight_layout()
     plt.show()
 
+def plot_acceptability_price(df_reg):
+    df_reg_here = df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97)]
+    df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.acceptable_price) & (df_reg_here.acceptable_price < 20)]
+    summary = (
+        df_reg_here.groupby("acceptability")["acceptable_price"]
+        .agg(["mean", "std", "count"])
+        )
+    summary["se"] = summary["std"] / (summary["count"] ** 0.5)
+
+    plt.figure()
+    plt.errorbar(
+        summary.index,
+        summary["mean"],
+        yerr=1.96 * summary["se"],
+        fmt="o"
+        )
+    plt.xlabel("Acceptability (0–10)")
+    plt.ylabel("Mean acceptable price")
+    plt.show()
+
+def plot_hist_survey(df_reg, var, xlabel):
+
+    plt.figure(figsize=(8, 5))
+    bins = np.arange(-0.5, 11.5, 1)
+    if var == "acceptable_price": 
+        plt.hist(
+        df_reg[var] * 2,
+        weights=(df_reg["PESAIX"] / df_reg["PESAIX"].sum()) * 100,
+        bins=bins,
+        color='#1f77b4',
+        alpha=0.85,
+        edgecolor='black'  # clearer bar separation
+        )
+    else:
+        plt.hist(
+            df_reg[var],
+            weights=(df_reg["PESAIX"] / df_reg["PESAIX"].sum()) * 100,
+            bins=bins,
+            color='#1f77b4',
+            alpha=0.85,
+            edgecolor='black'  # clearer bar separation
+            )
+
+    plt.xlabel(xlabel, fontsize=14)
+    plt.ylabel('Respondents (%)', fontsize=14)
+
+    plt.xticks(range(0, 11), fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.grid(axis='y', linestyle='--', alpha=0.6)
+
+    plt.tight_layout()
+    plt.show()
+
 def plot_mobility_loss(x,y, df_reg):
+    df_reg = df_reg.copy(deep=True)
     label_x = x
     label_y = y
     x = df_reg[x]
@@ -297,8 +323,8 @@ def plot_mobility_loss(x,y, df_reg):
     w = df_reg.PESAIX   # survey weights
 
     # Define bins
-    bins = np.linspace(x.min(), x.max(), 10)
-    df_reg['bin'] = pd.cut(x, bins)
+    bins = np.linspace(x.min(), x.max(), 20)
+    df_reg.loc[:, 'bin'] = pd.cut(x, bins)
 
     # Weighted mean function
     def weighted_mean(series, weights):
@@ -308,11 +334,9 @@ def plot_mobility_loss(x,y, df_reg):
         return np.average(series, weights=weights)
 
     # Group by bin and calculate weighted stats
-    grouped = (
-        df_reg.groupby('bin').apply(lambda g: pd.Series({
-            "mean": weighted_mean(g[y.name], g[w.name]),
-            "share": g[w.name].sum() / w.sum() * 100  # % of total respondents
-            })))
+    grouped = (df_reg.groupby('bin', observed = False).apply(lambda g: pd.Series({"mean": weighted_mean(g[y.name], g[w.name]), "share": g[w.name].sum() / w.sum() * 100 # % of total respondents
+                                                                }),
+            include_groups=False))
 
     # Drop bins with too few weighted respondents (optional, e.g. <1% share)
     grouped = grouped[grouped['share'] >= 1]
@@ -325,8 +349,10 @@ def plot_mobility_loss(x,y, df_reg):
 
     # Line plot: weighted mean acceptable toll
     ax1.plot(bin_centers, grouped['mean'], marker='o', color='blue')
-    ax1.set_xlabel(label_x, fontsize=14)
-    ax1.set_ylabel(label_y, fontsize=14, color='blue')
+    #ax1.set_xlabel(label_x, fontsize=14)
+    ax1.set_xlabel("Welfare score", fontsize=14)
+    #ax1.set_ylabel(label_y, fontsize=14, color='blue')
+    ax1.set_ylabel("Acceptable price", fontsize=14, color='blue')
     ax1.tick_params(axis='x', labelsize=12)
     ax1.tick_params(axis='y', labelsize=12, colors='blue')
 
@@ -344,6 +370,186 @@ def plot_mobility_loss(x,y, df_reg):
     ax2.tick_params(axis='y', labelsize=12, colors='black')
 
     plt.show()
+
+def plot_mode_shares(mode_shares_lvl, income_levels, MAX_YEAR):
+    values_0 = [100*mode_shares_lvl[level][0] for level in income_levels]
+    values_20 = [100*mode_shares_lvl[level][MAX_YEAR - 1] for level in income_levels]
+    x = np.arange(len(income_levels))
+    width = 0.35
+    plt.figure()
+    plt.bar(x - width/2, values_0, width, label="Year 0", color = "#4C72B0")
+    plt.bar(x + width/2, values_20, width, label="Year " + str(MAX_YEAR - 1), color = "#DD8452")
+    plt.xticks(x, ["Low-income", "Middle-income", "High-income"])
+    plt.ylabel("Share of public transport users (%)")
+    plt.legend()
+    plt.show()
+    plt.close()
+
+
+def plot_vkm(avg_vkm_in_zone_lvl, avg_vkm_out_zone_lvl, MAX_YEAR, income_levels):
+
+    in_0  = [avg_vkm_in_zone_lvl[lvl][0]  for lvl in income_levels]
+    in_20 = [avg_vkm_in_zone_lvl[lvl][MAX_YEAR - 1] for lvl in income_levels]
+    out_0  = [avg_vkm_out_zone_lvl[lvl][0]  for lvl in income_levels]
+    out_20 = [avg_vkm_out_zone_lvl[lvl][MAX_YEAR - 1] for lvl in income_levels]
+
+    x = np.arange(len(income_levels))
+    width = 0.35
+
+    plt.figure()
+    plt.bar(x - width/2, in_0,  width, label="Inside the tax zone (year 0)",  color="#4C72B0")
+    plt.bar(x - width/2, out_0, width, bottom=in_0, label="Outside of the tax zone (year 0)", color="#9ecae9")
+    plt.bar(x + width/2, in_20,  width, label="Inside the tax zone (year "+str(MAX_YEAR-1)+")",  color="#DD8452")
+    plt.bar(x + width/2, out_20, width, bottom=in_20, label="Outside of the tax zone (year "+str(MAX_YEAR-1)+")", color="#fdd0a2")
+    plt.xticks(x,  ["Low-income", "Middle-income", "High-income"])
+    plt.ylabel("Average vehicle-km driven")
+    plt.legend()
+    plt.show()
+    plt.close()
+
+
+def plot_living_commuting_pattern(live_and_work_in_toll_lvl, live_out_and_work_out_lvl, live_in_toll_and_work_out_lvl, live_out_and_work_in_toll_lvl, MAX_YEAR, income_levels):
+
+    lw_in_0  = [100 * live_and_work_in_toll_lvl[l][0]  for l in income_levels]
+    lw_in_20 = [100 * live_and_work_in_toll_lvl[l][MAX_YEAR - 1] for l in income_levels]
+
+    lw_out_0  = [100 * live_out_and_work_out_lvl[l][0]  for l in income_levels]
+    lw_out_20 = [100 * live_out_and_work_out_lvl[l][MAX_YEAR - 1] for l in income_levels]
+
+    in_out_0  = [100 * live_in_toll_and_work_out_lvl[l][0]  for l in income_levels]
+    in_out_20 = [100 * live_in_toll_and_work_out_lvl[l][MAX_YEAR - 1] for l in income_levels]
+
+    out_in_0  = [100 * live_out_and_work_in_toll_lvl[l][0]  for l in income_levels]
+    out_in_20 = [100 * live_out_and_work_in_toll_lvl[l][MAX_YEAR - 1] for l in income_levels]
+
+    x = np.arange(len(income_levels))
+    width = 0.32
+    # Muted academic palette
+    colors = {
+        "lw_in":  "#5B7C99",  # slate blue
+        "lw_out": "#8C9A5B",  # muted olive
+        "in_out": "#C2A878",  # sand
+        "out_in": "#B07A8F"   # dusty rose
+    }
+
+    plt.figure()
+    fig, ax = plt.subplots(figsize=(10, 6))
+    edge_col = "0.3"
+    edge_lw = 0.6
+
+    # --- Year 0 ---
+    bottom_0 = np.zeros(len(income_levels))
+    pos_0 = x - width/2
+
+    for vals, key in zip(
+        [lw_in_0, lw_out_0, in_out_0, out_in_0],
+        ["lw_in", "lw_out", "in_out", "out_in"]):
+        
+        ax.bar(pos_0, vals, width,
+                bottom=bottom_0,
+                color=colors[key],
+                edgecolor=edge_col,
+                linewidth=edge_lw)
+        
+        bottom_0 += vals
+
+    # --- Year 20 ---
+    bottom_20 = np.zeros(len(income_levels))
+    pos_20 = x + width/2
+
+    for vals, key in zip(
+        [lw_in_20, lw_out_20, in_out_20, out_in_20],
+        ["lw_in", "lw_out", "in_out", "out_in"]):
+    
+        ax.bar(pos_20, vals, width,
+            bottom=bottom_20,
+            color=colors[key],
+            edgecolor=edge_col,
+            linewidth=edge_lw)
+        bottom_20 += vals
+
+    # Year labels above bars
+    offset = 0.02
+    for i in range(len(income_levels)):
+        ax.text(pos_0[i],  bottom_0[i]  + offset, "Year 0",  ha="center", va="bottom", fontsize=14)
+        ax.text(pos_20[i], bottom_20[i] + offset, "Year " + str(MAX_YEAR - 1), ha="center", va="bottom", fontsize=14)
+
+    ax.set_xticks(x,  ["Low-income", "Middle-income", "High-income"])
+    ax.set_ylabel("Share (%)", fontsize=14)
+    ax.set_ylim(0, max(max(bottom_0), max(bottom_20)) + 0.08)
+    ax.tick_params(axis='x', labelsize=14)
+    ax.tick_params(axis='y', labelsize=14)
+
+    legend_elements = [
+        Patch(facecolor=colors["lw_in"],  edgecolor=edge_col, label="Live and work inside the tax zone"),
+        Patch(facecolor=colors["lw_out"], edgecolor=edge_col, label="Live and work outside the tax zone"),
+        Patch(facecolor=colors["in_out"], edgecolor=edge_col, label="Live inside and work outside the zone"),
+        Patch(facecolor=colors["out_in"], edgecolor=edge_col, label="Live outside and work inside the zone"),
+    ]
+
+    ax.legend(
+        handles=legend_elements,
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.12),  # 0.5 = center horizontally, -0.12 = below plot
+        ncol=2, fontsize=14  # one column per category
+    )
+    fig.tight_layout()
+    plt.show()
+    plt.close()
+
+
+def compute_change_costs(avg_tcost_lvl, avg_rent_lvl, avg_dsize_lvl, MAX_YEAR, income_levels):
+
+    indicators = ["Average generalized travel cost", "Average rent per m2", "Average dwelling size"]
+
+    # Compute % change from year 0 to 20
+    change_tcost = [
+        (avg_tcost_lvl[l][MAX_YEAR-1] - avg_tcost_lvl[l][0]) / avg_tcost_lvl[l][0] * 100
+        for l in income_levels
+    ]
+
+    change_rent = [
+        (avg_rent_lvl[l][MAX_YEAR-1] - avg_rent_lvl[l][0]) / avg_rent_lvl[l][0] * 100
+        for l in income_levels
+    ]
+
+    change_dsize = [
+        (avg_dsize_lvl[l][MAX_YEAR-1] - avg_dsize_lvl[l][0]) / avg_dsize_lvl[l][0] * 100
+        for l in income_levels
+    ]
+
+    changes = np.array([change_tcost, change_rent, change_dsize])
+
+    x = np.arange(len(income_levels))
+    width = 0.25
+
+    colors = ["#4C72B0", "#55A868", "#C44E52"]
+
+    fig, ax = plt.subplots(figsize=(8,5))
+
+    for i in range(len(indicators)):
+        ax.bar(
+            x + (i-1)*width,
+            changes[i],
+            width,
+            color=colors[i],
+            edgecolor="0.3",
+            label=indicators[i]
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(income_levels, fontsize=13)
+
+    ax.set_ylabel("Change between year 0 and " + str(MAX_YEAR - 1) + " (%)", fontsize=13)
+
+    ax.tick_params(axis='y', labelsize=13)
+
+    ax.legend(frameon=False, fontsize=13)
+
+    fig.tight_layout()
+    plt.show()
+    plt.close()
 
 def plot_employment(gdf, employment_centers, var):
     base = gdf.plot(color='lightgrey', edgecolor='white', linewidth=0.3, figsize=(10, 10))
@@ -492,7 +698,7 @@ def compare_rent_or_size(gdf, var_data, var_simul, weighting, yaxis):
         agg["simul"] = agg["simul"] / agg["pop"]
 
     # Plot
-    plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(8, 5))
 
     # Individual points (optional, can be noisy)
     plt.scatter(gdf["distance_center"], gdf[var_data], s=1, alpha=0.3, label="Data", color='red')
@@ -541,7 +747,7 @@ def plot_tax_suppport(save_tax, save_median_support):
     plt.tight_layout()
     plt.show()
 
-def plot_scores(save_score_emissions, save_score_qol, save_score_congestion, save_score_welfare):
+def plot_scores(save_score_emissions, save_score_qol, save_score_welfare):
 
     colors = plt.get_cmap("tab10").colors  
     plt.figure(figsize=(8, 6))
@@ -635,30 +841,6 @@ def plot_change_pop_line(gdf, save_population):
     plt.xlabel("Distance to city center (km)")
     plt.title("Population by distance bins")
     plt.show()
-
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.colors import BoundaryNorm
-from matplotlib.colors import TwoSlopeNorm
-
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import pandas as pd
-from matplotlib.colors import BoundaryNorm, TwoSlopeNorm
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.colors import TwoSlopeNorm
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.colors import TwoSlopeNorm, ListedColormap
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import matplotlib.colors as mcolors
 
 def plot_change_population_custom(gdf, save_population,
                                   bins=[-100, -50, -25, 0, 25, 50, 75, 700],
@@ -773,7 +955,7 @@ def plot_change_population_custom(gdf, save_population,
     plt.show()
 
 
-def plot_transport_cost_i(gdf, group):
+def plot_transport_cost(gdf, group):
 
     fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
 
@@ -797,7 +979,7 @@ def plot_transport_cost_i(gdf, group):
     cbar.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f'{int(y)}€'))
     plt.show
 
-def plot_transport_mode_i(gdf, group):
+def plot_transport_mode(gdf, group):
     fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
 
     # Plot
@@ -923,6 +1105,20 @@ def plot_line_charts(gdf, n, q, R):
     plt.tight_layout()
     plt.show()
 
+def compare_shares_in_tax_zone(gdf, n_group, houses_in_toll_area):
+    print("LOW")
+    print("Estimated share in tax zone:", round(100 * np.nansum(n_group["LOW"].loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["LOW"])), "%")
+    print("Actual share in tax zone:", round(100 * np.nansum(gdf.pop_LOW.loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["LOW"])), "%")
+
+    print("MED")
+    print("Estimated share in tax zone:", round(100 * np.nansum(n_group["MED"].loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["MED"])), "%")
+    print("Actual share in tax zone:", round(100 * np.nansum(gdf.pop_MED.loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["MED"])), "%")
+
+    print("HIGH")
+    print("Estimated share in tax zone:", round(100 * np.nansum(n_group["HIGH"].loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["HIGH"])), "%")
+    print("Actual share in tax zone:", round(100 * np.nansum(gdf.pop_HIGH.loc[gdf.ID.isin(houses_in_toll_area)]) / np.nansum(n_group["HIGH"])), "%")
+
+
 def plot_distance_distrib_check(income_levels, travel_matrix, level):
 
     for lvl in income_levels:
@@ -944,3 +1140,13 @@ def plot_distance_distrib_check(income_levels, travel_matrix, level):
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.show()
+
+
+def print_moving(save_population_lvl, income_levels, N):
+    moving = {}
+    for lvl in income_levels:
+        moving[lvl] = 0
+        for i in range(19):
+            moving[lvl] = moving[lvl] + np.nansum(np.abs(save_population_lvl[lvl][:, i+1] - save_population_lvl[lvl][:, i]))/2
+        print(lvl, 100 * (moving[lvl] / N[lvl]),  "% moving relative to the population")
+

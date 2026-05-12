@@ -3,50 +3,15 @@ import pandas as pd
 
 from model import *
 
-def compute_transport_cost(gdf, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, tax):
-    """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
-    
-    gdf["COST_CAR"] = ((gdf["travel_time_car"] / 60) * PRICE_TIME * WORKING_DAYS) + ((gdf.distance_car / 1000) * PRICE_FUEL * WORKING_DAYS) + FIXED_COST_CAR + (tax * WORKING_DAYS)
-    gdf["COST_PT"] = ((gdf["travel_time_transit"] / 60) * PRICE_TIME * WORKING_DAYS) + gdf["monthly_cost_transit"]
+def compute_housing_supply(housing_supply_t1_without_inertia, housing_supply_t0, TIME_LAG, DEPRECIATION_TIME):
+    diff_housing = ((housing_supply_t1_without_inertia - housing_supply_t0) / TIME_LAG) - (housing_supply_t0 / DEPRECIATION_TIME)
+    for i in range(0, len(housing_supply_t1_without_inertia)):
+        if housing_supply_t1_without_inertia[i] <= housing_supply_t0[i]:
+            diff_housing[i] = - (housing_supply_t0[i] / DEPRECIATION_TIME)
+    housing_supply_t1 = housing_supply_t0 + diff_housing
+    return housing_supply_t1
 
-    stacked = np.vstack([gdf["COST_CAR"], gdf["COST_PT"]])  # Shape (2, N)
-    masked = np.where(np.isnan(stacked), np.inf, stacked)
-    choice = np.argmin(masked, axis=0)
-
-    gdf["transport_cost"] = np.fmin(gdf["COST_CAR"], gdf["COST_PT"])
-    gdf["transport_mode"] = choice
-    
-    #print("Transport cost: ", sum(np.isnan(gdf["transport_cost"])), "missing values")
-    gdf.loc[np.isnan(gdf["transport_cost"]), "transport_cost"] = 120
-    gdf.loc[np.isnan(gdf["transport_mode"]), "transport_mode"] = 0
-
-    return gdf
-
-def compute_transport_cost_logit(gdf, Y, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, tax):
-    """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
-    
-    gdf["COST_CAR"] = ((gdf["travel_time_car"] / 60) * PRICE_TIME * WORKING_DAYS) + ((gdf.distance_car / 1000) * PRICE_FUEL * WORKING_DAYS) + FIXED_COST_CAR + (tax * WORKING_DAYS)
-    gdf["COST_PT"] = ((gdf["travel_time_transit"] / 60) * PRICE_TIME * WORKING_DAYS) + gdf["monthly_cost_transit"]
-
-    gdf.loc[np.isnan(gdf["COST_CAR"]), "COST_CAR"] = 600
-    gdf.loc[np.isnan(gdf["COST_PT"]), "COST_PT"] = 3500
-    #stacked = np.vstack([gdf["COST_CAR"], gdf["COST_PT"]])  # Shape (2, N)
-    #masked = np.where(np.isnan(stacked), np.inf, stacked)
-    #choice = np.argmin(masked, axis=0)
-
-    #gdf["transport_cost"] = np.fmin(gdf["COST_CAR"], gdf["COST_PT"])
-    
-    
-    gdf["transport_mode"] = 1 / (1 + np.exp((gdf["COST_PT"] - gdf["COST_CAR"])/LAMBDA))
-    gdf["transport_cost"] = (gdf["transport_mode"] * gdf["COST_PT"]) + ((1 - gdf["transport_mode"]) * gdf["COST_CAR"])
-    #print("Transport cost: ", sum(np.isnan(gdf["transport_cost"])), "missing values")
-    gdf.loc[np.isnan(gdf["transport_cost"]), "transport_cost"] = gdf["COST_CAR"]
-    gdf.loc[np.isnan(gdf["transport_mode"]), "transport_mode"] = 0
-    gdf["income_net_of_transport_cost"] = Y - gdf["transport_cost"]
-
-    return gdf
-
-def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors, scenario, discount = 0, time_discount = 0):
+def compute_transport_cost(gdf, travel_time_car, travel_time_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, tax, income_levels, wage_factors, scenario, discount = 0, time_discount = 0):
     """ Compute the transport cost and modes, assuming that people choose the transport mode that minimize the cost """
     
     if scenario == "exemption_trips_inside_zone":
@@ -74,9 +39,12 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
                 + tax * WORKING_DAYS * travel_time_car["zone_tax"]
             )
         travel_time_transit.loc[:,f"COST_PT_{level}"] = (
-            ((travel_time_transit["travel_time"]+time_discount) / 60) * PRICE_TIME * factor * WORKING_DAYS
-            + (travel_time_transit["monthly_cost_transit"] - discount)
+            (((travel_time_transit["travel_time"]) / 60)+time_discount).clip(lower = 0)  * PRICE_TIME * factor * WORKING_DAYS
+            + (travel_time_transit["monthly_cost_transit"] - (discount * travel_time_transit["monthly_cost_transit"])).clip(lower=0)
         )
+
+        print(np.nansum((((travel_time_transit["travel_time"]) / 60)+time_discount) == 0))
+        print(np.nanmean((((travel_time_transit["travel_time"]) / 60)+time_discount)/(((travel_time_transit["travel_time"]) / 60))))
 
         # Fill missing costs
         travel_time_car[f"COST_CAR_{level}"] = travel_time_car[f"COST_CAR_{level}"].fillna(600)
@@ -137,109 +105,69 @@ def compute_transport_cost_poly_i(gdf, travel_time_car, travel_time_transit, PRI
 
     return gdf, workers_per_cluster, travel_matrix
 
+def compute_outcomes(utility, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, housing_supply = 0, option_resid = False, resid_rent = 0, resid_density = 0, resid_size = 0):
 
-def compute_error_in_population(u, amen, N, BETA, Y_LOW, Y_MED, Y_HIGH,
-                                transport_cost_LOW, transport_cost_MED, transport_cost_HIGH,
-                                B, KAPPA, SIGMA, RHO,L, alpha, option_resid,
-                                option_function="CES", resid_rent=0, resid_density=0, resid_size=0, option_housing_supply = False, housing_supply = 0):
+    R_group = {
+        lvl: compute_rents(BETA, gdf[f"wage_{lvl}"], utility[i]/gdf["amenities"], gdf[f"transport_cost_{lvl}"])
+        for i, lvl in enumerate(income_levels)
+        }
+
+    R = np.amax([R_group["LOW"], R_group["MED"], R_group["HIGH"]], 0)
+    
+    a = 1-B
+    if option_housing_supply == False:
+        h = KAPPA ** (1/a) * (B * R / INTEREST_RATE) ** (B/a) * gdf["urb_area"]
+    elif option_housing_supply == True:
+        h = housing_supply
+        
+    # --- Compute dwelling sizes ---
+    q_group = {
+        lvl: compute_dwelling_size(BETA, gdf[f"wage_{lvl}"], gdf[f"transport_cost_{lvl}"], R)
+        for lvl in income_levels
+        }
+    
+    q = q_group["LOW"]
+    for i in range(len(q)):
+        if np.amax([R_group["LOW"], R_group["MED"], R_group["HIGH"]], 0)[i] == R_group["MED"][i]:
+            q[i] = q_group["MED"][i]
+        if np.amax([R_group["LOW"], R_group["MED"], R_group["HIGH"]], 0)[i] == R_group["HIGH"][i]:
+            q[i] = q_group["HIGH"][i]
+
+    n = h / q
+    
+    w = {lvl: (np.amax([R_group["LOW"], R_group["MED"], R_group["HIGH"]], 0) == R_group[lvl]) * 1 for lvl in income_levels}
+
+    if option_resid == True:
+        R = R * np.exp(resid_rent)
+        q = q * np.exp(resid_size)
+        n_group = {lvl: n * w[lvl] * np.exp(resid_density) for lvl in income_levels}
+        q_group = {lvl: q_group[lvl] * np.exp(resid_size) for lvl in income_levels}
+        R_group = {lvl: R_group[lvl] * np.exp(resid_rent) for lvl in income_levels}
+        n = np.nansum(list(n_group.values()), axis=0)
+        n[np.isnan(n)] = 0
+        for lvl in income_levels:
+            n_group[lvl][np.isnan(n_group[lvl])] = 0
+    
+    else:
+        n_group = {lvl: n * w[lvl] for lvl in income_levels}
+
+    return R, q, n, w, R_group, q_group, n_group, h
+
+def compute_error_in_population(u, income_levels, gdf, N, BETA,
+                                B, KAPPA, RHO, option_resid, resid_rent=0, resid_density=0, resid_size=0, option_housing_supply = False, housing_supply = 0):
     """
     Compute smooth squared error between model-estimated and observed populations
     given a trial utility vector u = [u_low, base_rent, u_high].
     Uses softmax weights to smooth spatial class assignment.
     """
 
-    # --- Compute rents ---
-    R_LOW = compute_rents(BETA, Y_LOW, u[0] / amen, transport_cost_LOW)
-    R_MED = compute_rents(BETA, Y_MED, u[1] / amen, transport_cost_MED)
-    R_HIGH = compute_rents(BETA, Y_HIGH, u[2] / amen, transport_cost_HIGH)
+    _, _, _, _, _, _, n_group, _ = compute_outcomes(u, gdf, BETA, B, KAPPA, RHO, income_levels, compute_rents, compute_dwelling_size, option_housing_supply, housing_supply, option_resid, resid_rent, resid_density, resid_size)
 
-    
-    # --- Soft assignment using a differentiable "softmax" on rents ---
-    # Higher rent => more likely to dominate
-    # --- Normalize rents to avoid overflow ---
-    # Bring rents to roughly mean-zero, unit-scale before exponentiation
-    
-    
-    #R_stack = np.vstack([R_LOW, R_MED, R_HIGH])
-    ##R_mean = np.nanmean(R_stack)
-    #R_std = np.nanstd(R_stack) + 1e-9  # prevent division by zero
-
-    #R_LOW_n = (R_LOW - R_mean) / R_std
-    #R_MED_n = (R_MED - R_mean) / R_std
-    #R_HIGH_n = (R_HIGH - R_mean) / R_std
-
-    # --- Soft assignment (numerically stable softmax) ---
-    # subtract max to avoid overflow
-    #R_max = np.maximum.reduce([R_LOW_n, R_MED_n, R_HIGH_n])
-    #exp_LOW = np.exp(alpha * (R_LOW_n - R_max))
-    #exp_MED = np.exp(alpha * (R_MED_n - R_max))
-    #exp_HIGH = np.exp(alpha * (R_HIGH_n - R_max))
-    #denom = exp_LOW + exp_MED + exp_HIGH
-
-    #w_LOW = exp_LOW / denom
-    #w_MED = exp_MED / denom
-    #w_HIGH = exp_HIGH / denom
-
-    # --- Weighted averages of rent, wage, and transport cost ---
-    #R = w_LOW * R_LOW + w_MED * R_MED + w_HIGH * R_HIGH
-    R = np.amax([R_LOW, R_MED, R_HIGH], 0)
-    
-    a = 1-B
-    if option_housing_supply == False:
-        h = KAPPA ** (1/a) * (B * R / RHO) ** (B/a) * L
-    elif option_housing_supply == True:
-        h = housing_supply
-    #avg_wage = w_LOW * Y_LOW + w_MED * Y_MED + w_HIGH * Y_HIGH
-    #avg_t_cost = w_LOW * transport_cost_LOW + w_MED * transport_cost_MED + w_HIGH * transport_cost_HIGH
-
-    # --- Compute dwelling size and population ---
-    q_LOW = compute_dwelling_size(BETA, Y_LOW, transport_cost_LOW, R)
-    q_MED = compute_dwelling_size(BETA, Y_MED, transport_cost_MED, R)
-    q_HIGH = compute_dwelling_size(BETA, Y_HIGH, transport_cost_HIGH, R)
-    
-    q = q_LOW
-    for i in range(len(q)):
-        if np.amax([R_LOW, R_MED, R_HIGH], 0)[i] == R_MED[i]:
-            q[i] = q_MED[i]
-        if np.amax([R_LOW, R_MED, R_HIGH], 0)[i] == R_HIGH[i]:
-            q[i] = q_HIGH[i]
-
-    n = h / q
-    
-    w_LOW = (np.amax([R_LOW, R_MED, R_HIGH], 0) == R_LOW) * 1
-    w_MED = (np.amax([R_LOW, R_MED, R_HIGH], 0) == R_MED) * 1
-    w_HIGH = (np.amax([R_LOW, R_MED, R_HIGH], 0) == R_HIGH) * 1
-    #print("sum_high", sum(w_HIGH))
-    #n = compute_population(B, KAPPA, SIGMA, R, RHO, L, w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, option_function=option_function)
-    
-    #n = n * np.exp(resid_density)
-
-    # --- Smooth population shares ---
-    if option_resid == True:
-        pop_LOW_model = np.nansum(w_LOW * (h / q) * np.exp(resid_density))
-        pop_MED_model = np.nansum(w_MED * (h / q) * np.exp(resid_density))
-        pop_HIGH_model = np.nansum(w_HIGH * (h / q) * np.exp(resid_density))
-    else:
-        pop_LOW_model = np.nansum(w_LOW * (h / q))
-        pop_MED_model = np.nansum(w_MED * (h / q))
-        pop_HIGH_model = np.nansum(w_HIGH * (h / q))
-
-    #print(f"u={u}, LOW={pop_LOW_model:.2f}, MED={pop_MED_model:.2f}, HIGH={pop_HIGH_model:.2f}")
-
-    # --- Squared errors ---
-    error_population_LOW = (N[0] - pop_LOW_model) **2
-    error_population_MED = (N[1] - pop_MED_model) **2
-    error_population_HIGH = (N[2] - pop_HIGH_model)**2
-
-    #print("error_population_LOW", (N[0] - pop_LOW_model))
-    #print("error_population_MED", (N[1] - pop_MED_model))
-    #print("error_population_HIGH", (N[2] - pop_HIGH_model))
     return np.array([
-        pop_LOW_model - N[0],
-        pop_MED_model - N[1],
-        pop_HIGH_model - N[2]])
-    #return error_population_LOW + error_population_MED + error_population_HIGH
-
+        np.nansum(n_group["LOW"]) - N[0],
+        np.nansum(n_group["MED"]) - N[1],
+        np.nansum(n_group["HIGH"]) - N[2]])
+    
 def compute_rents(beta, Y, u, T):
     '''
     Compute the bid-rent at each location in the city.
@@ -306,60 +234,3 @@ def compute_population(b, kappa, sigma, R, rho, L, q, option_function = "CES"):
 def CES_func(x, kappa, a, sigma):
     return kappa * (a ** (-sigma / (1 - sigma))) * ((1 - ((1 - a) ** sigma) * ((kappa * x) ** (sigma - 1))) ** (sigma / (1 - sigma)))
 
-def compute_outcomes(utility, gdf, BETA, B, KAPPA, SIGMA, INTEREST_RATE, alpha, income_levels, compute_rents, compute_dwelling_size, compute_population, option_function = "CES", option_housing_supply = False, housing_supply = 0):
-
-
-    R_group = {
-        lvl: compute_rents(BETA, gdf[f"wage_{lvl}"], utility[i]/gdf["amenities"], gdf[f"transport_cost_{lvl}"])
-        for i, lvl in enumerate(income_levels)
-        }
-
-    R = np.amax([R_group["LOW"], R_group["MED"], R_group["HIGH"]], 0)
-
-    # --- Normalize rents to avoid overflow ---
-    #R_stack = np.vstack(list(R_group.values()))
-    #R_mean, R_std = np.nanmean(R_stack), np.nanstd(R_stack) + 1e-9
-    #R_n = {lvl: (R_group[lvl] - R_mean) / R_std for lvl in income_levels}
-
-    # --- Soft assignment (numerically stable softmax) ---
-    #R_max = np.maximum.reduce(list(R_n.values()))
-    #exp_R = {lvl: np.exp(alpha * (R_n[lvl] - R_max)) for lvl in income_levels}
-    #denom = sum(exp_R.values())
-    #w = {lvl: exp_R[lvl] / denom for lvl in income_levels}
-
-
-    #R = sum(w[lvl] * R_group[lvl] for lvl in income_levels)
-    
-    a = 1-B
-    if option_housing_supply == False:
-        h = KAPPA ** (1/a) * (B * R / INTEREST_RATE) ** (B/a) * gdf["urb_area"]
-    elif option_housing_supply == True:
-        h = housing_supply
-        
-    # --- Compute dwelling sizes ---
-    q_group = {
-        lvl: compute_dwelling_size(BETA, gdf[f"wage_{lvl}"], gdf[f"transport_cost_{lvl}"], R)
-        for lvl in income_levels
-        }
-    
-    q = q_group["LOW"]
-    for i in range(len(q)):
-        if np.amax([R_group["LOW"], R_group["MED"], R_group["HIGH"]], 0)[i] == R_group["MED"][i]:
-            q[i] = q_group["MED"][i]
-        if np.amax([R_group["LOW"], R_group["MED"], R_group["HIGH"]], 0)[i] == R_group["HIGH"][i]:
-            q[i] = q_group["HIGH"][i]
-
-    n = h / q
-    
-    #w_LOW = (np.amax([R_group["LOW"], R_group["MED"], R_group["HIGH"]], 0) == R_group["LOW"]) * 1
-    #w_MED = (np.amax([R_group["LOW"], R_group["MED"], R_group["HIGH"]], 0) == R_group["MED"]) * 1
-    #w_HIGH = (np.amax([R_group["LOW"], R_group["MED"], R_group["HIGH"]], 0) == R_group["HIGH"]) * 1
-    #n = compute_population(B, KAPPA, SIGMA, R, RHO, L, w_LOW * q_LOW + w_MED * q_MED + w_HIGH * q_HIGH, option_function=option_function)
-    w = {lvl: (np.amax([R_group["LOW"], R_group["MED"], R_group["HIGH"]], 0) == R_group[lvl]) * 1 for lvl in income_levels}
-
-
-    # --- Compute total population ---
-    #q = sum(w[lvl] * q_group[lvl] for lvl in income_levels)
-    #n = compute_population(B, KAPPA, SIGMA, R, INTEREST_RATE, gdf["urb_area"], q, option_function=option_function)
-
-    return R, q, n, w, R_group, q_group
