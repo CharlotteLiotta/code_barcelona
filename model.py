@@ -105,10 +105,12 @@ def compute_transport_cost(gdf, travel_time_car, travel_time_transit, PRICE_TIME
 
     return gdf, workers_per_cluster, travel_matrix
 
-def compute_outcomes(utility, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, housing_supply = 0, option_resid = False, resid_rent = 0, resid_density = 0, resid_size = 0):
+def compute_outcomes(amenity_array, utility, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, housing_supply = 0, option_resid = False, resid_rent = 0, resid_density = 0, resid_size = 0):
+     
+    amenity_pref = {"LOW": amenity_array[0], "MED": amenity_array[1], "HIGH": amenity_array[2]}
 
     R_group = {
-        lvl: compute_rents(BETA, gdf[f"wage_{lvl}"], utility[i]/gdf["amenities"], gdf[f"transport_cost_{lvl}"])
+        lvl: compute_rents(BETA, gdf[f"wage_{lvl}"], utility[i]/(gdf["amenities"] ** amenity_pref[lvl]), gdf[f"transport_cost_{lvl}"])
         for i, lvl in enumerate(income_levels)
         }
 
@@ -153,7 +155,7 @@ def compute_outcomes(utility, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels,
 
     return R, q, n, w, R_group, q_group, n_group, h
 
-def compute_error_in_population(u, income_levels, gdf, N, BETA,
+def compute_error_in_population(amenity_array, u, income_levels, gdf, N, BETA,
                                 B, KAPPA, RHO, option_resid, resid_rent=0, resid_density=0, resid_size=0, option_housing_supply = False, housing_supply = 0):
     """
     Compute smooth squared error between model-estimated and observed populations
@@ -161,7 +163,7 @@ def compute_error_in_population(u, income_levels, gdf, N, BETA,
     Uses softmax weights to smooth spatial class assignment.
     """
 
-    _, _, _, _, _, _, n_group, _ = compute_outcomes(u, gdf, BETA, B, KAPPA, RHO, income_levels, compute_rents, compute_dwelling_size, option_housing_supply, housing_supply, option_resid, resid_rent, resid_density, resid_size)
+    _, _, _, _, _, _, n_group, _ = compute_outcomes(amenity_array, u, gdf, BETA, B, KAPPA, RHO, income_levels, compute_rents, compute_dwelling_size, option_housing_supply, housing_supply, option_resid, resid_rent, resid_density, resid_size)
 
     return np.array([
         np.nansum(n_group["LOW"]) - N[0],

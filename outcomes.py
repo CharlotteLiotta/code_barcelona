@@ -40,7 +40,7 @@ def compute_change_in_welfare(utility_without_tax, utility_with_tax):
     relative_change_utility[utility_without_tax > 0] = 100 * ((utility_with_tax[utility_without_tax > 0] - utility_without_tax[utility_without_tax > 0]) / utility_without_tax[utility_without_tax > 0])
     relative_change_utility[((utility_without_tax == 0) & (utility_with_tax > 0))] = np.nan
     relative_change_utility[((utility_without_tax == 0) & (utility_with_tax == 0))] = np.nan
-
+    relative_change_utility[(np.isnan(utility_without_tax) | np.isnan(utility_with_tax))] = np.nan
     return relative_change_utility
 
 def compute_score(relative_change, param):

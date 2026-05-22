@@ -40,13 +40,13 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
 
     X = gdf_here.loc[:, ["beach_500m", "beach_500m_1km",
                          'parc_2h_500m','parc_2h_500m_1km',
+                         #'parc_combined_2h_500m','parc_combined_2h_500m_1km',
                          "station_500m", "station_500m_1km", 
                          'fgc_500m', 'rodalies_500m', 'rodalies_500m_1km', 'fgc_500m_1km',
                          "airport_500m",
                          "high_tourism", "medium_tourism",
                          'mean_activity',
-                         'pedestrian_data_density', 
-                         ]]
+                         'pedestrian_data_density']] #pedestrian_data_density
     
     X = sm.add_constant(X)
     model = sm.OLS(y, X).fit()
@@ -66,10 +66,9 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
     sigmaAmenities = np.sqrt(np.nansum(errorAmenities ** 2) / np.nansum(~np.isnan(errorAmenities)))
     scoreAmenities = ComputeLogLikelihood(sigmaAmenities, errorAmenities)
     
-    R = {
-        lvl: compute_rents(BETA, gdf[f"wage_{lvl}"], U[lvl] / np.exp(gdf_here["log_A"]), gdf[f"transport_cost_{lvl}"])
-        for lvl in income_levels
-            }
+    gdf["log_A"] = gdf["log_A"].fillna(gdf["log_A"].median())  # or interpolate
+    R = {lvl: compute_rents(BETA, gdf[f"wage_{lvl}"], U[lvl] / np.exp(gdf["log_A"]), gdf[f"transport_cost_{lvl}"])
+         for lvl in income_levels}
 
 
     # --- Normalize rents for softmax ---
@@ -96,19 +95,38 @@ def calibration_utility_amenity(x, gdf, income_levels, alpha, print_summary=0, e
     log_sorting = sum(np.nansum(np.log(w_est[lvl]) * w_here[lvl]) for lvl in income_levels)
        
     # --- 5. Compute city sizes ---
-    size_est = sum(w[lvl] * BETA * (gdf[f"wage_{lvl}"] - gdf[f"transport_cost_{lvl}"]) / R[lvl] #Rtotal
+    R_model = sum(w_est[lvl] * R[lvl] for lvl in income_levels)
+    
+    size_est = sum(w_est[lvl] * BETA * (gdf[f"wage_{lvl}"] - gdf[f"transport_cost_{lvl}"]) / R_model #R[lvl] #Rtotal
+                   for lvl in income_levels)
+
+    size_est = sum(w[lvl] * BETA * (gdf[f"wage_{lvl}"] - gdf[f"transport_cost_{lvl}"]) / R[lvl] #R[lvl] #Rtotal
                    for lvl in income_levels)
     
     #diff_size = gdf["size"] - size_est
-    errorDwellingSize = np.log(size_est) - np.log(gdf["size"])
+    errorDwellingSize = np.log(size_est) - np.log(gdf["size"]) #np.log(sum(R[lvl])) - np.log(gdf["rent_m2"]) #
     sigmaDwellingSize = np.sqrt(np.nansum(errorDwellingSize ** 2) / np.nansum(~np.isnan(errorDwellingSize)))
     scoreDwellingSize = ComputeLogLikelihood(sigmaDwellingSize, errorDwellingSize)
     
+
+
+
     # --- 7. Export amenities if requested ---
     if export_amenities:
         amenities = np.exp(np.nansum(X.iloc[:,1:] * model.params.iloc[1:], 1))
         gdf_here = gdf_here.copy()
-        gdf_here["amenities"] = amenities
+        gdf_here["amenities"] =  amenities #np.exp(y) #amenities
+        
+        #estimated_A = {}
+        #for lvl in income_levels:
+        #    estimated_A[lvl] = np.clip(U[lvl] / (factor * (wage_minus_tc[lvl] / ( R[lvl]** BETA))), 1e-12, None)
+
+        #gdf = gdf.drop(columns = "log_A")
+        #gdf["log_A"] = np.log(sum(w[lvl] * estimated_A[lvl] for lvl in income_levels)) #np.log
+        #gdf_here = gdf_here.drop(columns = "log_A")
+        #gdf_here = gdf_here.merge(gdf.loc[:,["ID", "log_A"]], on = "ID")
+        #gdf_here["amenities"] = np.exp(gdf_here["log_A"])
+
         return gdf_here[["ID", "amenities"]]
     
     else:
