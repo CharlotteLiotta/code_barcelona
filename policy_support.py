@@ -137,7 +137,6 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
     df_reg = gpd.sjoin(df_reg, expected_welfare_loss, how = "left", predicate="within")
 
     #prepare variables: dependent var
-
     df_reg.rename(columns={'P22_4': 'acceptability'}, inplace=True)
     df_reg.rename(columns={'P18': 'acceptable_price'}, inplace=True)
     df_reg.acceptable_price = df_reg.acceptable_price / 2
@@ -217,7 +216,7 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
     #export_df.to_csv("regression_data.csv", index=False) 
 
     #OLS
-    model_acceptability = sm.WLS(y_acceptability, X, weights=df_reg_here['PESAIX']).fit() #cov_type='HC3'
+    model_acceptability = sm.WLS(y_acceptability, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit() #cov_type='HC3'
     print(model_acceptability.summary())
 
     #PROBIT
@@ -225,7 +224,7 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
         y_acceptability,
         X,
         family=families.Binomial(link=families.links.Probit()), #families.Binomial(link=families.links.Logit()),
-        var_weights=df_reg_here['PESAIX']   # swap freq_weights for var_weights if your weights are sampling/probability weights
+        var_weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))   # swap freq_weights for var_weights if your weights are sampling/probability weights
         ).fit() #cov_type='HC3'
     
     print(model_acceptability.summary())
@@ -249,28 +248,9 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
     marginal_effects = model_acceptability.get_margeff()
     print(marginal_effects.summary())
 
-    #MULTINOMIAL LOGIT
-    from statsmodels.discrete.discrete_model import MNLogit
-
-    # MNLogit expects integer-encoded categories (0, 1, 2, ...)
-    #Make sure y_acceptability contains integer category codes
-    model_acceptability = MNLogit(
-        (10 * y_acceptability).astype(int),
-        X
-        ).fit(
-                method='lbfgs',  # or 'bfgs', 'lbfgs'
-                maxiter=100,
-                disp=True
-            )
-
-    print(model_acceptability.summary())
-
-    # MULTINOMIAL LOGIT - MARGINAL EFFECTS
-    marginal_effects = model_acceptability.get_margeff()
-    print(marginal_effects.summary())
 
     #OLS
-    model_price = sm.WLS(y_price, X, weights=df_reg_here['PESAIX']).fit() #
+    model_price = sm.WLS(y_price, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit() #
     print(model_price.summary())
 
     #TOBIT
@@ -329,20 +309,20 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
     y_acceptability = df_reg_here["acceptability"].values.reshape(-1, 1).flatten() / 10
     y_price = (df_reg_here["acceptable_price"].values.reshape(-1, 1)).flatten()
 
-    model_acceptability_full = sm.WLS(y_acceptability, X, weights=df_reg_here['PESAIX']).fit() #, weights=df_reg_here['PESAIX']
+    model_acceptability_full = sm.WLS(y_acceptability, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit() #, weights=df_reg_here['PESAIX']
     print(model_acceptability_full.summary())
 
     model_acceptability_full = GLM(
         y_acceptability,
         X,
         family=families.Binomial(link=families.links.Logit()), #families.Binomial(link=families.links.Probit()),
-        var_weights=df_reg_here['PESAIX']   # swap freq_weights for var_weights if your weights are sampling/probability weights
+        var_weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))   # swap freq_weights for var_weights if your weights are sampling/probability weights
         ).fit()
     print(model_acceptability_full.summary())
     marginal_effects = model_acceptability_full.get_margeff()
     print(marginal_effects.summary())
 
-    model_price_full = sm.WLS(y_price, X, weights=df_reg_here['PESAIX']).fit()
+    model_price_full = sm.WLS(y_price, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit()
     print(model_price_full.summary())
 
     #TOBIT
@@ -354,7 +334,7 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
         y=y_price,
         X=X,
         start_params=start_params,
-        weights=df_reg_here['PESAIX'].values,
+        weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] )),
         left=0
     )
 

@@ -18,13 +18,13 @@ from policy_support import *
 scenario = "baseline"
 option_center = "catalunya"
 
-#scenario = "exemption_trips_inside_zone"    #DONE
-#scenario = "increasing_knowledge"           #DONE
-#scenario = "discount_low_income"            #DONE
-#scenario = "discount_residents"             #DONE
+#scenario = "exemption_trips_inside_zone"    
+#scenario = "increasing_knowledge"           
+#scenario = "discount_low_income"            
+#scenario = "discount_residents"             
 #scenario = "established_path"
-#scenario = "less_expensive_transport"       #DONE
-#scenario = "reduce_transport_time"          #DONE
+#scenario = "less_expensive_transport"       
+#scenario = "reduce_transport_time"          
 #scenario = "inertia_NEDUM"
 
 ### IMPORT PARAMETERS
@@ -37,7 +37,7 @@ LOGISTIC_PARAM_QOL = 0.3
 
 #Time
 year = 0
-MAX_YEAR = 20
+MAX_YEAR = 5
 
 #Policy impact model
 INTEREST_RATE = 0.05
@@ -47,7 +47,7 @@ PRICE_FUEL = 0.11 #euros/km
 center = "0801901025"
 SOFT_RENT = 10 #50
 DIFF_SPEED_CONGESTION = 10
-
+am_arr = np.array([1, 1, 1]) #np.array([1, 1.1, 1.5]) #amenities, by income group
 
 #ABM
 if scenario != "inertia_NEDUM":
@@ -150,15 +150,14 @@ amenities = calibration_utility_amenity(calib_beta.x, gdf, income_levels, SOFT_R
 gdf = gdf.merge(amenities, on = "ID", how = "left")
 gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1
 
-am_arr = np.array([1, 1.15, 1.6])
-
 # Solve the model
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
     print(compute_error_in_population(am_arr, u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, option_resid = False))
     return sum(compute_error_in_population(am_arr, u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, option_resid = False)**2)
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, calib_beta.x[1:4], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #[161, 287, 411] #[219, 329, 471]
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, [157, 283, 407], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #[161, 287, 411] #[219, 329, 471]
+solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #[161, 287, 411] #[219, 329, 471]
 
 if solving_model.success == True:
     R, q, n, w, R_group, q_group, n_group, _ = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_resid = False)
@@ -170,7 +169,7 @@ rent_residual = np.log(gdf["rent_m2"] / R)
 size_residual = np.log(gdf["size"] / q)
 
 # Plot the result of the calibration
-print_maps(gdf, n, q, R)
+#print_maps(gdf, n, q, R)
 plot_line_charts(gdf, n, q, R)
 compare_shares_in_tax_zone(gdf, n_group, houses_in_toll_area)
 
@@ -185,11 +184,12 @@ solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility
 if solving_model.success == True:
 
     R, q, n, w, R_group, q_group, n_group, housing_t0 = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
+    #R_sinres, q_sinres, _, _, _, _, _, _ = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_resid = False)
 
 else:
     raise ValueError("Minimization failed!")
 
-#plot_line_charts(gdf, n, q, R)
+plot_line_charts(gdf, n, q, R)
 compare_shares_in_tax_zone(gdf, n_group, houses_in_toll_area)
 
 # ABM: translate outputs at the household level
@@ -204,12 +204,14 @@ if scenario != "inertia_NEDUM":
 
     rent_indiv = {lvl: indiv_loc_matrix[lvl] @ R for lvl in income_levels} #R_group[lvl] #.to_numpy()
     dwelling_size_indiv = {lvl: indiv_loc_matrix[lvl] @ q.to_numpy() for lvl in income_levels} #q_group[lvl]
+    #rent_indiv_sinres = {lvl: indiv_loc_matrix[lvl] @ R_sinres for lvl in income_levels} #R_group[lvl] #.to_numpy()
+    #dwelling_size_indiv_sinres = {lvl: indiv_loc_matrix[lvl] @ q_sinres.to_numpy() for lvl in income_levels} #q_group[lvl]
 
 utility = {}
 
 if scenario == "inertia_NEDUM":
     for lvl in income_levels:
-        u = compute_utility_manually(
+        u = compute_utility_manually(am_arr, lvl,
             gdf[f"wage_{lvl}"],
             gdf[f"transport_cost_{lvl}"],
             q,
@@ -221,11 +223,11 @@ if scenario == "inertia_NEDUM":
 
 else:
     for lvl in income_levels:
-        u = compute_utility_manually(
+        u = compute_utility_manually(am_arr, lvl,
             indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"],
             indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
-            dwelling_size_indiv[lvl],
-            rent_indiv[lvl],
+            dwelling_size_indiv[lvl], #dwelling_size_indiv_sinres[lvl],
+            rent_indiv[lvl], #rent_indiv_sinres[lvl],
             BETA, indiv_loc_matrix[lvl] @ gdf["amenities"]
         )
         u[np.isnan(u)] = 0
@@ -233,7 +235,6 @@ else:
 
     housing_indiv = {
         lvl: dwelling_size_indiv[lvl] @ csr_matrix(indiv_loc_matrix[lvl]) for lvl in income_levels}
-
 
 
 # Save outputs
@@ -374,19 +375,19 @@ for lvl in income_levels:
 
 gdf_init, _, _ = compute_transport_cost(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0, income_levels, wage_factors, "baseline", 0, 0)
  
-utility_init = {lvl: compute_utility_manually(gdf_init[f"wage_{lvl}"],
+utility_init = {lvl: compute_utility_manually(am_arr, lvl, gdf_init[f"wage_{lvl}"],
                                               gdf_init[f"transport_cost_{lvl}"],
-                                              q, 
-                                              R, 
+                                              q, #q_sinres, 
+                                              R, #R_sinres, 
                                               BETA, gdf["amenities"]
                                               ) for lvl in income_levels}
 
 gdf_tax, _, _ = compute_transport_cost(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0.5, income_levels, wage_factors, "baseline", 0, 0)
  
-utility_tax = {lvl: compute_utility_manually(gdf_tax[f"wage_{lvl}"],
+utility_tax = {lvl: compute_utility_manually(am_arr, lvl,gdf_tax[f"wage_{lvl}"],
                                               gdf_tax[f"transport_cost_{lvl}"],
-                                              q,
-                                              R,
+                                              q, #q_sinres,
+                                              R, #R_sinres,
                                               BETA, gdf["amenities"]
                                               ) for lvl in income_levels}
 
@@ -406,7 +407,7 @@ expected_welfare_loss = gdf[["ID", "geometry"] + [f"score_welfare_{lvl.lower()}"
 
 BETA_OPINION, BETA_PRICE, INITIAL_OPINION, INITIAL_PRICE, INITIAL_CC, INITIAL_WELFARE, INITIAL_QOL, INITIAL_KNOWLEDGE = import_opinion_parameters(path_data, scenario, expected_welfare_loss, weighted_median, Y_median, wage_factors)
 
-tax = INITIAL_PRICE
+tax = 0 #INITIAL_PRICE
 acceptable_price = {"LOW": INITIAL_PRICE, "MED": INITIAL_PRICE, "HIGH": INITIAL_PRICE}
 #support = {"LOW": INITIAL_OPINION, "MED": INITIAL_OPINION, "HIGH": INITIAL_OPINION}
 save_score_emissions = np.zeros(MAX_YEAR)
@@ -480,7 +481,7 @@ while year < MAX_YEAR:
             """ Compute error in population associated to utility u"""
 
             #error_population = sum((compute_error_in_population(u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, True, rent_residual, density_residual, size_residual)) ** 2)
-            error_population = sum((compute_error_in_population(u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, True)) ** 2)
+            error_population = sum((compute_error_in_population(am_arr, u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, True)) ** 2)
             
             return error_population
 
@@ -492,7 +493,7 @@ while year < MAX_YEAR:
         if solving_model.success == True:
 
             #R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
-            R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = False) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
+            R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = False) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
 
         else:
             raise ValueError("Minimization failed!")
@@ -504,7 +505,7 @@ while year < MAX_YEAR:
             def compute_error_in_population_from_utility(u):
                 """ Compute error in population associated to utility u"""
 
-                error_population = sum((compute_error_in_population(u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, True, rent_residual, density_residual, size_residual, option_housing_supply = True, housing_supply = housing_supply_t1)) ** 2)
+                error_population = sum((compute_error_in_population(am_arr, u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, True, rent_residual, density_residual, size_residual, option_housing_supply = True, housing_supply = housing_supply_t1)) ** 2)
                 return error_population
 
             solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead")
@@ -514,7 +515,8 @@ while year < MAX_YEAR:
 
             if solving_model.success == True:
 
-                R, q, n, w, R_group, q_group, n_group, housing_t0_new  = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = True, housing_supply = housing_supply_t1, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
+                R, q, n, w, R_group, q_group, n_group, housing_t0_new  = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = True, housing_supply = housing_supply_t1, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
+                #R_sinres, q_sinres, _, _, _, _, _, _  = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = True, housing_supply = housing_supply_t1, option_resid = False)
 
             else:
                 raise ValueError("Minimization failed!")
@@ -572,11 +574,11 @@ while year < MAX_YEAR:
         housing_t0 = housing_t0_new
         # Compute utility
         for lvl in income_levels:
-            utility[lvl] = compute_utility_manually(
+            utility[lvl] = compute_utility_manually(am_arr, lvl,
                 gdf[f"wage_{lvl}"],
                 gdf[f"transport_cost_{lvl}"],
-                q,
-                R,
+                q, #q_sinres,
+                R, #R_sinres,
                 BETA, gdf["amenities"]
             )
     
@@ -608,6 +610,8 @@ while year < MAX_YEAR:
     
         rent_indiv_new = {lvl: indiv_loc_matrix[lvl] @ R for lvl in income_levels} #R.to_numpy()#R_group[lvl]
         dwelling_size_indiv_new = {lvl: indiv_loc_matrix[lvl] @ q.to_numpy() for lvl in income_levels} #q
+        #rent_indiv_new_sinres = {lvl: indiv_loc_matrix[lvl] @ R_sinres for lvl in income_levels} #R.to_numpy()#R_group[lvl]
+        #dwelling_size_indiv_new_sinres = {lvl: indiv_loc_matrix[lvl] @ q_sinres.to_numpy() for lvl in income_levels} #q
 
         for lvl in income_levels:
             # Update rents and dwelling sizes for movers
@@ -616,11 +620,11 @@ while year < MAX_YEAR:
             dwelling_size_indiv[lvl][mask_moved] = dwelling_size_indiv_new[lvl][mask_moved]
 
             # Compute utility
-            utility[lvl] = compute_utility_manually(
+            utility[lvl] = compute_utility_manually(am_arr, lvl,
                 indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"],
                 indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
-                dwelling_size_indiv[lvl],
-                rent_indiv[lvl],
+                dwelling_size_indiv[lvl], #dwelling_size_indiv_sinres[lvl],
+                rent_indiv[lvl],#rent_indiv_sinres[lvl],
                 BETA, indiv_loc_matrix[lvl] @ gdf["amenities"]
             )
     
@@ -756,12 +760,12 @@ while year < MAX_YEAR:
 
     #Policy update
 
-    if scenario == "established_path":
-        tax = np.fmin(tax * 1.06, np.nanmedian(np.concatenate([acceptable_price[lvl] for lvl in income_levels])))
-    elif scenario == "inertia_NEDUM":
-        tax = (INERTIA_OPINION * tax) + ((1 - INERTIA_OPINION) * np.nanmedian(np.concatenate([acceptable_price[lvl] for lvl in income_levels])))
-    else:
-        tax = np.nanmedian(np.concatenate([acceptable_price[lvl] for lvl in income_levels]))
+    #if scenario == "established_path":
+    #    tax = np.fmin(tax * 1.06, np.nanmedian(np.concatenate([acceptable_price[lvl] for lvl in income_levels])))
+    #elif scenario == "inertia_NEDUM":
+    #    tax = (INERTIA_OPINION * tax) + ((1 - INERTIA_OPINION) * np.nanmedian(np.concatenate([acceptable_price[lvl] for lvl in income_levels])))
+    #else:
+    #    tax = np.nanmedian(np.concatenate([acceptable_price[lvl] for lvl in income_levels]))
 
     year = year + 1
 
@@ -794,7 +798,7 @@ weighted_values_all = ((weighted_values_nonan["LOW"] * np.nansum(indiv_loc_matri
 plot_spatial_price(gdf, weighted_values_all)
 
 #Spatial analysis plot: population
-plot_change_population_custom(gdf, save_population, bins=[-60, -30, -10, -5, -1, 1, 5, 10, 30, 167],cmap_name="bwr",)
+plot_change_population_custom(MAX_YEAR, gdf, save_population, bins=[-60, -30, -10, -5, -1, 1, 5, 10, 30, 167],cmap_name="bwr",)
 plot_change_pop_line(gdf, save_population)
 print_moving(save_population_lvl, income_levels, N)
 

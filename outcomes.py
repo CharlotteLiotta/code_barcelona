@@ -24,12 +24,14 @@ def relative_change_outputs(save_emissions, qol_in_zone, qol_out_zone, save_util
 
     return emission_change, change_qol_in_zone, change_qol_out_zone, utility_change_low, utility_change_med, utility_change_high
 
-def compute_utility_manually(Y, T, q, R, BETA, amenities):
+def compute_utility_manually(amenity_array, lvl, Y, T, q, R, BETA, amenities):
     """ Compute agents' utility """
     
+    amenity_pref = {"LOW": amenity_array[0], "MED": amenity_array[1], "HIGH": amenity_array[2]}
+
     composite_good = Y - T - q * R
     composite_good[composite_good < 0] = 0
-    u = (composite_good) ** (1 - BETA) * q ** BETA * amenities
+    u = (composite_good) ** (1 - BETA) * q ** BETA * (amenities ** amenity_pref[lvl])
     return u
 
 

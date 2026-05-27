@@ -842,7 +842,7 @@ def plot_change_pop_line(gdf, save_population):
     plt.title("Population by distance bins")
     plt.show()
 
-def plot_change_population_custom(gdf, save_population,
+def plot_change_population_custom(MAX_YEAR, gdf, save_population,
                                   bins=[-100, -50, -25, 0, 25, 50, 75, 700],
                                   cmap_name="RdBu_r", alpha=0.6):
     """
@@ -857,14 +857,14 @@ def plot_change_population_custom(gdf, save_population,
     # --- prepare data ---
     gdf_proj = gdf.to_crs(epsg=32632).copy()
     gdf_proj["value"] = np.nan
-    gdf_proj.loc[save_population[:, 0]>0, "value"] = 100 * (save_population[save_population[:, 0]>0, 19] - save_population[save_population[:, 0]>0, 0]) / save_population[save_population[:, 0]>0, 0]
+    gdf_proj.loc[save_population[:, 0]>0, "value"] = 100 * (save_population[save_population[:, 0]>0, MAX_YEAR-1] - save_population[save_population[:, 0]>0, 0]) / save_population[save_population[:, 0]>0, 0]
     
     print("min", np.nanmin(gdf_proj["value"]))
     print("max", np.nanmax(gdf_proj["value"]))
 
     # Dissolve by municipality
     gdf_proj["Year 0"]= save_population[:, 0]
-    gdf_proj["Year 19"]= save_population[:, 19]
+    gdf_proj["Year 19"]= save_population[:, MAX_YEAR-1]
     muni_bar = gdf_proj.loc[:,["NMUN", "Year 0", "Year 19"]].groupby("NMUN").sum()
     muni_bar = muni_bar.sort_values('Year 0', ascending=False)
     muni_bar[['Year 0', 'Year 19']].plot(
