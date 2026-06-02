@@ -25,7 +25,9 @@ def plot_spatial_price(gdf, values, include_missing = True):
 
     cmap_name = "RdYlGn"
     vmin, vmax = gdf_proj["value"].min(), gdf_proj["value"].max()
-
+    #vmin = 0
+    #vmax = 6
+    
     missing = gdf_proj[gdf_proj["value"].isna()]
     present = gdf_proj[gdf_proj["value"].notna()]
 
@@ -70,6 +72,75 @@ def plot_spatial_price(gdf, values, include_missing = True):
     else:
         ax.legend(handles=[toll_patch], loc="lower right")
 
+def plot_spatial_price_discrete(gdf, values, include_missing=True):
+    # --- prepare values ---
+    gdf_proj = gdf.to_crs(epsg=32632).copy()
+    gdf_proj["value"] = values
+
+    # Dissolve by municipality
+    muni_gdf = gdf_proj.dissolve(by='NMUN', as_index=False)
+    muni_gdf['centroid'] = muni_gdf.geometry.centroid
+    muni_gdf['x'] = muni_gdf.centroid.x
+    muni_gdf['y'] = muni_gdf.centroid.y
+
+    # --- discrete color setup ---
+    bounds = [0, 1, 2, 3, 4, 5, gdf_proj["value"].max() + 0.01]
+    labels = ["<1", "1–2", "2–3", "3–4", "4–5", ">5"]
+    n_bins = len(labels)
+
+    base_cmap = plt.cm.get_cmap("RdYlGn", n_bins)
+    colors = [base_cmap(i) for i in range(n_bins)]
+    cmap = mcolors.ListedColormap(colors)
+    norm = mcolors.BoundaryNorm(bounds, ncolors=n_bins)
+
+    # --- plot ---
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
+
+    missing = gdf_proj[gdf_proj["value"].isna()]
+    present = gdf_proj[gdf_proj["value"].notna()]
+
+    missing.plot(color="lightgrey", edgecolor="white", linewidth=0.2, ax=ax)
+    present.plot(column="value", cmap=cmap, norm=norm,
+                 linewidth=0, edgecolor="grey", ax=ax)
+
+    ax.set_axis_off()
+
+    for coll in ax.collections:
+        coll.set_antialiased(False)
+        coll.set_alpha(0.7)
+
+    for _, row in muni_gdf.loc[muni_gdf["NMUN"].isin(
+            ["Badalona", "Castelldefels", "Castellbisbal", "Sant Cugat del Vallès"]), :].iterrows():
+        ax.text(row.x, row.y, row['NMUN'], fontsize=9, fontweight='bold',
+                ha='center', va='center', color='black')
+
+    city_border = muni_gdf[muni_gdf.ID.str[:5].isin(["08019", "08101", "08194"])]
+    city_border.boundary.plot(ax=ax, color='black', linewidth=2)
+
+    # --- legend: one patch per bin + extras ---
+    legend_handles = []
+
+    # Color bins (note: apply same alpha=0.7 as the map polygons)
+    for label, color in zip(labels, colors):
+        legend_handles.append(
+            mpatches.Patch(facecolor=(*color[:3], 0.7), edgecolor="grey",
+                           linewidth=0.5, label=label)
+        )
+
+    # Separator: toll area and missing
+    legend_handles.append(
+        mpatches.Patch(facecolor="none", edgecolor="black", linewidth=2, label="Toll area")
+    )
+    if include_missing:
+        legend_handles.append(
+            mpatches.Patch(facecolor="lightgrey", edgecolor="white",
+                           label="Simulated \npopulation = 0")
+        )
+
+    ax.legend(handles=legend_handles, loc="lower right", fontsize=9,
+              framealpha=0.8, edgecolor="grey",
+                bbox_to_anchor=(1.05, 0))
+    
 def main_plot(save_tax, emission_change, change_qol_in_zone, change_qol_out_zone, utility_change_low, utility_change_med, utility_change_high):
     
     # --- Global formatting for academic figures ---
@@ -98,7 +169,7 @@ def main_plot(save_tax, emission_change, change_qol_in_zone, change_qol_out_zone
     axes[2].plot(years, change_qol_in_zone,     label="Pollution inside the tax zone",         color="navy",   linewidth=1.5)
     axes[2].plot(years, change_qol_out_zone,    label="Pollution outside of the tax zone",    color="cyan", linewidth=1.5)
     axes[2].set_ylabel("Mean variation (%)")
-    axes[2].legend(frameon=False, loc="upper right", fontsize=9)
+    axes[2].legend(frameon=False, loc="center right", fontsize=9)
     axes[-1].set_xlabel("Year")
     axes[-1].set_xticks(list(years)[::2])   # every 2 years
 
@@ -403,7 +474,7 @@ def plot_vkm(avg_vkm_in_zone_lvl, avg_vkm_out_zone_lvl, MAX_YEAR, income_levels)
     plt.bar(x + width/2, out_20, width, bottom=in_20, label="Outside of the tax zone (year "+str(MAX_YEAR-1)+")", color="#fdd0a2")
     plt.xticks(x,  ["Low-income", "Middle-income", "High-income"])
     plt.ylabel("Average vehicle-km driven")
-    plt.legend()
+    plt.legend(loc = "lower right")
     plt.show()
     plt.close()
 
@@ -880,11 +951,11 @@ def plot_change_population_custom(MAX_YEAR, gdf, save_population,
     muni_bar["diff"] = 100 * (muni_bar["Year 19"] - muni_bar["Year 0"]) / muni_bar["Year 0"]
     muni_bar[['diff']].plot(
         kind='bar',
-        figsize=(10, 6))
+        figsize=(10, 6), legend=False)
     
     plt.xlabel('')
     plt.ylabel('Change (%)')
-    plt.legend()
+    #plt.legend()
     plt.tight_layout()
     plt.show()
 

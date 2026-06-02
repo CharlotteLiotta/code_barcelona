@@ -101,7 +101,7 @@ def compute_opinion(score_welfare, score_quality_of_life, score_emissions, BETA_
     if scenario == "increasing_knowledge":
         opinion = BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_quality_of_life + BETA_OPINION[3] * score_welfare + BETA_OPINION[4] * dummy_low + BETA_OPINION[5] * dummy_high + BETA_OPINION[6] * score_knowledge
     else:
-        opinion = BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_quality_of_life + BETA_OPINION[3] * score_welfare + BETA_OPINION[4] * dummy_low + BETA_OPINION[5] * dummy_high
+        opinion = BETA_OPINION[0] + BETA_OPINION[1] * score_emissions + BETA_OPINION[2] * score_quality_of_life + BETA_OPINION[3] * score_welfare #+ BETA_OPINION[4] * dummy_low + BETA_OPINION[5] * dummy_high
         
     if tobit == True:
         z = opinion / sigma
@@ -202,7 +202,7 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
         df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.knowledge) & (df_reg_here.knowledge < 8)]
         X = df_reg_here[["climate_change", "quality_of_life", "score_welfare_vehicle_ownership_license", "LOW", "HIGH", "knowledge"]] #score_welfare_vehicle_ownership_license
     else:
-        X = df_reg_here[["climate_change", "quality_of_life", "score_welfare_vehicle_ownership_license", "LOW", "HIGH"]] #score_welfare_vehicle_ownership_license
+        X = df_reg_here[["climate_change", "quality_of_life", "score_welfare_vehicle_ownership_license" ]] #, "LOW", "HIGH"]] #score_welfare_vehicle_ownership_license
     X = sm.add_constant(X)
     y_acceptability = df_reg_here["acceptability"].values.reshape(-1, 1).flatten()
     y_price = (df_reg_here["acceptable_price"].values.reshape(-1, 1)).flatten()
@@ -216,7 +216,7 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
     #export_df.to_csv("regression_data.csv", index=False) 
 
     #OLS
-    model_acceptability = sm.WLS(y_acceptability, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit() #cov_type='HC3'
+    model_acceptability = sm.WLS(y_acceptability, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit(cov_type='HC3') #cov_type='HC3'
     print(model_acceptability.summary())
 
     #PROBIT
@@ -225,7 +225,7 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
         X,
         family=families.Binomial(link=families.links.Probit()), #families.Binomial(link=families.links.Logit()),
         var_weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))   # swap freq_weights for var_weights if your weights are sampling/probability weights
-        ).fit() #cov_type='HC3'
+        ).fit(cov_type='HC3') #cov_type='HC3'
     
     print(model_acceptability.summary())
 
@@ -240,7 +240,7 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
         family=families.Binomial(link=families.links.Logit()), #families.Binomial(link=families.links.Logit()),
         var_weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))   # swap freq_weights for var_weights if your weights are sampling/probability weights
         #var_weights = df_reg_here['PESAIX'],
-        ).fit() #cov_type='HC3'
+        ).fit(cov_type='HC3') #cov_type='HC3'
     
     print(model_acceptability.summary())
 
@@ -250,7 +250,7 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
 
 
     #OLS
-    model_price = sm.WLS(y_price, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit() #
+    model_price = sm.WLS(y_price, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit(cov_type='HC3') #cov_type='HC3'
     print(model_price.summary())
 
     #TOBIT
@@ -295,6 +295,8 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
     
     df_reg_here = df_reg.loc[~np.isnan(df_reg.acceptability) & (df_reg.acceptability < 97) & ~np.isnan(df_reg.acceptable_price) & (df_reg.acceptable_price < 20) & ~np.isnan(df_reg.climate_change) & (df_reg.climate_change < 80) & ~np.isnan(df_reg.score_welfare) &~np.isnan(df_reg.quality_of_life) & (df_reg.quality_of_life < 80),:]
     
+    df_reg_here.loc[:,["climate_change", "quality_of_life", "acceptability"]] = df_reg_here.loc[:,["climate_change", "quality_of_life", "acceptability"]] / 10
+    
     df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.knowledge) & (df_reg_here.knowledge < 8)]
     df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.ecological_paradigm) & (df_reg_here.ecological_paradigm < 80)]
     df_reg_here = df_reg_here.loc[~np.isnan(df_reg_here.ecoanxiety) & (df_reg_here.ecoanxiety < 80)]
@@ -305,11 +307,12 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
 
     X = df_reg_here[["climate_change", "quality_of_life", "score_welfare_vehicle_ownership_license", "LOW", "HIGH", "age", "man", "education", "political_ideology", 'ecoanxiety', 'ecological_paradigm', "knowledge", "children2"]]   #, "age"           #score_welfare_vehicle_ownership_license
     
+    
     X = sm.add_constant(X)
-    y_acceptability = df_reg_here["acceptability"].values.reshape(-1, 1).flatten() / 10
+    y_acceptability = df_reg_here["acceptability"].values.reshape(-1, 1).flatten()
     y_price = (df_reg_here["acceptable_price"].values.reshape(-1, 1)).flatten()
 
-    model_acceptability_full = sm.WLS(y_acceptability, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit() #, weights=df_reg_here['PESAIX']
+    model_acceptability_full = sm.WLS(y_acceptability, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit(cov_type='HC3') #, weights=df_reg_here['PESAIX']
     print(model_acceptability_full.summary())
 
     model_acceptability_full = GLM(
@@ -317,12 +320,12 @@ def import_opinion_parameters(path_data, scenario, expected_welfare_loss, weight
         X,
         family=families.Binomial(link=families.links.Logit()), #families.Binomial(link=families.links.Probit()),
         var_weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))   # swap freq_weights for var_weights if your weights are sampling/probability weights
-        ).fit()
+        ).fit(cov_type='HC3')
     print(model_acceptability_full.summary())
     marginal_effects = model_acceptability_full.get_margeff()
     print(marginal_effects.summary())
 
-    model_price_full = sm.WLS(y_price, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit()
+    model_price_full = sm.WLS(y_price, X, weights=df_reg_here['PESAIX'] * (len(df_reg_here['PESAIX'] ) / sum(df_reg_here['PESAIX'] ))).fit(cov_type='HC3')
     print(model_price_full.summary())
 
     #TOBIT

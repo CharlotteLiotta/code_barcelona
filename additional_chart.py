@@ -2,16 +2,22 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-df = pd.read_excel("../code_barcelona/simulation_results_v2.xlsx")
+df = pd.read_excel("../code_barcelona/simulation_results_29052026.xlsx")
 
 # Clean
 df = df.dropna(subset=['Unnamed: 0'])
 
+df.scenario[df.scenario == "discount_low_income"] = "exemption_low_income"
+df.scenario[df.scenario == "discount_residents"] = "exemption_residents"
+df.scenario[df.scenario == "less_expensive_transport"] = "discount_public_transport"
+df.scenario[df.scenario == "reduce_transport_time"] = "improvement_public_transport"
+
+
 custom_order = [
     "baseline",
+    "exemption_low_income",
     "improvement_public_transport",
     "exemption_residents",
-    "exemption_low_income",
     "exemption_trips_inside_zone",
     "discount_public_transport",
     #"increasing_knowledge"
