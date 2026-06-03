@@ -15,7 +15,7 @@ from policy_support import *
 
 ### SCENARIOS
 
-scenario = "baseline"
+#scenario = "baseline"
 option_center = "catalunya"
 
 #scenario = "exemption_trips_inside_zone"    #DONE
@@ -25,7 +25,7 @@ option_center = "catalunya"
 #scenario = "established_path"
 #scenario = "less_expensive_transport"       #DONE
 #scenario = "reduce_transport_time"          #DONE
-#scenario = "inertia_NEDUM"
+scenario = "inertia_NEDUM"
 
 ### IMPORT PARAMETERS
 
@@ -480,7 +480,7 @@ while year < MAX_YEAR:
             """ Compute error in population associated to utility u"""
 
             #error_population = sum((compute_error_in_population(u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, True, rent_residual, density_residual, size_residual)) ** 2)
-            error_population = sum((compute_error_in_population(u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, True)) ** 2)
+            error_population = sum((compute_error_in_population(am_arr, u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, True)) ** 2)
             
             return error_population
 
@@ -492,7 +492,7 @@ while year < MAX_YEAR:
         if solving_model.success == True:
 
             #R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
-            R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = False) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
+            R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = False) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
 
         else:
             raise ValueError("Minimization failed!")
@@ -504,7 +504,7 @@ while year < MAX_YEAR:
             def compute_error_in_population_from_utility(u):
                 """ Compute error in population associated to utility u"""
 
-                error_population = sum((compute_error_in_population(u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, True, rent_residual, density_residual, size_residual, option_housing_supply = True, housing_supply = housing_supply_t1)) ** 2)
+                error_population = sum((compute_error_in_population(am_arr, u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, True, rent_residual, density_residual, size_residual, option_housing_supply = True, housing_supply = housing_supply_t1)) ** 2)
                 return error_population
 
             solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead")
@@ -514,7 +514,7 @@ while year < MAX_YEAR:
 
             if solving_model.success == True:
 
-                R, q, n, w, R_group, q_group, n_group, housing_t0_new  = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = True, housing_supply = housing_supply_t1, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
+                R, q, n, w, R_group, q_group, n_group, housing_t0_new  = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = True, housing_supply = housing_supply_t1, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
 
             else:
                 raise ValueError("Minimization failed!")
@@ -742,7 +742,7 @@ while year < MAX_YEAR:
         price_here[lvl][price_here[lvl] < 0] = 0
 
         if scenario == "inertia_NEDUM":
-            support[lvl] = political_opinion[lvl]
+            #support[lvl] = political_opinion[lvl]
             acceptable_price[lvl] = price_here[lvl]
         else:
             #support[lvl] = (INERTIA_OPINION * support[lvl]) + ((1 - INERTIA_OPINION) * 10 * political_opinion[lvl])
