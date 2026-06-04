@@ -40,7 +40,7 @@ LOGISTIC_PARAM_QOL = 0.3
 
 #Time
 year = 0
-MAX_YEAR = 5
+MAX_YEAR = 10
 
 #Policy impact model
 INTEREST_RATE = 0.05
@@ -487,7 +487,7 @@ while year < MAX_YEAR:
 
         solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead")
 
-        if solving_model.message == 'Maximum number of function evaluations has been exceeded.':
+        while solving_model.message == 'Maximum number of function evaluations has been exceeded.':
             solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead")
 
         if solving_model.success == True:
@@ -510,7 +510,7 @@ while year < MAX_YEAR:
 
             solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead")
 
-            if solving_model.message == 'Maximum number of function evaluations has been exceeded.':
+            while solving_model.message == 'Maximum number of function evaluations has been exceeded.':
                 solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, solving_model.x, method = "Nelder-Mead")
 
             if solving_model.success == True:
@@ -757,12 +757,37 @@ while year < MAX_YEAR:
 
     #Policy update
 
+    def compute_med_price(acceptable_price, save_population_lvl, year):
+        # --- Build the flat list of (price, population) pairs ---
+        records = []
+        for i in range(2149):
+            for lvl in ("LOW", "MED", "HIGH"):
+                price = acceptable_price[lvl][i]   # or acceptable_price[lvl][i], adjust to your structure
+                pop   = save_population_lvl[lvl][i, year]
+                if pop > 0:                         # skip empty buckets
+                    records.append((price, pop))
+
+        # --- Sort by price ---
+        records.sort(key=lambda x: x[0])
+
+        prices      = np.array([r[0] for r in records])
+        populations = np.array([r[1] for r in records])
+
+        # --- Weighted median ---
+        cumulative  = np.cumsum(populations)
+        total       = cumulative[-1]
+        median_idx  = np.searchsorted(cumulative, total / 2)  # first index where cumsum >= 50%
+        median_price = prices[median_idx]
+        return median_price
+
+
     if scenario == "established_path":
         tax = np.fmin(tax * 1.06, np.nanmedian(np.concatenate([acceptable_price[lvl] for lvl in income_levels])))
     elif scenario == "inertia_NEDUM":
-        tax = (INERTIA_OPINION * tax) + ((1 - INERTIA_OPINION) * np.nanmedian(np.concatenate([acceptable_price[lvl] for lvl in income_levels])))
+        tax = (INERTIA_OPINION * tax) + ((1 - INERTIA_OPINION) * compute_med_price(acceptable_price, save_population_lvl, year))
     else:
         tax = np.nanmedian(np.concatenate([acceptable_price[lvl] for lvl in income_levels]))
+
 
     year = year + 1
 
