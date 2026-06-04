@@ -29,6 +29,9 @@ scenario = "inertia_NEDUM"
 
 ### IMPORT PARAMETERS
 
+am_arr = np.array([1, 1.1, 1.5])
+
+
 path_data = "../data_barcelona/"
 option_function = "Cobb-Douglas"
 
@@ -37,7 +40,7 @@ LOGISTIC_PARAM_QOL = 0.3
 
 #Time
 year = 0
-MAX_YEAR = 20
+MAX_YEAR = 5
 
 #Policy impact model
 INTEREST_RATE = 0.05
@@ -150,16 +153,14 @@ amenities = calibration_utility_amenity(calib_beta.x, gdf, income_levels, SOFT_R
 gdf = gdf.merge(amenities, on = "ID", how = "left")
 gdf.loc[np.isnan(gdf["amenities"]), "amenities"] = 1
 
-am_arr = np.array([1, 1.15, 1.6])
-
 # Solve the model
 def compute_error_in_population_from_utility(u):
     """ Compute error in population associated to utility u"""
     print(compute_error_in_population(am_arr, u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, option_resid = False))
     return sum(compute_error_in_population(am_arr, u, income_levels, gdf, [pop[lvl] for lvl in income_levels], BETA, B, KAPPA, INTEREST_RATE, option_resid = False)**2)
 
-solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility, calib_beta.x[1:4], bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #[161, 287, 411] #[219, 329, 471]
-
+solving_model =scipy.optimize.minimize(compute_error_in_population_from_utility,  np.array([161, 287, 411]), bounds=[(0,None), (0,None), (0,None)], method = "Nelder-Mead") #[161, 287, 411] #[219, 329, 471]
+ 
 if solving_model.success == True:
     R, q, n, w, R_group, q_group, n_group, _ = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_resid = False)
 else:
@@ -209,7 +210,7 @@ utility = {}
 
 if scenario == "inertia_NEDUM":
     for lvl in income_levels:
-        u = compute_utility_manually(
+        u = compute_utility_manually(am_arr, lvl,
             gdf[f"wage_{lvl}"],
             gdf[f"transport_cost_{lvl}"],
             q,
@@ -221,7 +222,7 @@ if scenario == "inertia_NEDUM":
 
 else:
     for lvl in income_levels:
-        u = compute_utility_manually(
+        u = compute_utility_manually(am_arr, lvl,
             indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"],
             indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
             dwelling_size_indiv[lvl],
@@ -374,7 +375,7 @@ for lvl in income_levels:
 
 gdf_init, _, _ = compute_transport_cost(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0, income_levels, wage_factors, "baseline", 0, 0)
  
-utility_init = {lvl: compute_utility_manually(gdf_init[f"wage_{lvl}"],
+utility_init = {lvl: compute_utility_manually(am_arr, lvl,gdf_init[f"wage_{lvl}"],
                                               gdf_init[f"transport_cost_{lvl}"],
                                               q, 
                                               R, 
@@ -383,7 +384,7 @@ utility_init = {lvl: compute_utility_manually(gdf_init[f"wage_{lvl}"],
 
 gdf_tax, _, _ = compute_transport_cost(gdf, travel_time_matrix_car, travel_time_matrix_transit, PRICE_TIME, WORKING_DAYS, FIXED_COST_CAR, PRICE_FUEL, LAMBDA, ARRAY_WAGE_LOW, ARRAY_WAGE_MED, ARRAY_WAGE_HIGH, jobs_in_toll_area, houses_in_toll_area, 0.5, income_levels, wage_factors, "baseline", 0, 0)
  
-utility_tax = {lvl: compute_utility_manually(gdf_tax[f"wage_{lvl}"],
+utility_tax = {lvl: compute_utility_manually(am_arr, lvl,gdf_tax[f"wage_{lvl}"],
                                               gdf_tax[f"transport_cost_{lvl}"],
                                               q,
                                               R,
@@ -572,7 +573,7 @@ while year < MAX_YEAR:
         housing_t0 = housing_t0_new
         # Compute utility
         for lvl in income_levels:
-            utility[lvl] = compute_utility_manually(
+            utility[lvl] = compute_utility_manually(am_arr, lvl,
                 gdf[f"wage_{lvl}"],
                 gdf[f"transport_cost_{lvl}"],
                 q,
@@ -616,7 +617,7 @@ while year < MAX_YEAR:
             dwelling_size_indiv[lvl][mask_moved] = dwelling_size_indiv_new[lvl][mask_moved]
 
             # Compute utility
-            utility[lvl] = compute_utility_manually(
+            utility[lvl] = compute_utility_manually(am_arr, lvl,
                 indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"],
                 indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
                 dwelling_size_indiv[lvl],
