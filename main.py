@@ -40,7 +40,7 @@ LOGISTIC_PARAM_QOL = 0.3
 
 #Time
 year = 0
-MAX_YEAR = 10
+MAX_YEAR = 20
 
 #Policy impact model
 INTEREST_RATE = 0.05
