@@ -61,7 +61,7 @@ INERTIA_OPINION = 0.8 #inertia
 
 #Others
 TRANSPORT_EFFICIENCY = 7
-TOL_CONGESTION = 3000
+TOL_CONGESTION = 4000
 TOL_SUBVENTION = 1000000
 TOL_EFFICIENCY = 0.1
 
@@ -186,6 +186,7 @@ solving_model = scipy.optimize.minimize(compute_error_in_population_from_utility
 if solving_model.success == True:
 
     R, q, n, w, R_group, q_group, n_group, housing_t0 = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
+    R_sinres, q_sinres, _, _, _, _, _, _ = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_resid = False)
 
 else:
     raise ValueError("Minimization failed!")
@@ -205,6 +206,8 @@ if scenario != "inertia_NEDUM":
 
     rent_indiv = {lvl: indiv_loc_matrix[lvl] @ R for lvl in income_levels} #R_group[lvl] #.to_numpy()
     dwelling_size_indiv = {lvl: indiv_loc_matrix[lvl] @ q.to_numpy() for lvl in income_levels} #q_group[lvl]
+    rent_indiv_sinres = {lvl: indiv_loc_matrix[lvl] @ R_sinres for lvl in income_levels} #R_group[lvl] #.to_numpy()
+    dwelling_size_indiv_sinres = {lvl: indiv_loc_matrix[lvl] @ q_sinres.to_numpy() for lvl in income_levels} #q_group[lvl]
 
 utility = {}
 
@@ -213,8 +216,8 @@ if scenario == "inertia_NEDUM":
         u = compute_utility_manually(am_arr, lvl,
             gdf[f"wage_{lvl}"],
             gdf[f"transport_cost_{lvl}"],
-            q,
-            R,
+            q_sinres,
+            R_sinres,
             BETA, gdf["amenities"]
         )
         u[np.isnan(u)] = 0
@@ -225,8 +228,8 @@ else:
         u = compute_utility_manually(am_arr, lvl,
             indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"],
             indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
-            dwelling_size_indiv[lvl],
-            rent_indiv[lvl],
+            dwelling_size_indiv_sinres[lvl],
+            rent_indiv_sinres[lvl],
             BETA, indiv_loc_matrix[lvl] @ gdf["amenities"]
         )
         u[np.isnan(u)] = 0
@@ -377,8 +380,8 @@ gdf_init, _, _ = compute_transport_cost(gdf, travel_time_matrix_car, travel_time
  
 utility_init = {lvl: compute_utility_manually(am_arr, lvl,gdf_init[f"wage_{lvl}"],
                                               gdf_init[f"transport_cost_{lvl}"],
-                                              q, 
-                                              R, 
+                                              q_sinres, 
+                                              R_sinres, 
                                               BETA, gdf["amenities"]
                                               ) for lvl in income_levels}
 
@@ -386,8 +389,8 @@ gdf_tax, _, _ = compute_transport_cost(gdf, travel_time_matrix_car, travel_time_
  
 utility_tax = {lvl: compute_utility_manually(am_arr, lvl,gdf_tax[f"wage_{lvl}"],
                                               gdf_tax[f"transport_cost_{lvl}"],
-                                              q,
-                                              R,
+                                              q_sinres,
+                                              R_sinres,
                                               BETA, gdf["amenities"]
                                               ) for lvl in income_levels}
 
@@ -516,6 +519,7 @@ while year < MAX_YEAR:
             if solving_model.success == True:
 
                 R, q, n, w, R_group, q_group, n_group, housing_t0_new  = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = True, housing_supply = housing_supply_t1, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
+                R_sinres, q_sinres, _, _, _, _, _, _  = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = True, housing_supply = housing_supply_t1, option_resid = False)
 
             else:
                 raise ValueError("Minimization failed!")
@@ -576,8 +580,8 @@ while year < MAX_YEAR:
             utility[lvl] = compute_utility_manually(am_arr, lvl,
                 gdf[f"wage_{lvl}"],
                 gdf[f"transport_cost_{lvl}"],
-                q,
-                R,
+                q_sinres,
+                R_sinres,
                 BETA, gdf["amenities"]
             )
     
@@ -609,6 +613,8 @@ while year < MAX_YEAR:
     
         rent_indiv_new = {lvl: indiv_loc_matrix[lvl] @ R for lvl in income_levels} #R.to_numpy()#R_group[lvl]
         dwelling_size_indiv_new = {lvl: indiv_loc_matrix[lvl] @ q.to_numpy() for lvl in income_levels} #q
+        rent_indiv_new_sinres = {lvl: indiv_loc_matrix[lvl] @ R_sinres for lvl in income_levels} #R.to_numpy()#R_group[lvl]
+        dwelling_size_indiv_new_sinres = {lvl: indiv_loc_matrix[lvl] @ q_sinres.to_numpy() for lvl in income_levels} #q
 
         for lvl in income_levels:
             # Update rents and dwelling sizes for movers
@@ -620,8 +626,8 @@ while year < MAX_YEAR:
             utility[lvl] = compute_utility_manually(am_arr, lvl,
                 indiv_loc_matrix[lvl] @ gdf[f"wage_{lvl}"],
                 indiv_loc_matrix[lvl] @ gdf[f"transport_cost_{lvl}"],
-                dwelling_size_indiv[lvl],
-                rent_indiv[lvl],
+                dwelling_size_indiv_new_sinres[lvl],
+                rent_indiv_new_sinres[lvl],
                 BETA, indiv_loc_matrix[lvl] @ gdf["amenities"]
             )
     
@@ -694,8 +700,8 @@ while year < MAX_YEAR:
             #decompo util
             avg_wage_lvl[lvl][year] = np.nansum(n_group[lvl] * gdf[f"wage_{lvl}"]) / np.nansum(n_group[lvl])
             avg_tcost_lvl[lvl][year] = np.nansum(n_group[lvl] * gdf[f"transport_cost_{lvl}"]) / np.nansum(n_group[lvl])
-            avg_rent_lvl[lvl][year] = np.nanmean(R_group[lvl])
-            avg_dsize_lvl[lvl][year] = np.nanmean(q_group[lvl])
+            avg_rent_lvl[lvl][year] = np.nansum(R_group[lvl] * n_group[lvl]) / np.nansum(n_group[lvl])
+            avg_dsize_lvl[lvl][year] = np.nansum(q_group[lvl] * n_group[lvl]) / np.nansum(n_group[lvl])
         else:
             #mode share
             mode_shares_lvl[lvl][year] = np.nansum(gdf[f"transport_mode_{lvl}"] * save_population_lvl[lvl][:, year]) / np.nansum(save_population_lvl[lvl][:, year])
@@ -825,7 +831,7 @@ plot_change_pop_line(gdf, save_population)
 print_moving(save_population_lvl, income_levels, N)
 
 append_scenario_to_excel(
-    filename="simulation_results_v2.xlsx",
+    filename="simulation_results_NEDUM.xlsx",
     scenario_name=scenario,
     tax_level=save_tax,
     emission_change=emission_change,
