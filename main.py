@@ -213,8 +213,8 @@ if scenario == "inertia_NEDUM":
         u = compute_utility_manually(am_arr, lvl,
             gdf[f"wage_{lvl}"],
             gdf[f"transport_cost_{lvl}"],
-            q, #q_sinres,
-            R, #R_sinres,
+            q_sinres,
+            R_sinres,
             BETA, gdf["amenities"]
         )
         u[np.isnan(u)] = 0
@@ -498,6 +498,7 @@ while year < MAX_YEAR:
 
             #R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
             R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
+            R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = False) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
             #R_sinres, q_sinres, _, _, _, _, _, _ = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = False) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
 
         else:
@@ -522,7 +523,7 @@ while year < MAX_YEAR:
             if solving_model.success == True:
 
                 R, q, n, w, R_group, q_group, n_group, housing_t0_new  = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = True, housing_supply = housing_supply_t1, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
-                #R_sinres, q_sinres, _, _, _, _, _, _  = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = True, housing_supply = housing_supply_t1, option_resid = False)
+                R_sinres, q_sinres, _, _, _, _, _, _  = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = True, housing_supply = housing_supply_t1, option_resid = False)
 
             else:
                 raise ValueError("Minimization failed!")
@@ -583,8 +584,8 @@ while year < MAX_YEAR:
             utility[lvl] = compute_utility_manually(am_arr, lvl,
                 gdf[f"wage_{lvl}"],
                 gdf[f"transport_cost_{lvl}"],
-                q, #q_sinres,
-                R, #R_sinres,
+                q_sinres,
+                R_sinres,
                 BETA, gdf["amenities"]
             )
     
