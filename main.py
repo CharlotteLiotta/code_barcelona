@@ -36,7 +36,7 @@ LOGISTIC_PARAM_QOL = 0.3
 
 #Time
 year = 0
-MAX_YEAR = 20
+MAX_YEAR = 9
 
 #Policy impact model
 INTEREST_RATE = 0.05
@@ -498,7 +498,7 @@ while year < MAX_YEAR:
 
             #R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
             R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = True, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
-            R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = False) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
+            #R, q, n, w, R_group, q_group, n_group, housing_without_inertia = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = False) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
             #R_sinres, q_sinres, _, _, _, _, _, _ = compute_outcomes(am_arr, solving_model.x, gdf, BETA, B, KAPPA, INTEREST_RATE, income_levels, compute_rents, compute_dwelling_size, option_housing_supply = False, option_resid = False) #, resid_rent = rent_residual, resid_density = density_residual, resid_size = size_residual)
 
         else:
@@ -704,8 +704,8 @@ while year < MAX_YEAR:
             #decompo util
             avg_wage_lvl[lvl][year] = np.nansum(n_group[lvl] * gdf[f"wage_{lvl}"]) / np.nansum(n_group[lvl])
             avg_tcost_lvl[lvl][year] = np.nansum(n_group[lvl] * gdf[f"transport_cost_{lvl}"]) / np.nansum(n_group[lvl])
-            avg_rent_lvl[lvl][year] = np.nanmean(R_group[lvl])
-            avg_dsize_lvl[lvl][year] = np.nanmean(q_group[lvl])
+            avg_rent_lvl[lvl][year] = np.nansum(R_group[lvl] * n_group[lvl]) / np.nansum(n_group[lvl])
+            avg_dsize_lvl[lvl][year] = np.nansum(q_group[lvl] * n_group[lvl]) / np.nansum(n_group[lvl])
         else:
             #mode share
             mode_shares_lvl[lvl][year] = np.nansum(gdf[f"transport_mode_{lvl}"] * save_population_lvl[lvl][:, year]) / np.nansum(save_population_lvl[lvl][:, year])
